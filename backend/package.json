@@ -1,0 +1,23 @@
+{
+  "name": "lineweb-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate": "bun src/db/migrate-from-sheets.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.2.3",
+    "@elysiajs/jwt": "^1.2.2",
+    "@elysiajs/swagger": "^1.2.2",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "^1.2.25",
+    "googleapis": "^144.0.0",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
+  }
+}
