@@ -11,6 +11,8 @@ backend/uploads
 # large local-only files — ไม่ควรเข้า git history (ใหญ่/รีเจนได้/เป็นข้อมูลผู้เช่า)
 *.zip
 sheet_export
+*.sql
+*.dump
 
 # Claude Code local settings (เครื่องใครเครื่องมัน)
 .claude/settings.local.json
