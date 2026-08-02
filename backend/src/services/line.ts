@@ -443,7 +443,7 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
             type: "box", layout: "horizontal", alignItems: "center",
             contents: [
               { type: "image", url: ICONS.RECEIPT, size: ICON_SIZE_HEADER, aspectRatio: "1:1", flex: 0 },
-              { type: "text", text: " ใบเสร็จรับเงิน", weight: "bold", color: "#ffffff", size: "xl", margin: "md" },
+              { type: "text", text: " ใบเสร็จรับเงิ", weight: "bold", color: "#ffffff", size: "xl", margin: "md" },
             ],
           },
           { type: "text", text: `ห้อง ${input.roomNumber}`, weight: "bold", color: "#ffffff", size: "lg", margin: "md" },
