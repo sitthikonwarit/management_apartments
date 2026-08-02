@@ -7,12 +7,11 @@ import { tenantDisplayName } from "../utils/tenantName";
 
 const AVATAR_URL = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
+// Google Drive image proxy ปิดใช้งานถาวรที่ฝั่ง backend (GOOGLE_INTEGRATION_ENABLED) — ไม่ยิง request
+// ไปเปล่าๆ ให้ตกกลับเป็น avatar เริ่มต้นทันทีถ้า url เป็นลิงก์ Drive
 function getDriveImgSrc(url: string): string {
   if (!url) return AVATAR_URL;
-  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (m1) return `/api/drive/image/${m1[1]}`;
-  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (m2) return `/api/drive/image/${m2[1]}`;
+  if (/\/d\/[a-zA-Z0-9_-]+/.test(url) || /[?&]id=[a-zA-Z0-9_-]+/.test(url)) return AVATAR_URL;
   return url;
 }
 

@@ -30,12 +30,11 @@ function formatIdCard(val: string): string {
   return `${d.slice(0,1)}-${d.slice(1,5)}-${d.slice(5,10)}-${d.slice(10,12)}-${d.slice(12)}`;
 }
 
+// Google Drive image proxy ปิดใช้งานถาวรที่ฝั่ง backend (GOOGLE_INTEGRATION_ENABLED) — ไม่ยิง request
+// ไปเปล่าๆ ให้ตกกลับเป็น avatar เริ่มต้นทันทีถ้า url เป็นลิงก์ Drive
 function getDriveImgSrc(url: string): string {
   if (!url) return AVATAR;
-  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (m1) return `/api/drive/image/${m1[1]}`;
-  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (m2) return `/api/drive/image/${m2[1]}`;
+  if (/\/d\/[a-zA-Z0-9_-]+/.test(url) || /[?&]id=[a-zA-Z0-9_-]+/.test(url)) return AVATAR;
   return url;
 }
 
