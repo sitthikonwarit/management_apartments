@@ -102,6 +102,7 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
         paymentDate: String(b.paymentDate || ts),
         billTotal: Number(b.billTotal) || 0,
         paidTotal: Number(b.paidTotal) || 0,
+        slipUrl,
       });
     } catch (e) {
       console.error("[send-payment-receipt]", e);

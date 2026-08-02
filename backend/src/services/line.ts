@@ -175,6 +175,19 @@ function isUsableImageUrl(url: string): boolean {
   return /^https:\/\//i.test(url);
 }
 
+// path สลิปที่อัปโหลดถูกเก็บเป็น path สัมพัทธ์เสมอ (เช่น "/uploads/payments/xxx.jpg" ดู uploadPaymentSlip
+// ใน routes/bills.ts) เพราะ frontend พร็อกซี /uploads ไปที่ backend เอง แต่ปุ่ม "uri" action ของ LINE ต้องเป็น
+// URL แบบเต็มที่เซิร์ฟเวอร์ LINE (และมือถือผู้เช่า) เปิดได้จริงจากนอกวง LAN — ต้องตั้ง PUBLIC_BASE_URL ใน .env
+// ชี้ไปที่โดเมน/URL สาธารณะของระบบก่อนปุ่มถึงจะโชว์ ถ้าไม่ได้ตั้งไว้จะไม่แสดงปุ่มเลย (เหมือน isUsableImageUrl
+// ด้านบนที่ต้องกรอง URL ที่ไม่ใช่ https:// ทิ้งเช่นกัน)
+function resolveSlipUrl(slipUrl: string | undefined): string {
+  if (!slipUrl) return "";
+  if (isUsableImageUrl(slipUrl)) return slipUrl;
+  const base = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  if (!isUsableImageUrl(`${base}/`)) return "";
+  return `${base}${slipUrl.startsWith("/") ? "" : "/"}${slipUrl}`;
+}
+
 interface LineAppearanceSettings {
   appName: string;
   logoUrl: string;
@@ -387,6 +400,7 @@ export interface PaymentReceiptInput {
   paymentDate: string;
   billTotal: number; // ยอดรวมสุทธิของบิล (หลังปรับค่าปรับ/ส่วนลดในป็อปอัพนี้แล้ว)
   paidTotal: number; // ยอดที่จ่ายสะสมรวมทั้งหมดของบิลนี้ หลังรวมยอดที่เพิ่งบันทึก
+  slipUrl?: string; // path/URL รูปสลิปการโอน — ว่าง = ไม่แสดงปุ่มดูสลิป (ดู resolveSlipUrl ด้านบน)
 }
 
 // ใบเสร็จรับเงิน (Flex Message) — ส่งให้ผู้เช่าทันทีที่กดยืนยันการชำระในป็อปอัพบันทึกการชำระเงิน
@@ -394,6 +408,7 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
   const monthLabel = monthYearLabel(input.monthYear, settings.yearFormat);
   const remaining = Math.max(0, input.billTotal - input.paidTotal);
   const fullySettled = remaining <= 0.005;
+  const slipUrl = resolveSlipUrl(input.slipUrl);
 
   // ตราประทับจางๆ ต้องอยู่ตัวแรกสุด (position: absolute ไม่กินพื้นที่ในเลย์เอาต์ปกติ) เพื่อให้ลอยอยู่ใต้
   // แถวข้อมูลที่ตามมาซึ่งจัดเรียงแบบปกติทับด้านบน (เหมือนตรายางประทับไว้ก่อนแล้วค่อยเขียนตัวหนังสือทับ)
@@ -439,6 +454,17 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
         type: "box", layout: "vertical", backgroundColor: BG_BODY, paddingAll: "20px",
         contents: bodyContents,
       },
+      ...(slipUrl && {
+        footer: {
+          type: "box", layout: "vertical", paddingAll: "12px",
+          contents: [
+            {
+              type: "button", style: "primary", height: "sm", color: COLOR_PRIMARY,
+              action: { type: "uri", label: "ดูสลิปการโอน", uri: slipUrl },
+            },
+          ],
+        },
+      }),
     },
   };
 }
