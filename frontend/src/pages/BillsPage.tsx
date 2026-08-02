@@ -39,6 +39,14 @@ function money(n: number) {
   return (Number(n) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ข้อความสรุปการส่งบิลทาง LINE ล่าสุด — ใช้ทั้งใน tooltip ปุ่มส่ง และในป็อปอัพยืนยันการส่ง (BillsPage)
+function sendLogSummary(log?: { timestamp: string; method: "manual" | "auto"; by?: string; status: "success" | "error" }) {
+  if (!log) return "ยังไม่เคยส่ง";
+  const who = log.by || (log.method === "auto" ? "ระบบอัตโนมัติ" : "-");
+  const statusText = log.status === "success" ? "สำเร็จ" : "ไม่สำเร็จ";
+  return `ส่งล่าสุด: ${new Date(log.timestamp).toLocaleString("th-TH")} โดย ${who} (${statusText})`;
+}
+
 function formatDateSafe(s?: string) {
   if (!s) return "-";
   const d = new Date(s);
@@ -836,7 +844,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
           <BillStatusBadge item={item} />
           {config.lineMessaging.enabled && (
             <button type="button" className="btn btn-outline-success btn-sm" onClick={onSendLine} disabled={sendingLine}
-              title={item.sendLogs?.[0] ? `ส่งล่าสุด: ${new Date(item.sendLogs[0].timestamp).toLocaleString("th-TH")} (${item.sendLogs[0].status === "success" ? "สำเร็จ" : "ไม่สำเร็จ"})` : "ยังไม่เคยส่ง"}>
+              title={sendLogSummary(item.sendLogs?.[0])}>
               {sendingLine ? <span className="spinner-border spinner-border-sm me-1" /> : <i className="fab fa-line me-1" />}
               ส่งบิลทาง LINE
             </button>
@@ -1757,7 +1765,7 @@ function BillTableView({ data, payments, monthYear, onEdit, onPrint, onToggleSta
             )}
             {lineEnabled && (
               <button type="button" className="btn btn-sm btn-outline-success" disabled={sendingLineIdx === idx}
-                title={item.sendLogs?.[0] ? `ส่งล่าสุด: ${new Date(item.sendLogs[0].timestamp).toLocaleString("th-TH")} (${item.sendLogs[0].status === "success" ? "สำเร็จ" : "ไม่สำเร็จ"})` : "ส่งบิลทาง LINE"}
+                title={item.sendLogs?.[0] ? sendLogSummary(item.sendLogs[0]) : "ส่งบิลทาง LINE"}
                 onClick={(e) => { e.stopPropagation(); onSendLine(idx); }}>
                 {sendingLineIdx === idx ? <span className="spinner-border spinner-border-sm" /> : <i className="fab fa-line" />}
               </button>
@@ -2080,6 +2088,8 @@ export default function BillsPage() {
   const [sendingLineIdx, setSendingLineIdx] = useState<number | null>(null);
   const [bulkSendingLine, setBulkSendingLine] = useState(false);
   const [bulkSendModal, setBulkSendModal] = useState<BulkSendItem[] | null>(null);
+  const [confirmSendIdx, setConfirmSendIdx] = useState<number | null>(null);
+  const [confirmSendBulkIds, setConfirmSendBulkIds] = useState<string[] | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -2830,9 +2840,9 @@ export default function BillsPage() {
                 new Set(items.map((it) => billEntryKey(editingMonthYear, it.roomId))),
               )}
               lineEnabled={config.lineMessaging.enabled}
-              onSendLine={handleSendLineForRoom}
+              onSendLine={setConfirmSendIdx}
               sendingLineIdx={sendingLineIdx}
-              onSendLineBulk={handleSendLineBulk}
+              onSendLineBulk={setConfirmSendBulkIds}
               bulkSendingLine={bulkSendingLine}
             />
           ) : roomViewMode === "grid" ? (
@@ -2899,8 +2909,8 @@ export default function BillsPage() {
                   )}
                   {config.lineMessaging.enabled && (
                     <button type="button" className="btn btn-sm btn-outline-success" disabled={sendingLineIdx === idx}
-                      title={item.sendLogs?.[0] ? `ส่งล่าสุด: ${new Date(item.sendLogs[0].timestamp).toLocaleString("th-TH")} (${item.sendLogs[0].status === "success" ? "สำเร็จ" : "ไม่สำเร็จ"})` : "ส่งบิลทาง LINE"}
-                      onClick={(e) => { e.stopPropagation(); handleSendLineForRoom(idx); }}>
+                      title={item.sendLogs?.[0] ? sendLogSummary(item.sendLogs[0]) : "ส่งบิลทาง LINE"}
+                      onClick={(e) => { e.stopPropagation(); setConfirmSendIdx(idx); }}>
                       {sendingLineIdx === idx ? <span className="spinner-border spinner-border-sm" /> : <i className="fab fa-line" />}
                     </button>
                   )}
@@ -2931,7 +2941,7 @@ export default function BillsPage() {
             ? updateItem(detailIndex, (d) => { d.status = "unpaid"; })
             : openPaymentModal(detailIndex)}
           onCancelPayment={handleCancelPayment}
-          onSendLine={() => handleSendLineForRoom(detailIndex)}
+          onSendLine={() => setConfirmSendIdx(detailIndex)}
           sendingLine={sendingLineIdx === detailIndex}
         />
       ) : null}
@@ -3122,6 +3132,51 @@ export default function BillsPage() {
                   leave?.();
                 }}>
                 {saving ? <span className="spinner-border spinner-border-sm" /> : "บันทึกแล้วออก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmSendIdx !== null && billData[confirmSendIdx] && (
+        <div className="confirm-overlay" onClick={() => sendingLineIdx === null && setConfirmSendIdx(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon confirm-icon--primary"><i className="fab fa-line" /></div>
+            <h6 className="confirm-title">ยืนยันการส่งบิลทาง LINE?</h6>
+            <p className="confirm-message">
+              ส่งบิลห้อง <strong>{billData[confirmSendIdx].roomNumber}</strong> ({billData[confirmSendIdx].tenantName || "ว่าง"}) ทาง LINE ใช่หรือไม่?
+              <br /><small className="text-muted">{sendLogSummary(billData[confirmSendIdx].sendLogs?.[0])}</small>
+            </p>
+            <div className="confirm-actions">
+              <button className="btn btn-outline-secondary" onClick={() => setConfirmSendIdx(null)} disabled={sendingLineIdx !== null}>ยกเลิก</button>
+              <button className="btn btn-success" disabled={sendingLineIdx !== null}
+                onClick={async () => {
+                  const idx = confirmSendIdx;
+                  setConfirmSendIdx(null);
+                  await handleSendLineForRoom(idx);
+                }}>
+                {sendingLineIdx !== null ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</> : <><i className="fab fa-line me-1" />ใช่, ส่งเลย</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmSendBulkIds && (
+        <div className="confirm-overlay" onClick={() => !bulkSendingLine && setConfirmSendBulkIds(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon confirm-icon--primary"><i className="fab fa-line" /></div>
+            <h6 className="confirm-title">ยืนยันการส่งบิลทาง LINE?</h6>
+            <p className="confirm-message">ส่งบิลทาง LINE ให้ <strong>{confirmSendBulkIds.length}</strong> ห้องที่เลือกไว้ ใช่หรือไม่?</p>
+            <div className="confirm-actions">
+              <button className="btn btn-outline-secondary" onClick={() => setConfirmSendBulkIds(null)} disabled={bulkSendingLine}>ยกเลิก</button>
+              <button className="btn btn-success" disabled={bulkSendingLine}
+                onClick={async () => {
+                  const ids = confirmSendBulkIds;
+                  setConfirmSendBulkIds(null);
+                  await handleSendLineBulk(ids);
+                }}>
+                {bulkSendingLine ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</> : <><i className="fab fa-line me-1" />ใช่, ส่งเลย</>}
               </button>
             </div>
           </div>

@@ -1,8 +1,9 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { bills, payments } from "../db/schema";
+import { bills, payments, users } from "../db/schema";
 import { sendBillLineForRoom, sendPaymentReceiptLine } from "../services/line";
+import { authDerive } from "../lib/authDerive";
 
 function parseBill(r: typeof bills.$inferSelect) {
   let data: any = [];
@@ -47,6 +48,7 @@ async function uploadPaymentSlip(filename: string, mimeType: string, base64Data:
 }
 
 export const billsRoute = new Elysia({ prefix: "/bills" })
+  .use(authDerive)
   .get("/", async () => {
     const rows = await db.select().from(bills);
     return rows.map(parseBill);
@@ -162,10 +164,15 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
   })
   // ส่งบิลของห้องหนึ่งห้องในบิลกลุ่มนี้เข้า LINE ของผู้เช่า (ต้องบันทึกบิลไว้แล้วก่อน เพราะอ่านข้อมูล
   // ห้องจาก DB ตรงๆ — ฝั่งหน้าเว็บจะบันทึกให้อัตโนมัติก่อนส่งถ้ายังมีการแก้ไขที่ไม่ได้บันทึก)
-  .post("/:id/send-line", async ({ params, body, set }) => {
+  .post("/:id/send-line", async ({ params, body, set, authUser }) => {
     const { roomId } = body as any;
     if (!roomId) { set.status = 400; return { error: "ต้องระบุ roomId" }; }
-    const result = await sendBillLineForRoom(params.id, String(roomId), "manual");
+    let actor = "Admin";
+    if (authUser?.id) {
+      const [u] = await db.select().from(users).where(eq(users.id, authUser.id));
+      actor = u?.displayName || u?.username || authUser.username || "Admin";
+    }
+    const result = await sendBillLineForRoom(params.id, String(roomId), "manual", actor);
     if (result.message === "ไม่พบบิล" || result.message === "ไม่พบข้อมูลห้องนี้ในบิล") {
       set.status = 404;
       return { error: result.message };

@@ -7,7 +7,7 @@ export interface BillTagItem { id: string; name: string; price: number; color?: 
 export interface BillVehicleItem { id: string; plate: string; name: string; price: number }
 export interface BillLineItem { id: string; name: string; price: number }
 export interface OutstandingItem { monthYear: string; amount: number }
-export interface BillSendLog { timestamp: string; method: "manual" | "auto"; status: "success" | "error"; detail: string }
+export interface BillSendLog { timestamp: string; method: "manual" | "auto"; by?: string; status: "success" | "error"; detail: string }
 
 export interface BillItem {
   customBillId: string;

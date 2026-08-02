@@ -315,7 +315,7 @@ export interface SendLineResult {
 
 // ส่งบิลของห้องหนึ่งห้อง (ภายในบิลกลุ่ม billId) ไปยัง LINE ของผู้เช่าห้องนั้น แล้วบันทึกผลลง sendLogs
 // ของห้องนั้นใน bills.data ทันที (ไม่ต้องรอผู้ใช้กด "บันทึก" อีกที)
-export async function sendBillLineForRoom(billId: string, roomId: string, method: "manual" | "auto" = "manual"): Promise<SendLineResult> {
+export async function sendBillLineForRoom(billId: string, roomId: string, method: "manual" | "auto" = "manual", actor: string = ""): Promise<SendLineResult> {
   const [billRow] = await db.select().from(bills).where(eq(bills.id, billId));
   if (!billRow) return { success: false, message: "ไม่พบบิล" };
 
@@ -351,6 +351,7 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
   const log = {
     timestamp: new Date().toISOString(),
     method,
+    by: actor || (method === "auto" ? "ระบบอัตโนมัติ" : ""),
     status: "success" as "success" | "error",
     detail: "",
   };
@@ -443,7 +444,7 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
             type: "box", layout: "horizontal", alignItems: "center",
             contents: [
               { type: "image", url: ICONS.RECEIPT, size: ICON_SIZE_HEADER, aspectRatio: "1:1", flex: 0 },
-              { type: "text", text: " ใบเสร็จรับเงิ", weight: "bold", color: "#ffffff", size: "xl", margin: "md" },
+              { type: "text", text: " ใบเสร็จรับเงิน", weight: "bold", color: "#ffffff", size: "xl", margin: "md" },
             ],
           },
           { type: "text", text: `ห้อง ${input.roomNumber}`, weight: "bold", color: "#ffffff", size: "lg", margin: "md" },
@@ -524,7 +525,7 @@ export async function runLineAutoSend(): Promise<void> {
     for (const item of data) {
       if (!item?.tenantId || item?.status === "paid") continue;
       try {
-        await sendBillLineForRoom(row.id, String(item.roomId), "auto");
+        await sendBillLineForRoom(row.id, String(item.roomId), "auto", "ระบบอัตโนมัติ");
       } catch (e) {
         console.error(`[line-auto-send] bill=${row.id} room=${item.roomId}`, e);
       }
