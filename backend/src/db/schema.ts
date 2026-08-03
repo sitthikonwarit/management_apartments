@@ -269,5 +269,15 @@ export const appConfig = pgTable("app_config", {
   lineChannelAccessToken: str("line_channel_access_token"),
   lineChannelSecret: str("line_channel_secret"),
   lineAutoSendEnabled: text("line_auto_send_enabled").notNull().default("false"),
+  // ── LINE Rich Menu (Guest/Member/Admin) — ตั้งค่า/สร้างได้จากหน้า Settings > LINE Rich Menu
+  // (ดู services/richMenu.ts) รูปเก็บเป็น path สัมพัทธ์ใน uploads/richmenu/ เหมือน rooms.pictures ──
+  liffLoginUrl: str("liff_login_url"),
+  liffPaymentUrl: str("liff_payment_url"),
+  richMenuGuestImage: str("rich_menu_guest_image"),
+  richMenuMemberImage: str("rich_menu_member_image"),
+  richMenuAdminImage: str("rich_menu_admin_image"),
+  richMenuGuestId: str("rich_menu_guest_id"),
+  richMenuMemberId: str("rich_menu_member_id"),
+  richMenuAdminId: str("rich_menu_admin_id"),
   updatedAt: str("updated_at"),
 });

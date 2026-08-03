@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { appSettings, appConfig } from "../db/schema";
+import { createAllRichMenus } from "../services/richMenu";
 
 const CONFIG_ID = "default";
 
@@ -49,6 +50,20 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
       channelAccessToken: r.lineChannelAccessToken || "",
       channelSecret: r.lineChannelSecret || "",
       autoSendEnabled: r.lineAutoSendEnabled === "true",
+    },
+    richMenu: {
+      liffLoginUrl: r.liffLoginUrl || "",
+      liffPaymentUrl: r.liffPaymentUrl || "",
+      images: {
+        guest: r.richMenuGuestImage || "",
+        member: r.richMenuMemberImage || "",
+        admin: r.richMenuAdminImage || "",
+      },
+      menuIds: {
+        guest: r.richMenuGuestId || "",
+        member: r.richMenuMemberId || "",
+        admin: r.richMenuAdminId || "",
+      },
     },
     updatedAt: r.updatedAt,
   };
@@ -143,8 +158,96 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       lineChannelAccessToken: String(b.lineMessaging?.channelAccessToken ?? ""),
       lineChannelSecret: String(b.lineMessaging?.channelSecret ?? ""),
       lineAutoSendEnabled: b.lineMessaging?.autoSendEnabled ? "true" : "false",
+      // รูปเมนู/ID ที่สร้างไว้ตั้งใจไม่ใส่ในนี้ — จัดการแยกผ่าน /richmenu/image และ /richmenu/create
+      // ด้านล่าง เพราะเป็น action ที่มีผลข้างเคียง (อัปโหลดไฟล์/เรียก LINE API จริง) ไม่ใช่แค่บันทึกค่าฟอร์ม
+      liffLoginUrl: String(b.richMenu?.liffLoginUrl ?? ""),
+      liffPaymentUrl: String(b.richMenu?.liffPaymentUrl ?? ""),
       updatedAt: new Date().toISOString(),
     }).where(eq(appConfig.id, CONFIG_ID));
     const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));
     return parseConfig(row);
+  })
+  // ── LINE Rich Menu ───────────────────────────────────────────────────────────
+  // อัปโหลดรูปเมนูหนึ่งแบบ (guest/member/admin) — เซฟไฟล์ทันที (แพทเทิร์นเดียวกับ uploadRoomImage ใน
+  // routes/rooms.ts) ไม่รอปุ่ม "บันทึกการตั้งค่าทั้งหมด" เพราะไฟล์ต้องมีอยู่จริงบนดิสก์ตอนกด "สร้าง Rich Menu"
+  .post("/richmenu/image", async ({ body, set }) => {
+    const { menu, base64 } = body as { menu: "guest" | "member" | "admin"; base64: string; name?: string };
+    if (menu !== "guest" && menu !== "member" && menu !== "admin") { set.status = 400; return { error: "ประเภทเมนูไม่ถูกต้อง" }; }
+    if (!base64) { set.status = 400; return { error: "ไม่พบไฟล์รูป" }; }
+
+    const mimeType = base64.match(/data:([^;]+);/)?.[1] ?? "image/png";
+    const ext = (mimeType.split("/")[1] || "png").replace("jpeg", "jpg");
+    const { mkdirSync, writeFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const uploadDir = resolve(process.cwd(), "uploads", "richmenu");
+    mkdirSync(uploadDir, { recursive: true });
+    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+    const buffer = Buffer.from(raw, "base64");
+    const fileName = `${menu}_${Date.now()}.${ext}`;
+    writeFileSync(resolve(uploadDir, fileName), buffer);
+    const url = `/uploads/richmenu/${fileName}`;
+
+    await getOrCreateConfig();
+    if (menu === "guest") await db.update(appConfig).set({ richMenuGuestImage: url }).where(eq(appConfig.id, CONFIG_ID));
+    else if (menu === "member") await db.update(appConfig).set({ richMenuMemberImage: url }).where(eq(appConfig.id, CONFIG_ID));
+    else await db.update(appConfig).set({ richMenuAdminImage: url }).where(eq(appConfig.id, CONFIG_ID));
+
+    return { url };
+  })
+  // สร้าง Rich Menu ทั้ง 3 แบบจริงผ่าน LINE API โดยอ่าน token/LIFF URL/รูปที่ตั้งค่าไว้แล้วจาก app_config
+  // ลบเมนูชุดเดิม (ถ้าเคยสร้างไว้) ทิ้งก่อนเสมอ กัน Rich Menu ค้างซ้อนกันในบัญชี LINE OA
+  .post("/richmenu/create", async ({ set }) => {
+    const row = await getOrCreateConfig();
+    const token = row.lineChannelAccessToken || "";
+    if (!token) {
+      set.status = 400;
+      return { error: "ยังไม่ได้ตั้งค่า LINE Channel Access Token (ตั้งค่าที่หมวดฟีเจอร์เสริม > ส่งบิลแจ้งเตือนทาง LINE)" };
+    }
+    const liffLoginUrl = row.liffLoginUrl || "";
+    const liffPaymentUrl = row.liffPaymentUrl || "";
+    if (!liffLoginUrl || !liffPaymentUrl) {
+      set.status = 400;
+      return { error: "กรุณากรอกและบันทึก LIFF Login URL กับ LIFF Payment URL ให้ครบก่อน" };
+    }
+    const imagePaths = { guest: row.richMenuGuestImage, member: row.richMenuMemberImage, admin: row.richMenuAdminImage };
+    if (!imagePaths.guest || !imagePaths.member || !imagePaths.admin) {
+      set.status = 400;
+      return { error: "กรุณาอัปโหลดรูปเมนูให้ครบทั้ง 3 แบบ (Guest / Member / Admin) ก่อน" };
+    }
+
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    function loadImage(relUrl: string) {
+      const filePath = resolve(process.cwd(), relUrl.replace(/^\//, ""));
+      const buffer = readFileSync(filePath);
+      const ext = relUrl.split(".").pop()?.toLowerCase();
+      const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+      return { buffer, mimeType };
+    }
+
+    let images;
+    try {
+      images = { guest: loadImage(imagePaths.guest), member: loadImage(imagePaths.member), admin: loadImage(imagePaths.admin) };
+    } catch {
+      set.status = 400;
+      return { error: "ไม่พบไฟล์รูปเมนูบนเซิร์ฟเวอร์ กรุณาอัปโหลดรูปใหม่อีกครั้ง" };
+    }
+
+    try {
+      const result = await createAllRichMenus(token, liffLoginUrl, liffPaymentUrl, images, {
+        guest: row.richMenuGuestId || undefined,
+        member: row.richMenuMemberId || undefined,
+        admin: row.richMenuAdminId || undefined,
+      });
+      await db.update(appConfig).set({
+        richMenuGuestId: result.ids.guest,
+        richMenuMemberId: result.ids.member,
+        richMenuAdminId: result.ids.admin,
+      }).where(eq(appConfig.id, CONFIG_ID));
+
+      return { menuIds: result.ids, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError };
+    } catch (e: any) {
+      set.status = 500;
+      return { error: e?.message ?? "สร้าง Rich Menu ไม่สำเร็จ" };
+    }
   });

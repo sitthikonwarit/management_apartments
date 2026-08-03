@@ -212,4 +212,12 @@ export const settingsApi = {
   deleteFormula: (id: string) => api.delete(`/settings/${id}`).then((r) => r.data),
   getConfig: () => api.get("/settings/config").then((r) => r.data),
   updateConfig: (data: any) => api.put("/settings/config", data).then((r) => r.data),
+  uploadRichMenuImage: (menu: "guest" | "member" | "admin", base64: string, name: string) =>
+    api.post("/settings/richmenu/image", { menu, base64, name }).then((r) => r.data as { url: string }),
+  createRichMenus: () =>
+    api.post("/settings/richmenu/create").then((r) => r.data as {
+      menuIds: { guest: string; member: string; admin: string };
+      defaultSet: boolean;
+      warning?: string;
+    }),
 };

@@ -8,15 +8,19 @@ import { thaiDateOnlyString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 
-type Tab = "appearance" | "bill" | "features" | "users";
+type Tab = "appearance" | "bill" | "features" | "richmenu" | "users";
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "appearance", label: "รูปลักษณ์ (Appearance)", icon: "fas fa-paint-brush" },
   { key: "bill", label: "ระบบบิล (Bill System)", icon: "fas fa-coins" },
   { key: "features", label: "ฟีเจอร์เสริม (Features)", icon: "fas fa-plug" },
+  { key: "richmenu", label: "LINE Rich Menu", icon: "fas fa-border-all" },
   { key: "users", label: "บัญชีผู้ใช้ (Users)", icon: "fas fa-users-cog" },
 ];
 
 const MAX_LOGO_SIZE = 120;
+const RICHMENU_WIDTH = 2500;
+const RICHMENU_HEIGHT = 1686;
+type RichMenuKey = "guest" | "member" | "admin";
 
 // กรอบหมวดหมู่แบบเรียบ (ไม่มีเงา) เพื่อแยกแต่ละหัวข้อการตั้งค่าให้เห็นชัดเจน
 const CATEGORY_CARD_STYLE: React.CSSProperties = {
@@ -240,6 +244,18 @@ export default function SettingsPage() {
   const [lineSecretVisible, setLineSecretVisible] = useState(false);
   const [lineAutoSendEnabled, setLineAutoSendEnabled] = useState(false);
 
+  // ── LINE Rich Menu ──
+  const [liffLoginUrl, setLiffLoginUrl] = useState("");
+  const [liffPaymentUrl, setLiffPaymentUrl] = useState("");
+  const [richMenuImages, setRichMenuImages] = useState({ guest: "", member: "", admin: "" });
+  const [richMenuIds, setRichMenuIds] = useState({ guest: "", member: "", admin: "" });
+  const [uploadingRichMenu, setUploadingRichMenu] = useState({ guest: false, member: false, admin: false });
+  const [creatingRichMenu, setCreatingRichMenu] = useState(false);
+  const [richMenuMsg, setRichMenuMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const guestFileRef = useRef<HTMLInputElement>(null);
+  const memberFileRef = useRef<HTMLInputElement>(null);
+  const adminFileRef = useRef<HTMLInputElement>(null);
+
   const [logoUrl, setLogoUrl] = useState("");
   const [logoBgEnabled, setLogoBgEnabled] = useState(false);
   const [logoBgColor, setLogoBgColor] = useState("#ffffff");
@@ -315,6 +331,10 @@ export default function SettingsPage() {
     setLineToken(config.lineMessaging.channelAccessToken);
     setLineSecret(config.lineMessaging.channelSecret);
     setLineAutoSendEnabled(config.lineMessaging.autoSendEnabled);
+    setLiffLoginUrl(config.richMenu.liffLoginUrl);
+    setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
+    setRichMenuImages(config.richMenu.images);
+    setRichMenuIds(config.richMenu.menuIds);
     setLogoUrl(config.appIdentity.logoUrl);
     setLogoBgEnabled(config.appIdentity.logoBg.enabled);
     setLogoBgColor(config.appIdentity.logoBg.color);
@@ -383,6 +403,56 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
+  // ตรวจขนาดรูปให้ตรง 2500x1686 พิกเซลเป๊ะก่อนอัปโหลดจริง (LINE ปฏิเสธรูปที่ขนาดไม่ตรงตอนสร้างเมนู) —
+  // อัปโหลดทันทีที่เลือกไฟล์เสร็จ ไม่รอปุ่ม "บันทึกการตั้งค่าทั้งหมด" เพราะไฟล์ต้องมีอยู่จริงบนเซิร์ฟเวอร์
+  function handleRichMenuFile(menu: RichMenuKey, file: File) {
+    setUploadingRichMenu((prev) => ({ ...prev, [menu]: true }));
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onload = async () => {
+        if (img.width !== RICHMENU_WIDTH || img.height !== RICHMENU_HEIGHT) {
+          toastError(`รูปต้องมีขนาด ${RICHMENU_WIDTH}x${RICHMENU_HEIGHT} พิกเซลเป๊ะ (รูปนี้ ${img.width}x${img.height})`);
+          setUploadingRichMenu((prev) => ({ ...prev, [menu]: false }));
+          return;
+        }
+        try {
+          const { url } = await settingsApi.uploadRichMenuImage(menu, dataUrl, file.name);
+          setRichMenuImages((prev) => ({ ...prev, [menu]: url }));
+          toastSuccess("อัปโหลดรูปเมนูสำเร็จ");
+        } catch (err: any) {
+          toastError(err?.response?.data?.error ?? "อัปโหลดรูปไม่สำเร็จ");
+        } finally {
+          setUploadingRichMenu((prev) => ({ ...prev, [menu]: false }));
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleCreateRichMenus() {
+    setCreatingRichMenu(true); setRichMenuMsg(null);
+    try {
+      const result = await settingsApi.createRichMenus();
+      setRichMenuIds(result.menuIds);
+      if (result.warning) {
+        setRichMenuMsg({ type: "error", text: `สร้างเมนูสำเร็จ แต่${result.warning}` });
+      } else {
+        const successText = "สร้าง Rich Menu ทั้ง 3 แบบสำเร็จ และตั้งเมนู Guest เป็นค่าเริ่มต้นแล้ว";
+        setRichMenuMsg({ type: "success", text: successText });
+        toastSuccess(successText);
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? "สร้าง Rich Menu ไม่สำเร็จ";
+      setRichMenuMsg({ type: "error", text: msg });
+      toastError(msg);
+    } finally {
+      setCreatingRichMenu(false);
+    }
+  }
+
   async function handleSaveAll() {
     setSaving(true); setSaveMsg(null);
     try {
@@ -404,6 +474,7 @@ export default function SettingsPage() {
         yearFormat,
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
         lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(), autoSendEnabled: lineAutoSendEnabled },
+        richMenu: { ...DEFAULT_APP_CONFIG.richMenu, liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim() },
       };
       const updated = await settingsApi.updateConfig(payload);
       setConfig({
@@ -412,6 +483,11 @@ export default function SettingsPage() {
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...updated.overdue },
         features: { ...DEFAULT_APP_CONFIG.features, ...updated.features },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...updated.lineMessaging },
+        richMenu: {
+          ...DEFAULT_APP_CONFIG.richMenu, ...updated.richMenu,
+          images: { ...DEFAULT_APP_CONFIG.richMenu.images, ...updated.richMenu?.images },
+          menuIds: { ...DEFAULT_APP_CONFIG.richMenu.menuIds, ...updated.richMenu?.menuIds },
+        },
       });
       const successText = "บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว";
       setSaveMsg({ type: "success", text: successText });
@@ -879,6 +955,99 @@ export default function SettingsPage() {
                   </div>
                 </Searchable>
               </>
+            )}
+
+            {/* ── LINE Rich Menu ── */}
+            {sectionVisible("richmenu") && (
+              <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
+                  <i className="fas fa-border-all me-2" />LINE Rich Menu
+                </h6>
+                <p className="text-muted small mb-3">
+                  ตั้งค่าเมนูปุ่มลัดที่แสดงใต้ช่องแชทของ LINE OA แบ่งเป็น 3 แบบ: <strong>Guest</strong> (ผู้ใช้ใหม่/ยังไม่เข้าสู่ระบบ —
+                  เห็นเป็นเมนูเริ่มต้นเสมอ), <strong>Member</strong> และ <strong>Admin</strong> — ต้องตั้งค่า LINE Channel Access Token
+                  ในหมวด "ฟีเจอร์เสริม &gt; ส่งบิลแจ้งเตือนทาง LINE" ก่อนถึงจะสร้างเมนูได้
+                </p>
+
+                <div className="row g-3 mb-3">
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Login URL <span className="text-muted fw-normal">(ปุ่มใหญ่บนเมนู Guest)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffLoginUrl} onChange={(e) => setLiffLoginUrl(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Payment URL <span className="text-muted fw-normal">(ปุ่มชำระเงินบนเมนู Member)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffPaymentUrl} onChange={(e) => setLiffPaymentUrl(e.target.value)} />
+                  </div>
+                  <div className="col-12">
+                    <div className="form-text small">แก้ไข URL แล้วต้องกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้ก่อน ถึงจะมีผลตอนกดสร้าง Rich Menu ด้านล่าง</div>
+                  </div>
+                </div>
+
+                <div className="row g-3 mb-3">
+                  {([
+                    { key: "guest" as RichMenuKey, label: "เมนู Guest", desc: "1 ปุ่มใหญ่บน + 3 ปุ่มล่าง", ref: guestFileRef },
+                    { key: "member" as RichMenuKey, label: "เมนู Member", desc: "6 ปุ่ม (3x2)", ref: memberFileRef },
+                    { key: "admin" as RichMenuKey, label: "เมนู Admin", desc: "6 ปุ่ม (3x2)", ref: adminFileRef },
+                  ]).map((m) => (
+                    <div className="col-md-4" key={m.key}>
+                      <label className="form-label small fw-bold">{m.label}</label>
+                      <div className="p-2 rounded" style={{ border: "1px solid var(--color-light)", background: "var(--color-background)" }}>
+                        <div style={{
+                          width: "100%", aspectRatio: `${RICHMENU_WIDTH} / ${RICHMENU_HEIGHT}`, borderRadius: 8, overflow: "hidden",
+                          background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          {richMenuImages[m.key]
+                            ? <img src={richMenuImages[m.key]} alt={m.label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span className="text-muted small"><i className="fas fa-image me-1" />ยังไม่มีรูป</span>}
+                        </div>
+                        <div className="text-muted small mt-1 mb-2">{m.desc} — ขนาด {RICHMENU_WIDTH}x{RICHMENU_HEIGHT} พิกเซล</div>
+                        <button className="btn btn-sm btn-outline-secondary w-100" type="button" disabled={uploadingRichMenu[m.key]}
+                          onClick={() => m.ref.current?.click()}>
+                          {uploadingRichMenu[m.key]
+                            ? <><span className="spinner-border spinner-border-sm me-1" />กำลังอัปโหลด...</>
+                            : <><i className="fas fa-upload me-1" />{richMenuImages[m.key] ? "เปลี่ยนรูป" : "อัปโหลดรูป"}</>}
+                        </button>
+                        <input ref={m.ref} type="file" accept="image/png,image/jpeg" style={{ display: "none" }}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleRichMenuFile(m.key, f); e.target.value = ""; }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {richMenuMsg && (
+                  <div className={`alert ${richMenuMsg.type === "success" ? "alert-success" : "alert-danger"} py-2 px-3 small mb-3`}>
+                    {richMenuMsg.text}
+                  </div>
+                )}
+
+                <button className="btn btn-primary" onClick={handleCreateRichMenus}
+                  disabled={creatingRichMenu || !liffLoginUrl.trim() || !liffPaymentUrl.trim()
+                    || !richMenuImages.guest || !richMenuImages.member || !richMenuImages.admin}>
+                  {creatingRichMenu
+                    ? <><span className="spinner-border spinner-border-sm me-2" />กำลังสร้าง Rich Menu...</>
+                    : <><i className="fas fa-magic me-2" />สร้าง/อัปเดต Rich Menu ทั้ง 3 แบบ</>}
+                </button>
+
+                {(richMenuIds.guest || richMenuIds.member || richMenuIds.admin) && (
+                  <div className="mt-3 small text-muted">
+                    <div><i className="fas fa-check-circle text-success me-1" />Guest ID: <code>{richMenuIds.guest || "-"}</code></div>
+                    <div><i className="fas fa-check-circle text-success me-1" />Member ID: <code>{richMenuIds.member || "-"}</code></div>
+                    <div><i className="fas fa-check-circle text-success me-1" />Admin ID: <code>{richMenuIds.admin || "-"}</code></div>
+                  </div>
+                )}
+
+                <div className="alert alert-light border small mt-3 mb-0" style={{ background: "var(--color-background)" }}>
+                  <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
+                  <ol className="mb-0 ps-3 mt-1">
+                    <li>เตรียมรูปเมนู 3 รูป ขนาด {RICHMENU_WIDTH}x{RICHMENU_HEIGHT} พิกเซลเป๊ะ (นามสกุล .png หรือ .jpg เท่านั้น) แล้วอัปโหลดให้ครบทั้ง Guest/Member/Admin ด้านบน</li>
+                    <li>สร้างหน้า LIFF สำหรับเข้าสู่ระบบ และหน้า LIFF สำหรับชำระเงินไว้ก่อน (จาก LINE Developers Console) แล้ววาง URL ทั้งสองในช่องด้านบน จากนั้นกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้</li>
+                    <li>กด "สร้าง/อัปเดต Rich Menu ทั้ง 3 แบบ" — ระบบจะสร้างเมนูใหม่ 3 อัน (ลบของเดิมที่เคยสร้างไว้ทิ้งอัตโนมัติ) แล้วตั้งเมนู Guest เป็นค่าเริ่มต้นให้ผู้ใช้ทุกคน</li>
+                    <li>เมนู Member/Admin ยังต้องผูกเข้ากับ LINE User ID รายคนเองผ่าน LINE API เพิ่มเติม (หน้านี้ยังไม่มีปุ่มผูกอัตโนมัติ) — เก็บ ID ที่แสดงด้านบนไว้ใช้งาน</li>
+                  </ol>
+                </div>
+              </div>
             )}
 
             {/* ── บัญชีผู้ใช้ (Users) ── */}

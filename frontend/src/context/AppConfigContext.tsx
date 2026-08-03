@@ -23,6 +23,13 @@ export interface AppConfig {
   sessionTimeoutMinutes: number;
   // ส่งบิลแจ้งเตือนทาง LINE (LINE Messaging API) — ต้องกรอก Channel Access Token ของ LINE OA ก่อน
   lineMessaging: { enabled: boolean; channelAccessToken: string; channelSecret: string; autoSendEnabled: boolean };
+  // LINE Rich Menu (Guest/Member/Admin) — ตั้งค่า/สร้างได้จากหน้า Settings > LINE Rich Menu
+  richMenu: {
+    liffLoginUrl: string;
+    liffPaymentUrl: string;
+    images: { guest: string; member: string; admin: string };
+    menuIds: { guest: string; member: string; admin: string };
+  };
   updatedAt?: string;
 }
 
@@ -51,6 +58,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   yearFormat: "BE",
   sessionTimeoutMinutes: 30,
   lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false },
+  richMenu: {
+    liffLoginUrl: "", liffPaymentUrl: "",
+    images: { guest: "", member: "", admin: "" },
+    menuIds: { guest: "", member: "", admin: "" },
+  },
 };
 
 const AppConfigContext = createContext<{
@@ -87,6 +99,11 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...data.overdue },
         features: { ...DEFAULT_APP_CONFIG.features, ...data.features },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...data.lineMessaging },
+        richMenu: {
+          ...DEFAULT_APP_CONFIG.richMenu, ...data.richMenu,
+          images: { ...DEFAULT_APP_CONFIG.richMenu.images, ...data.richMenu?.images },
+          menuIds: { ...DEFAULT_APP_CONFIG.richMenu.menuIds, ...data.richMenu?.menuIds },
+        },
       });
     } finally {
       setLoading(false);

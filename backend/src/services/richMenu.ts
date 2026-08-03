@@ -1,0 +1,139 @@
+// LINE Rich Menu (Guest/Member/Admin) — สร้าง/ลบเมนูผ่าน LINE Messaging API เรียกจาก
+// routes/settings.ts (ปุ่ม "สร้าง/อัปเดต Rich Menu" ในหน้า Settings > LINE Rich Menu) เลย์เอาต์ปุ่ม/
+// ข้อความของแต่ละเมนูเก็บตายตัวไว้ที่นี่ ส่วน Channel Access Token / LIFF URL / รูปภาพแต่ละเมนู
+// มาจาก app_config (ตั้งค่าได้จากหน้าเว็บ ไม่ต้องแก้โค้ด)
+
+const LINE_RICHMENU_URL = "https://api.line.me/v2/bot/richmenu";
+const LINE_RICHMENU_CONTENT_URL = "https://api-data.line.me/v2/bot/richmenu";
+const LINE_DEFAULT_RICHMENU_URL = "https://api.line.me/v2/bot/user/all/richmenu";
+
+// เทมเพลตใหญ่สุดของ LINE — รูปทุกไฟล์ต้องเป็นขนาดนี้เป๊ะ (ตรวจฝั่ง frontend ก่อนอัปโหลดแล้ว ดู
+// handleRichMenuFile ใน SettingsPage.tsx)
+export const RICHMENU_SIZE = { width: 2500, height: 1686 };
+
+interface RichMenuArea {
+  bounds: { x: number; y: number; width: number; height: number };
+  action: { type: "uri"; uri: string } | { type: "message"; text: string };
+}
+
+function guestAreas(liffLoginUrl: string): RichMenuArea[] {
+  return [
+    { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
+    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: { type: "message", text: "ดูห้องว่าง" } },
+    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: { type: "message", text: "จองห้อง" } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "message", text: "ติดต่อ" } },
+  ];
+}
+
+const W = 833;
+const H = 843;
+
+function memberAreas(liffPaymentUrl: string): RichMenuArea[] {
+  return [
+    { bounds: { x: 0, y: 0, width: W, height: H }, action: { type: "message", text: "ข้อมูลผู้เช่า" } },
+    { bounds: { x: W, y: 0, width: W, height: H }, action: { type: "message", text: "บิลเดือนนี้" } },
+    { bounds: { x: W * 2, y: 0, width: W, height: H }, action: { type: "uri", uri: liffPaymentUrl } },
+    { bounds: { x: 0, y: H, width: W, height: H }, action: { type: "message", text: "แจ้งซ่อม" } },
+    { bounds: { x: W, y: H, width: W, height: H }, action: { type: "message", text: "ติดต่อ" } },
+    { bounds: { x: W * 2, y: H, width: W, height: H }, action: { type: "message", text: "เพิ่มเติม" } },
+  ];
+}
+
+function adminAreas(): RichMenuArea[] {
+  return [
+    { bounds: { x: 0, y: 0, width: W, height: H }, action: { type: "message", text: "แดชบอร์ดสรุปยอด" } },
+    { bounds: { x: W, y: 0, width: W, height: H }, action: { type: "message", text: "ดูห้องที่ค้างชำระ" } },
+    { bounds: { x: W * 2, y: 0, width: W, height: H }, action: { type: "message", text: "ส่งแจ้งเตือนบิล" } },
+    { bounds: { x: 0, y: H, width: W, height: H }, action: { type: "message", text: "รายการแจ้งซ่อม" } },
+    { bounds: { x: W, y: H, width: W, height: H }, action: { type: "message", text: "ตั้งค่าระบบ" } },
+    { bounds: { x: W * 2, y: H, width: W, height: H }, action: { type: "message", text: "คู่มือแอดมิน" } },
+  ];
+}
+
+async function createOne(
+  token: string, name: string, chatBarText: string, areas: RichMenuArea[],
+  imageBuffer: Buffer, mimeType: string
+): Promise<string> {
+  const createRes = await fetch(LINE_RICHMENU_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ size: RICHMENU_SIZE, selected: false, name, chatBarText, areas }),
+  });
+  if (!createRes.ok) {
+    const text = await createRes.text().catch(() => "");
+    throw new Error(`สร้างเมนู "${name}" ไม่สำเร็จ (${createRes.status}): ${text}`);
+  }
+  const { richMenuId } = await createRes.json();
+
+  const uploadRes = await fetch(`${LINE_RICHMENU_CONTENT_URL}/${richMenuId}/content`, {
+    method: "POST",
+    headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
+    body: imageBuffer,
+  });
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text().catch(() => "");
+    throw new Error(`อัปโหลดรูปเมนู "${name}" ไม่สำเร็จ (${uploadRes.status}): ${text}`);
+  }
+  return richMenuId;
+}
+
+// ลบ Rich Menu เก่าออกจาก LINE — best-effort เฉยๆ (อาจถูกลบจากฝั่ง LINE Console ไปแล้วก็ได้) ไม่ throw
+// เพราะไม่อยากบล็อกการสร้างชุดใหม่ด้วยเหตุผลที่ไม่เกี่ยวกับชุดใหม่เลย
+async function deleteRichMenu(token: string, richMenuId: string): Promise<void> {
+  if (!richMenuId) return;
+  try {
+    await fetch(`${LINE_RICHMENU_URL}/${richMenuId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    // เพิกเฉย — ดู comment ด้านบน
+  }
+}
+
+export interface RichMenuImageInput {
+  buffer: Buffer;
+  mimeType: string;
+}
+
+export interface RichMenuIds {
+  guest: string;
+  member: string;
+  admin: string;
+}
+
+export interface CreateAllRichMenusResult {
+  ids: RichMenuIds;
+  defaultSet: boolean;
+  defaultError?: string;
+}
+
+// สร้างเมนู Guest/Member/Admin ทั้งชุดใหม่ ลบของเดิม (ถ้ามี ID เก่าส่งมาใน previousIds) ทิ้งก่อน แล้ว
+// ตั้งเมนู Guest เป็นค่าเริ่มต้นของผู้ใช้ทุกคน (ผู้ใช้ใหม่/ยังไม่ผูกบัญชีจะเห็นเมนูนี้ก่อนเสมอ) — ถ้าขั้นตอน
+// ตั้งค่าเริ่มต้นล้มเหลว ไม่ throw ทิ้ง ID ที่เพิ่งสร้างไป (เมนูสร้างสำเร็จแล้วจริง แค่ยังไม่ได้ผูกเป็นค่า
+// เริ่มต้นเฉยๆ) เพื่อให้ผู้เรียกบันทึก ID เหล่านี้ไว้ได้แม้ขั้นตอนสุดท้ายจะพลาด
+export async function createAllRichMenus(
+  token: string,
+  liffLoginUrl: string,
+  liffPaymentUrl: string,
+  images: { guest: RichMenuImageInput; member: RichMenuImageInput; admin: RichMenuImageInput },
+  previousIds?: Partial<RichMenuIds>
+): Promise<CreateAllRichMenusResult> {
+  if (previousIds?.guest) await deleteRichMenu(token, previousIds.guest);
+  if (previousIds?.member) await deleteRichMenu(token, previousIds.member);
+  if (previousIds?.admin) await deleteRichMenu(token, previousIds.admin);
+
+  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(liffLoginUrl), images.guest.buffer, images.guest.mimeType);
+  const memberId = await createOne(token, "Member Menu", "เมนูสมาชิก", memberAreas(liffPaymentUrl), images.member.buffer, images.member.mimeType);
+  const adminId = await createOne(token, "Admin Menu", "เมนูผู้ดูแลระบบ", adminAreas(), images.admin.buffer, images.admin.mimeType);
+
+  const ids: RichMenuIds = { guest: guestId, member: memberId, admin: adminId };
+
+  const setDefaultRes = await fetch(`${LINE_DEFAULT_RICHMENU_URL}/${guestId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!setDefaultRes.ok) {
+    const text = await setDefaultRes.text().catch(() => "");
+    return { ids, defaultSet: false, defaultError: `ตั้งเมนู Guest เป็นค่าเริ่มต้นไม่สำเร็จ (${setDefaultRes.status}): ${text}` };
+  }
+
+  return { ids, defaultSet: true };
+}
