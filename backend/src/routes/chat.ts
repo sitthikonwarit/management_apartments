@@ -13,6 +13,15 @@ function myScore(my: string): number {
   return (parseInt(y, 10) || 0) * 100 + (parseInt(m, 10) || 0);
 }
 
+// ข้อความตัวอย่างแสดงในรายชื่อสนทนา — "bill"/"receipt" เก็บ JSON ดิบไว้ใน text (ดู services/line.ts:
+// logOutboundChatMessage) ต้องแปลงเป็นข้อความสั้นๆ อ่านง่ายแทน ไม่งั้นโชว์ JSON ดิบๆ ในหน้ารายชื่อ
+function previewText(m: { messageType: string; text: string }): string {
+  if (m.messageType === "text") return m.text;
+  if (m.messageType === "bill") return "📄 แจ้งบิลค่าเช่า";
+  if (m.messageType === "receipt") return "🧾 ใบเสร็จรับเงิน";
+  return m.text || "[ไฟล์แนบ]";
+}
+
 // สติกเกอร์ที่พนักงานเลือกส่งได้ — ต้องเป็นคู่ packageId/stickerId ที่ LINE เผยแพร่ทางการให้ส่งผ่าน
 // Messaging API เท่านั้น (ไม่ใช่สติกเกอร์ที่ผู้เช่าซื้อเอง อ้างอิงจาก
 // https://developers.line.biz/en/docs/messaging-api/sticker-list/) รายการนี้ต้องตรงกับ
@@ -93,7 +102,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
         displayName,
         roomNumber: room?.number || null,
         pictureUrl: profileMap.get(lineUserId)?.pictureUrl || null,
-        lastMessage: last.messageType === "text" ? last.text : last.text || "[ไฟล์แนบ]",
+        lastMessage: previewText(last),
         lastMessageAt: last.createdAt,
         lastDirection: last.direction as "in" | "out",
         unreadCount,

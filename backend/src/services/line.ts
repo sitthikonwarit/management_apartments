@@ -328,6 +328,65 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
   };
 }
 
+// สรุปข้อมูลบิลเป็น JSON เก็บลงประวัติแชท (chat_messages.text ตอน messageType="bill") ให้หน้าแชทฝั่งเว็บ
+// เรนเดอร์เป็นการ์ดหน้าตาเหมือนบิลที่ส่งจริงทาง LINE (ดู buildBillFlexMessage ด้านบน) แถวรายการ/ยอด/เงื่อนไข
+// ต้องตรงกับที่นั่นเป๊ะๆ ต่างกันแค่ใช้ไอคอน FontAwesome (เว็บเรามีอยู่แล้ว) แทนรูปไอคอนของ Flex Message
+function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppearanceSettings) {
+  const rows: { icon: string; iconBg: string; name: string; sub?: string; price: number }[] = [];
+  rows.push({ icon: "fa-door-open", iconBg: "var(--color-primary)", name: "ค่าห้อง/ค่าเช่า", price: Number(item.priceRoom) || 0 });
+  if (item.electricActive) {
+    rows.push({
+      icon: "fa-bolt", iconBg: "#fd7e14", name: `ค่าไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`,
+      sub: `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · หน่วยละ ${fmtMoney(item.electricRate)} บาท`,
+      price: Number(item.priceElectric) || 0,
+    });
+  }
+  if (item.waterActive) {
+    rows.push({
+      icon: "fa-tint", iconBg: "#0dcaf0", name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
+      sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · หน่วยละ ${fmtMoney(item.waterRate)} บาท`,
+      price: Number(item.priceWater) || 0,
+    });
+  }
+  (item.billTagItems ?? []).forEach((t: any) => {
+    if (Number(t.price) > 0) rows.push({ icon: "fa-tag", iconBg: t.color || "#6c757d", name: t.name, price: Number(t.price) });
+  });
+  (item.billTenantTagItems ?? []).forEach((t: any) => {
+    if (Number(t.price) > 0) rows.push({ icon: "fa-tag", iconBg: t.color || "var(--color-primary)", name: t.name, price: Number(t.price) });
+  });
+  (item.customItems ?? []).forEach((c: any) => {
+    if (Number(c.price) > 0) rows.push({ icon: "fa-plus", iconBg: "var(--color-success)", name: c.name, price: Number(c.price) });
+  });
+  (item.billVehicleItems ?? []).forEach((v: any) => {
+    if (Number(v.price) > 0) rows.push({ icon: "fa-car", iconBg: "#6610f2", name: v.plate || v.name, price: Number(v.price) });
+  });
+
+  const outstandingItems = Array.isArray(item.outstandingItems)
+    ? item.outstandingItems.map((o: any) => ({ label: monthYearLabel(o.monthYear, settings.yearFormat), amount: Number(o.amount) || 0 }))
+    : [];
+  const discountItems = (item.discountItems ?? [])
+    .filter((d: any) => Number(d.price) > 0)
+    .map((d: any) => ({ name: d.name, price: Number(d.price) || 0 }));
+
+  return {
+    kind: "bill",
+    roomNumber: String(item.roomNumber ?? ""),
+    tenantTitle: item.tenantTitle || "คุณ",
+    tenantName: item.tenantName || "-",
+    monthLabel: monthYearLabel(monthYear, settings.yearFormat),
+    rows,
+    fineAmount: Number(item.fineAmount) || 0,
+    overdueDays: Number(item.overdueDays) || 0,
+    outstandingItems,
+    outstandingAmount: outstandingItems.length === 0 ? Number(item.outstandingAmount) || 0 : 0,
+    discountItems,
+    total: Number(item.total) || 0,
+    residentCount: Number(item.residentCount) || 1,
+    showSplit: !!(settings.splitRentByResidents && Number(item.residentCount) > 1),
+    dueDateLabel: dueDateLabel(item.overdueConfig),
+  };
+}
+
 export async function pushLineMessage(token: string, to: string, messages: any[]) {
   const res = await fetch(LINE_PUSH_URL, {
     method: "POST",
@@ -405,9 +464,11 @@ export async function cacheLineProfile(lineUserId: string, profile: { displayNam
 }
 
 // บันทึกข้อความแจ้งเตือนอัตโนมัติ (ส่งบิล/ใบเสร็จทาง LINE) ลง chat_messages ด้วย — ให้ขึ้นในหน้าแชท LINE
-// ของเว็บเราเหมือนข้อความที่พนักงานพิมพ์ตอบเอง (ไม่ใช่แค่ push ไปที่ LINE ของผู้เช่าเฉยๆ) มาร์คว่าอ่านแล้ว
-// ทันทีเพราะเป็นข้อความขาออก แล้ว broadcast ให้หน้าแชทที่เปิดอยู่รีเฟรชสดๆ เหมือนตอนมีข้อความเข้าใหม่
-async function logOutboundChatMessage(lineUserId: string, tenantId: string, text: string, senderName: string) {
+// ของเว็บเราเหมือนข้อความที่พนักงานพิมพ์ตอบเอง (ไม่ใช่แค่ push ไปที่ LINE ของผู้เช่าเฉยๆ) messageType เป็น
+// "bill"/"receipt" เก็บ JSON สรุปข้อมูลบิล/ใบเสร็จไว้ใน text ให้หน้าแชทเรนเดอร์เป็นการ์ดหน้าตาเหมือนที่ส่งไป
+// จริงๆ (ไม่ใช่แค่ข้อความตัวหนังสือธรรมดา) มาร์คว่าอ่านแล้วทันทีเพราะเป็นข้อความขาออก แล้ว broadcast ให้
+// หน้าแชทที่เปิดอยู่รีเฟรชสดๆ เหมือนตอนมีข้อความเข้าใหม่
+async function logOutboundChatMessage(lineUserId: string, tenantId: string, messageType: string, payload: string, senderName: string) {
   if (!lineUserId || !lineUserId.startsWith("U")) return;
   const now = new Date().toISOString();
   await db.insert(chatMessages).values({
@@ -415,8 +476,8 @@ async function logOutboundChatMessage(lineUserId: string, tenantId: string, text
     lineUserId,
     tenantId,
     direction: "out",
-    messageType: "text",
-    text,
+    messageType,
+    text: payload,
     senderName,
     createdAt: now,
     readAt: now,
@@ -529,10 +590,9 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
     log.detail = `ส่งบิลทาง LINE สำเร็จ (${method === "auto" ? "อัตโนมัติ" : "ส่งเอง"})`
       + (coLineUserIds.length > 0 ? ` — ผู้ร่วมพักอาศัย ${coOk}/${coLineUserIds.length} คน` : "");
 
-    const monthLabel = monthYearLabel(billRow.monthYear, settings.yearFormat);
+    const snapshot = buildChatBillSnapshot(item, billRow.monthYear, settings);
     await logOutboundChatMessage(
-      lineUserId, String(item.tenantId ?? ""),
-      `📄 แจ้งบิลค่าเช่าห้อง ${item.roomNumber} เดือน ${monthLabel}\nยอด ${fmtMoney(item.total)} ฿`,
+      lineUserId, String(item.tenantId ?? ""), "bill", JSON.stringify(snapshot),
       log.by || "พนักงาน"
     );
   }
@@ -628,6 +688,28 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
   };
 }
 
+// สรุปข้อมูลใบเสร็จเป็น JSON เก็บลงประวัติแชท (chat_messages.text ตอน messageType="receipt") ให้หน้าแชท
+// ฝั่งเว็บเรนเดอร์เป็นการ์ดหน้าตาเหมือนใบเสร็จที่ส่งจริงทาง LINE (ดู buildPaymentReceiptFlexMessage ด้านบน)
+// slipUrl เก็บเป็น path สัมพัทธ์เดิม (ไม่ผ่าน resolveSlipUrl) เพราะเว็บเราเปิดผ่าน /uploads พร็อกซีเองได้เลย
+// ไม่ต้องพึ่ง PUBLIC_BASE_URL แบบตอนส่งลิงก์ไปให้ LINE ของผู้เช่า
+function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppearanceSettings) {
+  const remaining = Math.max(0, input.billTotal - input.paidTotal);
+  const fullySettled = remaining <= 0.005;
+  return {
+    kind: "receipt",
+    roomNumber: String(input.roomNumber ?? ""),
+    monthLabel: monthYearLabel(input.monthYear, settings.yearFormat),
+    method: input.method,
+    amount: Number(input.amount) || 0,
+    change: Number(input.change) || 0,
+    note: input.note || "",
+    paymentDateLabel: thaiDateLabel(input.paymentDate, settings.yearFormat),
+    remaining,
+    fullySettled,
+    slipUrl: input.slipUrl || "",
+  };
+}
+
 // ส่งใบเสร็จรับเงินทาง LINE — เรียกจาก bills.ts ทันทีหลังบันทึกรายการชำระเงินสำเร็จ (best-effort ไม่บล็อกการ
 // บันทึกยอดถ้าส่งไม่สำเร็จ เช่น ผู้เช่ายังไม่ได้ผูก LINE User ID หรือปิดใช้งาน LINE Messaging ไว้)
 export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promise<SendLineResult> {
@@ -648,12 +730,9 @@ export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promis
   try {
     await pushLineMessage(settings.token, lineUserId, [buildPaymentReceiptFlexMessage(input, settings)]);
 
-    const remaining = Math.max(0, input.billTotal - input.paidTotal);
-    const fullySettled = remaining <= 0.005;
+    const snapshot = buildChatReceiptSnapshot(input, settings);
     await logOutboundChatMessage(
-      lineUserId, String(input.tenantId ?? ""),
-      `🧾 ใบเสร็จรับเงิน ห้อง ${input.roomNumber} (เดือน ${monthYearLabel(input.monthYear, settings.yearFormat)})\n`
-      + `รับชำระ ${fmtMoney(input.amount)} ฿ — ${fullySettled ? "ชำระครบถ้วนแล้ว" : `คงเหลือ ${fmtMoney(remaining)} ฿`}`,
+      lineUserId, String(input.tenantId ?? ""), "receipt", JSON.stringify(snapshot),
       input.actor || "พนักงาน"
     );
 

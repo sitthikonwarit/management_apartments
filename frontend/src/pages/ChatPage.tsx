@@ -8,6 +8,7 @@ import { LINE_STICKERS, stickerThumbUrl } from "../utils/lineStickers";
 import { AVATAR_URL } from "../components/TenantTableView";
 import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
 import ImageLightbox from "../components/ImageLightbox";
+import { ChatBillMessage } from "../components/ChatBillCard";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -250,6 +251,10 @@ export default function ChatPage() {
                   {m.messageType === "sticker" && m.stickerId ? (
                     // สติกเกอร์แสดงแบบลอยเดี่ยวๆ ไม่มีกล่องพื้นหลัง เหมือนแอปแชททั่วไป
                     <img src={stickerThumbUrl(m.stickerId)} alt="สติกเกอร์" style={{ width: 110, height: 110, objectFit: "contain" }} />
+                  ) : m.messageType === "bill" || m.messageType === "receipt" ? (
+                    // การ์ดแจ้งบิล/ใบเสร็จ (ส่งอัตโนมัติตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) มีหน้าตา/สีพื้นหลัง
+                    // ของตัวเองอยู่แล้ว ไม่ต้องห่อด้วยฟองข้อความสีปกติ
+                    <ChatBillMessage messageType={m.messageType} raw={m.text} />
                   ) : (
                     <div style={{
                       background: m.direction === "out" ? "var(--color-primary)" : "var(--color-background)",
