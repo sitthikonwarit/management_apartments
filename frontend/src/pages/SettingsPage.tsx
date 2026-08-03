@@ -264,6 +264,9 @@ export default function SettingsPage() {
   const [paymentQrImage, setPaymentQrImage] = useState("");
   const [uploadingQr, setUploadingQr] = useState(false);
   const qrFileRef = useRef<HTMLInputElement>(null);
+  const [easySlipApiKey, setEasySlipApiKey] = useState("");
+  const [easySlipApiKeyVisible, setEasySlipApiKeyVisible] = useState(false);
+  const [promptPayId, setPromptPayId] = useState("");
 
   const [logoUrl, setLogoUrl] = useState("");
   const [logoBgEnabled, setLogoBgEnabled] = useState(false);
@@ -348,6 +351,8 @@ export default function SettingsPage() {
     setPaymentAccountName(config.payment.accountName);
     setPaymentAccountNumber(config.payment.accountNumber);
     setPaymentQrImage(config.payment.qrImage);
+    setEasySlipApiKey(config.payment.easySlipApiKey);
+    setPromptPayId(config.payment.promptPayId);
     setLogoUrl(config.appIdentity.logoUrl);
     setLogoBgEnabled(config.appIdentity.logoBg.enabled);
     setLogoBgColor(config.appIdentity.logoBg.color);
@@ -517,6 +522,7 @@ export default function SettingsPage() {
         payment: {
           bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
           accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage,
+          easySlipApiKey: easySlipApiKey.trim(), promptPayId: promptPayId.trim(),
         },
       };
       const updated = await settingsApi.updateConfig(payload);
@@ -839,9 +845,12 @@ export default function SettingsPage() {
                 <Searchable query={q} keywords="บัญชีธนาคาร โอนเงิน qr code liff payment ชำระเงิน พร้อมเพย์">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                     <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
-                      <i className="fas fa-qrcode me-2" />ข้อมูลบัญชีรับชำระเงิน
+                      <i className="fas fa-qrcode me-2" />ข้อมูลบัญชีรับชำระเงิน (ค่าเริ่มต้น)
                     </h6>
-                    <p className="text-muted small mb-3">แสดงในหน้า LIFF Payment ให้ผู้เช่าดูยอดค้างชำระและโอนเงินเองผ่าน LINE</p>
+                    <p className="text-muted small mb-3">
+                      แสดงในหน้า LIFF Payment ให้ผู้เช่าดูยอดค้างชำระและโอนเงินเอง — ถ้าตั้งค่า EasySlip ด้านล่างไว้ครบ
+                      ระบบจะสร้าง QR ระบุยอดเองอัตโนมัติแทน ใช้ข้อมูลชุดนี้เป็น QR/เลขบัญชีสำรองตอนยังไม่ได้ตั้งค่า EasySlip เท่านั้น
+                    </p>
                     <div className="row g-4">
                       <div className="col-md-4 col-lg-3">
                         <label className="form-label small fw-bold">QR รับเงิน</label>
@@ -880,6 +889,45 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </Searchable>
+
+                <Searchable query={q} keywords="easyslip ตรวจสลิป promptpay สแกนจ่าย qr อัตโนมัติ ยืนยันการชำระเงิน">
+                  <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                    <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
+                      <i className="fas fa-robot me-2" />EasySlip — สร้าง QR ระบุยอด + ตรวจสลิปอัตโนมัติ
+                    </h6>
+                    <p className="text-muted small mb-3">
+                      ให้ผู้เช่าเลือกเดือน/จำนวนเงินที่จะจ่ายเอง (จ่ายเป็นงวดได้) แล้วสร้าง QR PromptPay ระบุยอดนั้นให้สแกน — เมื่อส่งสลิปกลับเข้าแชท LINE
+                      ระบบจะตรวจสอบยอดกับ EasySlip อัตโนมัติ ถ้ายอดตรงและไม่ใช่สลิปซ้ำ จะบันทึกยอดชำระ+ส่งใบเสร็จให้ทันที ไม่ต้องรอพนักงาน
+                    </p>
+
+                    <label className="form-label small">EasySlip API Key</label>
+                    <div className="input-group mb-2">
+                      <input type={easySlipApiKeyVisible ? "text" : "password"} className="form-control" autoComplete="off"
+                        placeholder="วาง API Key จาก easyslip.com"
+                        value={easySlipApiKey} onChange={(e) => setEasySlipApiKey(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" onClick={() => setEasySlipApiKeyVisible((v) => !v)}
+                        title={easySlipApiKeyVisible ? "ซ่อน" : "แสดง"}>
+                        <i className={`fas fa-eye${easySlipApiKeyVisible ? "-slash" : ""}`} />
+                      </button>
+                    </div>
+
+                    <label className="form-label small">PromptPay ID</label>
+                    <div className="input-group mb-2">
+                      <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้"
+                        value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} />
+                    </div>
+
+                    <div className="alert alert-light border small mb-0" style={{ background: "var(--color-background)" }}>
+                      <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
+                      <ol className="mb-0 ps-3 mt-1">
+                        <li>สมัครใช้งาน EasySlip ที่ easyslip.com แล้วคัดลอก API Key มาวางในช่องด้านบน</li>
+                        <li>กรอกเบอร์มือถือหรือเลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริง (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
+                        <li>กด "บันทึกการตั้งค่าทั้งหมด" ด้านบนสุดของหน้านี้ — หน้า LIFF Payment จะเปลี่ยนไปให้เลือกจำนวนเงิน+สร้าง QR เองอัตโนมัติ</li>
+                        <li>ระบบตรวจสลิปให้เฉพาะสลิปที่ส่งเข้าแชทหลังกดสร้าง QR ภายใน 2 ชั่วโมง และยอดต้องตรงกับที่เลือกไว้เป๊ะเท่านั้น — นอกเหนือจากนี้พนักงานยังบันทึกยอดเองได้ตามปกติ</li>
+                      </ol>
                     </div>
                   </div>
                 </Searchable>

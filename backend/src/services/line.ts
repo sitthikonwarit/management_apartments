@@ -34,6 +34,7 @@ function myScore(my: string): number {
 
 export interface OutstandingBillItem {
   billId: string;
+  roomId: string;
   monthYear: string;
   roomNumber: string;
   total: number;
@@ -55,13 +56,25 @@ export async function getOutstandingBillsForTenant(tenantId: string): Promise<{ 
       const paidAmount = Number(item?.paidAmount) || 0;
       const amount = total - paidAmount;
       if (amount > 0.005) {
-        items.push({ billId: row.id, monthYear: row.monthYear, roomNumber: String(item?.roomNumber ?? ""), total, paidAmount, amount });
+        items.push({ billId: row.id, roomId: String(item?.roomId ?? ""), monthYear: row.monthYear, roomNumber: String(item?.roomNumber ?? ""), total, paidAmount, amount });
       }
     }
   }
   items.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
   const total = items.reduce((sum, it) => sum + it.amount, 0);
   return { items, total };
+}
+
+// ดึงรายการห้องหนึ่งรายการในบิลกลุ่มหนึ่ง พร้อมตรวจว่าเป็นของผู้เช่าคนนี้จริง (กันผู้เช่าคนอื่นดู/จ่ายบิล
+// ของคนอื่นได้แค่เดา billId/roomId) — ใช้ในหน้า LIFF Payment ทั้งตอนดูรายละเอียดบิลและตอนสร้าง QR ชำระเงิน
+export async function getBillItemForTenant(billId: string, roomId: string, tenantId: string): Promise<{ item: any; monthYear: string } | null> {
+  const [row] = await db.select().from(bills).where(eq(bills.id, billId));
+  if (!row) return null;
+  let data: any[] = [];
+  try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
+  const item = data.find((it) => String(it?.roomId) === roomId);
+  if (!item || String(item?.tenantId ?? "") !== tenantId) return null;
+  return { item, monthYear: row.monthYear };
 }
 
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
@@ -404,7 +417,9 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
 // สรุปข้อมูลบิลเป็น JSON เก็บลงประวัติแชท (chat_messages.text ตอน messageType="bill") ให้หน้าแชทฝั่งเว็บ
 // เรนเดอร์เป็นการ์ดหน้าตาเหมือนบิลที่ส่งจริงทาง LINE (ดู buildBillFlexMessage ด้านบน) แถวรายการ/ยอด/เงื่อนไข
 // ต้องตรงกับที่นั่นเป๊ะๆ ต่างกันแค่ใช้ไอคอน FontAwesome (เว็บเรามีอยู่แล้ว) แทนรูปไอคอนของ Flex Message
-function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppearanceSettings) {
+// export ไว้ให้ routes/liff.ts ใช้ต่อ (หน้า LIFF Payment "ดูรายละเอียดบิล" เรนเดอร์ด้วยคอมโพเนนต์
+// ChatBillMessage ตัวเดียวกับที่หน้าแชทใช้ หน้าตาต้องตรงกันเป๊ะๆ จึงใช้ shape/ตัวสร้างข้อมูลตัวเดียวกัน)
+export function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppearanceSettings) {
   const rows: { icon: string; name: string; sub?: string; price: number }[] = [];
   rows.push({ icon: ICONS.BED, name: "ค่าห้อง/ค่าเช่า", price: Number(item.priceRoom) || 0 });
   if (item.electricActive) {

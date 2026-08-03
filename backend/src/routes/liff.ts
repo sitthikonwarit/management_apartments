@@ -5,11 +5,13 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { appConfig, rooms, tenants } from "../db/schema";
+import { appConfig, rooms, tenants, paymentIntents } from "../db/schema";
 import {
-  getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone, getOutstandingBillsForTenant,
+  getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
+  getOutstandingBillsForTenant, getBillItemForTenant, buildChatBillSnapshot,
 } from "../services/line";
 import { linkRichMenuToUser } from "../services/richMenu";
+import { generatePromptPayQr } from "../services/easyslip";
 import { broadcastChange } from "../lib/wsHub";
 
 const CONFIG_ID = "default";
@@ -134,6 +136,98 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         accountName: row?.paymentAccountName || "",
         accountNumber: row?.paymentAccountNumber || "",
         qrImage: row?.paymentQrImage || "",
+        // มี API key + PromptPay ID ครบ ถึงจะให้เลือกจำนวนเงินเอง+สร้าง QR แบบระบุยอดได้ (endpoint
+        // /payment/qr ด้านล่าง) ไม่งั้น fallback ไปโชว์แค่ QR/เลขบัญชีคงที่ตามที่ตั้งไว้ด้านบนแทน
+        dynamicQrAvailable: !!(row?.easySlipApiKey && row?.paymentPromptPayId),
       },
     };
+  })
+  // กดปุ่ม "ดูรายละเอียด" ที่บิลเดือนใดเดือนหนึ่งในหน้า LIFF Payment — คืนข้อมูลชุดเดียวกับที่การ์ดบิลใน
+  // หน้าแชท (ChatBillMessage) ใช้ ให้หน้าตาตรงกันเป๊ะๆ (ดู buildChatBillSnapshot ใน services/line.ts)
+  .post("/bill-detail", async ({ body, set }) => {
+    const { accessToken, billId, roomId } = body as { accessToken?: string; billId?: string; roomId?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!billId || !roomId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า" }; }
+
+    const found = await getBillItemForTenant(billId, roomId, tenant.id);
+    if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
+
+    const settings = await getLineSettings();
+    return { snapshot: buildChatBillSnapshot(found.item, found.monthYear, settings) };
+  })
+  // เลือกจำนวนเงินที่จะจ่ายรอบนี้ (ไม่ต้องเต็มยอดบิล จ่ายเป็นงวดได้) แล้วสร้าง QR PromptPay ระบุยอดนั้นผ่าน
+  // EasySlip พร้อมบันทึก "รายการรอชำระ" ไว้จับคู่กับสลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts)
+  .post("/payment/qr", async ({ body, set }) => {
+    const { accessToken, billId, roomId, amount } = body as { accessToken?: string; billId?: string; roomId?: string; amount?: number };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!billId || !roomId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า" }; }
+
+    const found = await getBillItemForTenant(billId, roomId, tenant.id);
+    if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
+    const { item, monthYear } = found;
+
+    const remainingDue = Math.max(0, Number(item.total) - (Number(item.paidAmount) || 0));
+    const payAmount = Math.round((Number(amount) || 0) * 100) / 100;
+    if (payAmount <= 0 || payAmount > remainingDue + 0.5) {
+      set.status = 400;
+      return { error: `จำนวนเงินไม่ถูกต้อง (ยอดคงเหลือ ${remainingDue.toFixed(2)} บาท)` };
+    }
+
+    const row = await getConfigRow();
+    const apiKey = row?.easySlipApiKey || "";
+    const promptPayId = row?.paymentPromptPayId || "";
+    if (!apiKey || !promptPayId) {
+      set.status = 400;
+      return { error: "ระบบยังไม่ได้ตั้งค่า EasySlip API Key หรือ PromptPay ID กรุณาติดต่อผู้ดูแลระบบ" };
+    }
+
+    let qr;
+    try {
+      qr = await generatePromptPayQr(apiKey, promptPayId, payAmount);
+    } catch (e: any) {
+      set.status = 502;
+      return { error: e?.message ?? "สร้าง QR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
+    }
+
+    const intentId = `PINT-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await db.insert(paymentIntents).values({
+      id: intentId,
+      tenantId: tenant.id,
+      tenantName: tenantDisplayName(tenant),
+      billId, roomId,
+      roomNumber: String(item.roomNumber ?? await tenantRoomNumber(tenant.idRoom)),
+      monthYear,
+      amount: String(payAmount),
+      status: "pending",
+      lineUserId: profile.userId,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { intentId, qrImage: `data:${qr.mime};base64,${qr.image}`, amount: payAmount };
+  })
+  // หน้า LIFF โพลสถานะเป็นระยะหลังสร้าง QR — ให้รู้ทันทีที่ตรวจสลิปสำเร็จอัตโนมัติ (ดู
+  // tryAutoConfirmSlipPayment ใน services/payments.ts ที่อัปเดตสถานะนี้จาก routes/lineWebhook.ts)
+  .post("/payment/status", async ({ body, set }) => {
+    const { accessToken, intentId } = body as { accessToken?: string; intentId?: string };
+    if (!accessToken || !intentId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, intentId));
+    if (!intent || intent.lineUserId !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการ" }; }
+
+    return { status: intent.status };
   });

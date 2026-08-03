@@ -31,7 +31,11 @@ export interface AppConfig {
     menuIds: { guest: string; member: string; admin: string };
   };
   // ข้อมูลบัญชีรับชำระเงิน — แสดงในหน้า LIFF Payment ให้ผู้เช่าโอนเงินเอง
-  payment: { bankName: string; accountName: string; accountNumber: string; qrImage: string };
+  payment: {
+    bankName: string; accountName: string; accountNumber: string; qrImage: string;
+    // EasySlip — สร้าง QR PromptPay ระบุยอดเอง + ตรวจสลิปอัตโนมัติ (ว่าง = ปิดใช้งาน ใช้ QR/เลขบัญชีคงที่แทน)
+    easySlipApiKey: string; promptPayId: string;
+  };
   updatedAt?: string;
 }
 
@@ -65,7 +69,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },
-  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "" },
+  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", easySlipApiKey: "", promptPayId: "" },
 };
 
 const AppConfigContext = createContext<{

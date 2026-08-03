@@ -70,6 +70,8 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
       accountName: r.paymentAccountName || "",
       accountNumber: r.paymentAccountNumber || "",
       qrImage: r.paymentQrImage || "",
+      easySlipApiKey: r.easySlipApiKey || "",
+      promptPayId: r.paymentPromptPayId || "",
     },
     updatedAt: r.updatedAt,
   };
@@ -172,6 +174,8 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       paymentAccountName: String(b.payment?.accountName ?? ""),
       paymentAccountNumber: String(b.payment?.accountNumber ?? ""),
       paymentQrImage: String(b.payment?.qrImage ?? ""),
+      easySlipApiKey: String(b.payment?.easySlipApiKey ?? ""),
+      paymentPromptPayId: String(b.payment?.promptPayId ?? ""),
       updatedAt: new Date().toISOString(),
     }).where(eq(appConfig.id, CONFIG_ID));
     const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));

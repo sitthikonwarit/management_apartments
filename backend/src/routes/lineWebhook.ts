@@ -9,6 +9,7 @@ import {
   getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent,
   findTenantByLineUserId, cacheLineProfile,
 } from "../services/line";
+import { tryAutoConfirmSlipPayment } from "../services/payments";
 import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
 
 const PROFILE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 วัน — ไม่ต้องยิง LINE API ทุกข้อความที่เข้ามา
@@ -84,6 +85,11 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
           messageType = "image";
           imageUrl = await downloadLineContent(settings.token, String(msg.id ?? ""), "jpg");
           text = "[รูปภาพ]";
+          // ผู้เช่าอาจส่งรูปสลิปเข้ามาหลังกดสร้าง QR ในหน้า LIFF Payment — ลองตรวจ+บันทึกยอดชำระอัตโนมัติ
+          // ด้วย EasySlip (ไม่มีผลอะไรถ้าไม่มี "รายการรอชำระ" ค้างอยู่ หรือยังไม่ได้ตั้งค่า EasySlip ไว้)
+          if (imageUrl) {
+            await tryAutoConfirmSlipPayment(lineUserId, imageUrl);
+          }
         } else if (msg.type === "sticker") {
           messageType = "sticker";
           packageId = String(msg.packageId ?? "");

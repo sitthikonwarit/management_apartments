@@ -164,6 +164,25 @@ export const payments = pgTable("payments", {
   action: str("action"),
 });
 
+// รายการ "รอชำระ" ที่เกิดตอนผู้เช่ากดสร้าง QR ในหน้า LIFF Payment (เลือกบิล/ห้อง/จำนวนเงินที่จะจ่ายรอบนี้
+// เอง เพราะจ่ายเป็นงวดได้ ไม่ใช่ยอดเต็มบิลเสมอไป) ใช้จับคู่กับสลิปที่ผู้เช่าส่งเข้าแชท LINE ภายหลัง เพื่อ
+// ตรวจสอบยอด+บันทึกชำระเงินอัตโนมัติผ่าน EasySlip (ดู services/payments.ts, services/easyslip.ts)
+export const paymentIntents = pgTable("payment_intents", {
+  id: text("id").primaryKey(),
+  tenantId: str("tenant_id"),
+  tenantName: str("tenant_name"),
+  billId: str("bill_id"),
+  roomId: str("room_id"),
+  roomNumber: str("room_number"),
+  monthYear: str("month_year"),
+  amount: str("amount"),
+  status: text("status").notNull().default("pending"), // pending | confirmed
+  lineUserId: str("line_user_id"),
+  createdAt: str("created_at"),
+  confirmedAt: str("confirmed_at"),
+  paymentId: str("payment_id"),
+});
+
 export const liveMeterConfigs = pgTable("live_meter_configs", {
   slaveId: text("slave_id").primaryKey(),
   roomId: str("room_id"),
@@ -283,6 +302,10 @@ export const appConfig = pgTable("app_config", {
   paymentBankName: str("payment_bank_name"),
   paymentAccountName: str("payment_account_name"),
   paymentAccountNumber: str("payment_account_number"),
-  paymentQrImage: str("payment_qr_image"), // base64 data URI เหมือน logoUrl (ดู comment ที่ logoUrl)
+  paymentQrImage: str("payment_qr_image"), // base64 data URI เหมือน logoUrl (ดู comment ที่ logoUrl) — fallback ตอน EasySlip ยังไม่ได้ตั้งค่า
+  // ── EasySlip (https://easyslip.com) — สร้าง QR PromptPay แบบระบุยอดเอง + ตรวจสลิปที่ผู้เช่าส่งเข้าแชท
+  // อัตโนมัติ (ดู services/easyslip.ts, services/payments.ts) ──
+  easySlipApiKey: str("easyslip_api_key"),
+  paymentPromptPayId: str("payment_promptpay_id"), // เบอร์มือถือ (10 หลัก) หรือเลขบัตร ปชช. (13 หลัก) ที่ผูก PromptPay ไว้
   updatedAt: str("updated_at"),
 });
