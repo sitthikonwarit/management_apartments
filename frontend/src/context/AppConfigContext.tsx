@@ -27,6 +27,12 @@ export interface AppConfig {
   richMenu: {
     liffLoginUrl: string;
     liffPaymentUrl: string;
+    // ปุ่ม "ข้อมูลผู้เช่า" / "แจ้งซ่อม" บนเมนู Member — ต้องเป็นหน้า LIFF แยก (คนละ LIFF app) เพราะต้องรู้
+    // ตัวตนผู้เช่าเหมือน login/payment — ว่าง = ปุ่มยังเป็นข้อความส่งเข้าแชทแบบเดิม
+    liffProfileUrl: string;
+    liffRepairUrl: string;
+    // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู)
+    contactPhone: string;
     images: { guest: string; member: string; admin: string };
     menuIds: { guest: string; member: string; admin: string };
   };
@@ -65,7 +71,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   sessionTimeoutMinutes: 30,
   lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false },
   richMenu: {
-    liffLoginUrl: "", liffPaymentUrl: "",
+    liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", contactPhone: "",
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },

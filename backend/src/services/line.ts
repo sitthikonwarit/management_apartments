@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { resolve } from "path";
 import { db } from "../db";
-import { appConfig, bills, chatMessages, lineProfiles, tenants } from "../db/schema";
+import { appConfig, bills, chatMessages, lineProfiles, payments, tenants } from "../db/schema";
 import { broadcastChange } from "../lib/wsHub";
 
 const LINE_PROFILE_VERIFY_URL = "https://api.line.me/v2/profile";
@@ -63,6 +63,75 @@ export async function getOutstandingBillsForTenant(tenantId: string): Promise<{ 
   items.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
   const total = items.reduce((sum, it) => sum + it.amount, 0);
   return { items, total };
+}
+
+export interface TenantBillSummary {
+  billId: string;
+  roomId: string;
+  monthYear: string;
+  roomNumber: string;
+  total: number;
+  paidAmount: number;
+  status: string;
+}
+
+// บิลทุกใบของผู้เช่าคนหนึ่ง (ทั้งจ่ายแล้วและยังไม่จ่าย) เรียงใหม่ไปเก่า — ใช้ในหน้า LIFF Profile ให้ผู้เช่า
+// ดูประวัติบิลของตัวเองย้อนหลังได้ทั้งหมด ต่างจาก getOutstandingBillsForTenant ที่กรองเอาแต่ใบที่ค้างอยู่
+export async function getAllBillsForTenant(tenantId: string): Promise<TenantBillSummary[]> {
+  const billRows = await db.select().from(bills);
+  const result: TenantBillSummary[] = [];
+  for (const row of billRows) {
+    let data: any[] = [];
+    try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
+    for (const item of data) {
+      if (String(item?.tenantId ?? "") !== tenantId) continue;
+      result.push({
+        billId: row.id,
+        roomId: String(item?.roomId ?? ""),
+        monthYear: row.monthYear,
+        roomNumber: String(item?.roomNumber ?? ""),
+        total: Number(item?.total) || 0,
+        paidAmount: Number(item?.paidAmount) || 0,
+        status: String(item?.status ?? "unpaid"),
+      });
+    }
+  }
+  result.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
+  return result;
+}
+
+export interface TenantPaymentRecord {
+  id: string;
+  paymentDate: string;
+  monthYear: string;
+  roomNumber: string;
+  method: string;
+  amount: number;
+  note: string;
+  slipUrl: string;
+  cancelled: boolean;
+}
+
+// ประวัติการชำระเงินทุกรายการของผู้เช่าคนหนึ่ง เรียงใหม่ไปเก่า — ใช้ในหน้า LIFF Profile
+export async function getPaymentHistoryForTenant(tenantId: string): Promise<TenantPaymentRecord[]> {
+  const rows = await db.select().from(payments).where(eq(payments.tenantId, tenantId));
+  const result: TenantPaymentRecord[] = rows.map((r) => {
+    let data: any = {};
+    try { data = r.data ? JSON.parse(r.data) : {}; } catch { data = {}; }
+    return {
+      id: r.id,
+      paymentDate: r.paymentDate,
+      monthYear: String(data?.monthYear ?? ""),
+      roomNumber: String(data?.roomNumber ?? ""),
+      method: String(data?.method ?? ""),
+      amount: Number(data?.amount) || 0,
+      note: String(data?.note ?? ""),
+      slipUrl: String(data?.slipUrl ?? ""),
+      cancelled: !!data?.cancelled,
+    };
+  });
+  result.sort((a, b) => new Date(b.paymentDate || 0).getTime() - new Date(a.paymentDate || 0).getTime());
+  return result;
 }
 
 // ดึงรายการห้องหนึ่งรายการในบิลกลุ่มหนึ่ง พร้อมตรวจว่าเป็นของผู้เช่าคนนี้จริง (กันผู้เช่าคนอื่นดู/จ่ายบิล

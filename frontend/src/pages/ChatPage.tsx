@@ -10,6 +10,7 @@ import { AVATAR_URL } from "../components/TenantTableView";
 import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
 import ImageLightbox from "../components/ImageLightbox";
 import { ChatBillMessage } from "../components/ChatBillCard";
+import { ChatRepairMessage } from "../components/ChatRepairCard";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -303,6 +304,13 @@ export default function ChatPage() {
                       // การ์ดแจ้งบิล/ใบเสร็จ (ส่งอัตโนมัติตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) มีหน้าตา/สีพื้นหลัง
                       // ของตัวเองอยู่แล้ว ไม่ต้องห่อด้วยฟองข้อความสีปกติ
                       <ChatBillMessage messageType={m.messageType} raw={m.text} />
+                    ) : m.messageType === "repair" ? (
+                      // การ์ดแจ้งซ่อม (ผู้เช่าส่งเข้ามาจากหน้า LIFF Repair) — พนักงานกรอกรายละเอียดการซ่อม
+                      // แล้วยืนยันปิดงานได้ตรงนี้เลย ไม่ต้องห่อด้วยฟองข้อความสีปกติเหมือนบิล/ใบเสร็จ
+                      <ChatRepairMessage
+                        messageId={m.id} lineUserId={m.lineUserId} raw={m.text}
+                        onUpdated={(updated) => setMessages((prev) => prev.map((msg) => (msg.id === updated.id ? updated : msg)))}
+                      />
                     ) : m.messageType === "image" && m.imageUrl ? (
                       // รูปภาพแสดงแบบลอยเดี่ยวๆ ไม่มีฟองข้อความ/พื้นหลังห่อ (เหมือนสติกเกอร์) — ของเดิมห่อด้วย
                       // ฟองสีทำให้ดูเหมือนมีกรอบ/ขอบรอบรูปเกินจำเป็น

@@ -203,6 +203,9 @@ export const chatApi = {
     api.post(`/chat/conversations/${lineUserId}/refresh-profile`).then((r) => r.data as { pictureUrl: string | null; displayName: string | null }),
   getOutstandingBills: (lineUserId: string) =>
     api.get(`/chat/conversations/${lineUserId}/outstanding-bills`).then((r) => r.data as OutstandingBills),
+  confirmRepair: (lineUserId: string, messageId: string, data: {
+    items: { name: string; price: number; qty: number }[]; note: string; photos: string[];
+  }) => api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/repair`, data).then((r) => r.data as ChatMessage),
 };
 
 export const settingsApi = {
@@ -229,6 +232,9 @@ export const liffApi = {
   getConfig: () => api.get("/liff/config").then((r) => r.data as {
     liffLoginUrl: string;
     liffPaymentUrl: string;
+    liffProfileUrl: string;
+    liffRepairUrl: string;
+    contactPhone: string;
     appIdentity: { logoUrl: string; nameText: string; logoBg: { enabled: boolean; color: string } };
   }),
   login: (accessToken: string) => api.post("/liff/login", { accessToken }).then((r) => r.data as
@@ -260,4 +266,18 @@ export const liffApi = {
     }),
   paymentStatus: (accessToken: string, intentId: string) =>
     api.post("/liff/payment/status", { accessToken, intentId }).then((r) => r.data as { status: "pending" | "confirmed" }),
+  profile: (accessToken: string) => api.post("/liff/profile", { accessToken }).then((r) => r.data as
+    | { linked: false }
+    | {
+        linked: true;
+        tenant: { tenantName: string; roomNumber: string; tel: string; contractStartDate: string; contractEndDate: string };
+        bills: { billId: string; roomId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; status: string }[];
+        paymentHistory: {
+          id: string; paymentDate: string; monthYear: string; roomNumber: string;
+          method: string; amount: number; note: string; slipUrl: string; cancelled: boolean;
+        }[];
+      }
+  ),
+  submitRepair: (accessToken: string, title: string, details: string, photos: string[]) =>
+    api.post("/liff/repair", { accessToken, title, details, photos }).then((r) => r.data as { ok: boolean; messageId: string }),
 };

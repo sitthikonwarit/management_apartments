@@ -17,6 +17,9 @@ import ChatToastHost from "./components/ChatToastHost";
 import LoginPage from "./pages/LoginPage";
 import LiffLoginPage from "./pages/LiffLoginPage";
 import LiffPaymentPage from "./pages/LiffPaymentPage";
+import LiffProfilePage from "./pages/LiffProfilePage";
+import LiffRepairPage from "./pages/LiffRepairPage";
+import ContactPage from "./pages/ContactPage";
 import TenantsPage from "./pages/TenantsPage";
 import RoomsPage from "./pages/RoomsPage";
 import MetersPage from "./pages/MetersPage";
@@ -107,6 +110,10 @@ export default function App() {
               ล็อกอินด้วยบัญชีพนักงาน) เปิดจากปุ่มบน LINE Rich Menu ผ่านเบราว์เซอร์ในตัวของ LINE เอง */}
           <Route path="/liff/login" element={<LiffLoginPage />} />
           <Route path="/liff/payment" element={<LiffPaymentPage />} />
+          <Route path="/liff/profile" element={<LiffProfilePage />} />
+          <Route path="/liff/repair" element={<LiffRepairPage />} />
+          {/* /contact ไม่ต้องรู้ตัวตนผู้เช่า เลยไม่ผ่าน LIFF SDK เหมือนหน้าอื่นด้านบน (ดู ContactPage.tsx) */}
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/*" element={<AuthenticatedShell />} />
         </Routes>
       </BreadcrumbProvider>

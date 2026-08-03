@@ -292,6 +292,13 @@ export const appConfig = pgTable("app_config", {
   // (ดู services/richMenu.ts) รูปเก็บเป็น path สัมพัทธ์ใน uploads/richmenu/ เหมือน rooms.pictures ──
   liffLoginUrl: str("liff_login_url"),
   liffPaymentUrl: str("liff_payment_url"),
+  // ปุ่ม "ข้อมูลผู้เช่า" / "แจ้งซ่อม" บนเมนู Member ต้องรู้ตัวตนผู้เช่า จึงต้องเป็นหน้า LIFF แยกเหมือน
+  // login/payment ด้านบน (คนละ LIFF app กันใน LINE Developers Console) — ว่าง = ปุ่มยังเป็นข้อความส่งเข้า
+  // แชทแบบเดิม (ดู services/richMenu.ts)
+  liffProfileUrl: str("liff_profile_url"),
+  liffRepairUrl: str("liff_repair_url"),
+  // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู) — ไม่ต้องใช้ LIFF เพราะไม่ต้องรู้ตัวตนผู้เช่า
+  contactPhone: str("contact_phone"),
   richMenuGuestImage: str("rich_menu_guest_image"),
   richMenuMemberImage: str("rich_menu_member_image"),
   richMenuAdminImage: str("rich_menu_admin_image"),

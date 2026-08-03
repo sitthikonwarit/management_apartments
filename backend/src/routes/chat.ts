@@ -14,6 +14,14 @@ function previewText(m: { messageType: string; text: string }): string {
   if (m.messageType === "text") return m.text;
   if (m.messageType === "bill") return "📄 แจ้งบิลค่าเช่า";
   if (m.messageType === "receipt") return "🧾 ใบเสร็จรับเงิน";
+  if (m.messageType === "repair") {
+    try {
+      const data = JSON.parse(m.text);
+      return `🔧 แจ้งซ่อม: ${data?.title ?? ""}`;
+    } catch {
+      return "🔧 แจ้งซ่อม";
+    }
+  }
   return m.text || "[ไฟล์แนบ]";
 }
 
@@ -263,4 +271,57 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     if (!tenant) return { tenantId: null, items: [], total: 0 };
     const { items, total } = await getOutstandingBillsForTenant(tenant.id);
     return { tenantId: tenant.id, items, total };
+  })
+  // พนักงานกรอกรายละเอียดการซ่อม (อุปกรณ์/ราคา/จำนวน/รูป/หมายเหตุ) แล้วกดยืนยันปิดงาน — แก้ไข JSON ของ
+  // ข้อความ "repair" ที่ผู้เช่าแจ้งเข้ามาโดยตรง (ต่างจาก bill/receipt ที่เป็น snapshot ส่งครั้งเดียวจบ เพราะ
+  // repair ต้องแก้ไขได้หลังสร้างแล้ว) แจ้งผู้เช่าทาง LINE ว่าซ่อมเสร็จแล้วไปด้วย (best-effort)
+  .patch("/conversations/:lineUserId/messages/:id/repair", async ({ params, body, set, authUser }) => {
+    const b = body as any;
+    const items: { name: string; price: number; qty: number }[] = Array.isArray(b?.items)
+      ? b.items.map((it: any) => ({ name: String(it?.name ?? ""), price: Number(it?.price) || 0, qty: Number(it?.qty) || 1 }))
+      : [];
+    const note = String(b?.note ?? "");
+    const photosBase64: string[] = Array.isArray(b?.photos) ? b.photos : [];
+
+    const [existing] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    if (!existing || existing.messageType !== "repair" || existing.lineUserId !== params.lineUserId) {
+      set.status = 404;
+      return { error: "ไม่พบรายการแจ้งซ่อม" };
+    }
+
+    let snapshot: any = {};
+    try { snapshot = existing.text ? JSON.parse(existing.text) : {}; } catch { snapshot = {}; }
+    if (snapshot.status === "completed") { set.status = 400; return { error: "รายการนี้ยืนยันปิดงานไปแล้ว" }; }
+
+    const adminPhotos: string[] = [];
+    for (const [i, base64] of photosBase64.slice(0, 6).entries()) {
+      const url = await uploadChatAttachment(`repair_admin_${Date.now()}_${i}.jpg`, base64);
+      adminPhotos.push(url);
+    }
+
+    const actor = await resolveActorName(authUser);
+    const now = new Date().toISOString();
+    const total = items.reduce((sum, it) => sum + it.price * it.qty, 0);
+
+    snapshot = { ...snapshot, status: "completed", adminItems: items, adminPhotos, adminNote: note, confirmedBy: actor, confirmedAt: now };
+    await db.update(chatMessages).set({ text: JSON.stringify(snapshot) }).where(eq(chatMessages.id, params.id));
+
+    const settings = await getLineSettings();
+    if (settings.enabled && settings.token) {
+      try {
+        const itemLines = items.map((it) => `- ${it.name} x${it.qty} = ${(it.price * it.qty).toLocaleString("th-TH")} บาท`).join("\n");
+        const summary = [
+          `✅ งานซ่อม "${snapshot.title}" เสร็จเรียบร้อยแล้ว`,
+          itemLines,
+          total > 0 ? `รวมค่าใช้จ่าย: ${total.toLocaleString("th-TH")} บาท` : "",
+          note ? `หมายเหตุ: ${note}` : "",
+        ].filter(Boolean).join("\n");
+        await sendTextMessage(settings.token, params.lineUserId, summary);
+      } catch (e) {
+        console.error("[repair-confirm][notify]", e);
+      }
+    }
+
+    const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    return parseMessage(row);
   });

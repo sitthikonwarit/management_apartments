@@ -5,14 +5,15 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { appConfig, rooms, tenants, paymentIntents } from "../db/schema";
+import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents } from "../db/schema";
 import {
   getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
   getOutstandingBillsForTenant, getBillItemForTenant, buildChatBillSnapshot,
+  getAllBillsForTenant, getPaymentHistoryForTenant, uploadChatAttachment,
 } from "../services/line";
 import { linkRichMenuToUser } from "../services/richMenu";
 import { generatePromptPayQr } from "../services/easyslip";
-import { broadcastChange } from "../lib/wsHub";
+import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
 
 const CONFIG_ID = "default";
 
@@ -48,6 +49,9 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     return {
       liffLoginUrl: row?.liffLoginUrl || "",
       liffPaymentUrl: row?.liffPaymentUrl || "",
+      liffProfileUrl: row?.liffProfileUrl || "",
+      liffRepairUrl: row?.liffRepairUrl || "",
+      contactPhone: row?.contactPhone || "",
       appIdentity: {
         logoUrl: row?.logoUrl || "",
         nameText: row?.appName || "",
@@ -247,4 +251,96 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     if (!intent || intent.lineUserId !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการ" }; }
 
     return { status: intent.status };
+  })
+  // ปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member — ข้อมูลส่วนตัว + บิลทุกใบ (ทั้งจ่ายแล้ว/ค้างอยู่) + ประวัติการชำระเงินทั้งหมด
+  .post("/profile", async ({ body, set }) => {
+    const { accessToken } = body as { accessToken?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) return { linked: false };
+
+    const [tenantBills, paymentHistory] = await Promise.all([
+      getAllBillsForTenant(tenant.id),
+      getPaymentHistoryForTenant(tenant.id),
+    ]);
+
+    return {
+      linked: true,
+      tenant: {
+        tenantName: tenantDisplayName(tenant),
+        roomNumber: await tenantRoomNumber(tenant.idRoom),
+        tel: tenant.tel || "",
+        contractStartDate: tenant.contractStartDate || "",
+        contractEndDate: tenant.contractEndDate || "",
+      },
+      bills: tenantBills,
+      paymentHistory,
+    };
+  })
+  // ปุ่ม "แจ้งซ่อม" บนเมนู Member — ผู้เช่ากรอกหัวข้อ/รายละเอียด/แนบรูป ส่งเข้ามาเป็นข้อความแชทพิเศษ
+  // (messageType "repair") เด้งแจ้งเตือนในหน้าแชทของเว็บทันที (broadcastChatMessage เดียวกับข้อความเข้าใหม่
+  // ปกติจาก routes/lineWebhook.ts) พนักงานกรอกรายละเอียดการซ่อม (อุปกรณ์/ราคา/รูป) แล้วกดยืนยันต่อได้จาก
+  // หน้าแชทเลย (ดู PATCH /chat/conversations/:lineUserId/messages/:id/repair ใน routes/chat.ts)
+  .post("/repair", async ({ body, set }) => {
+    const { accessToken, title, details, photos } = body as {
+      accessToken?: string; title?: string; details?: string; photos?: string[];
+    };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!title?.trim()) { set.status = 400; return { error: "กรุณากรอกหัวข้อที่ต้องการแจ้งซ่อม" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
+
+    const tenantPhotos: string[] = [];
+    for (const [i, base64] of (photos ?? []).slice(0, 6).entries()) {
+      const url = await uploadChatAttachment(`repair_${Date.now()}_${i}.jpg`, base64);
+      tenantPhotos.push(url);
+    }
+
+    const senderName = tenantDisplayName(tenant);
+    const roomNumber = await tenantRoomNumber(tenant.idRoom);
+    const snapshot = {
+      kind: "repair",
+      title: title.trim(),
+      details: (details ?? "").trim(),
+      tenantPhotos,
+      roomNumber,
+      status: "pending",
+      adminItems: [] as { name: string; price: number; qty: number }[],
+      adminPhotos: [] as string[],
+      adminNote: "",
+      confirmedBy: "",
+      confirmedAt: "",
+    };
+
+    const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await db.insert(chatMessages).values({
+      id,
+      lineUserId: profile.userId,
+      tenantId: tenant.id,
+      direction: "in",
+      messageType: "repair",
+      text: JSON.stringify(snapshot),
+      senderName,
+      createdAt: new Date().toISOString(),
+    });
+
+    const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
+    broadcastChatMessage({
+      lineUserId: profile.userId,
+      displayName: senderName || profile.displayName || "ไม่ทราบชื่อ",
+      roomNumber: roomNumber || null,
+      pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
+      preview: `🔧 แจ้งซ่อม: ${title.trim()}`,
+    });
+    broadcastChange("chat", "create", "มีการแจ้งซ่อมใหม่", senderName);
+
+    return { ok: true, messageId: id };
   });

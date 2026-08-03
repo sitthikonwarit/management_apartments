@@ -17,25 +17,39 @@ interface RichMenuArea {
   action: { type: "uri"; uri: string } | { type: "message"; text: string };
 }
 
-function guestAreas(liffLoginUrl: string): RichMenuArea[] {
+// ปุ่ม "ติดต่อ"/"ข้อมูลผู้เช่า"/"แจ้งซ่อม" เป็น URL จริงได้ก็ต่อเมื่อตั้งค่าไว้แล้วเท่านั้น (ต้องสร้างหน้า
+// LIFF/PUBLIC_BASE_URL ไว้ก่อน) ไม่งั้น fallback เป็นปุ่มข้อความส่งเข้าแชทแบบเดิม กันปุ่มพังตอนยังตั้งค่า
+// ไม่ครบ
+function uriOrMessage(url: string, text: string): RichMenuArea["action"] {
+  return url ? { type: "uri", uri: url } : { type: "message", text };
+}
+
+function guestAreas(liffLoginUrl: string, contactUrl: string): RichMenuArea[] {
   return [
     { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
     { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: { type: "message", text: "ดูห้องว่าง" } },
     { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: { type: "message", text: "จองห้อง" } },
-    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "message", text: "ติดต่อ" } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: uriOrMessage(contactUrl, "ติดต่อ") },
   ];
 }
 
 const W = 833;
 const H = 843;
 
-function memberAreas(liffPaymentUrl: string): RichMenuArea[] {
+export interface MemberMenuUrls {
+  liffPaymentUrl: string;
+  liffProfileUrl: string;
+  liffRepairUrl: string;
+  contactUrl: string;
+}
+
+function memberAreas(urls: MemberMenuUrls): RichMenuArea[] {
   return [
-    { bounds: { x: 0, y: 0, width: W, height: H }, action: { type: "message", text: "ข้อมูลผู้เช่า" } },
+    { bounds: { x: 0, y: 0, width: W, height: H }, action: uriOrMessage(urls.liffProfileUrl, "ข้อมูลผู้เช่า") },
     { bounds: { x: W, y: 0, width: W, height: H }, action: { type: "message", text: "บิลเดือนนี้" } },
-    { bounds: { x: W * 2, y: 0, width: W, height: H }, action: { type: "uri", uri: liffPaymentUrl } },
-    { bounds: { x: 0, y: H, width: W, height: H }, action: { type: "message", text: "แจ้งซ่อม" } },
-    { bounds: { x: W, y: H, width: W, height: H }, action: { type: "message", text: "ติดต่อ" } },
+    { bounds: { x: W * 2, y: 0, width: W, height: H }, action: { type: "uri", uri: urls.liffPaymentUrl } },
+    { bounds: { x: 0, y: H, width: W, height: H }, action: uriOrMessage(urls.liffRepairUrl, "แจ้งซ่อม") },
+    { bounds: { x: W, y: H, width: W, height: H }, action: uriOrMessage(urls.contactUrl, "ติดต่อ") },
     { bounds: { x: W * 2, y: H, width: W, height: H }, action: { type: "message", text: "เพิ่มเติม" } },
   ];
 }
@@ -127,10 +141,17 @@ export interface CreateAllRichMenusResult {
 // ตั้งเมนู Guest เป็นค่าเริ่มต้นของผู้ใช้ทุกคน (ผู้ใช้ใหม่/ยังไม่ผูกบัญชีจะเห็นเมนูนี้ก่อนเสมอ) — ถ้าขั้นตอน
 // ตั้งค่าเริ่มต้นล้มเหลว ไม่ throw ทิ้ง ID ที่เพิ่งสร้างไป (เมนูสร้างสำเร็จแล้วจริง แค่ยังไม่ได้ผูกเป็นค่า
 // เริ่มต้นเฉยๆ) เพื่อให้ผู้เรียกบันทึก ID เหล่านี้ไว้ได้แม้ขั้นตอนสุดท้ายจะพลาด
+export interface RichMenuUrls {
+  liffLoginUrl: string;
+  liffPaymentUrl: string;
+  liffProfileUrl: string;
+  liffRepairUrl: string;
+  contactUrl: string;
+}
+
 export async function createAllRichMenus(
   token: string,
-  liffLoginUrl: string,
-  liffPaymentUrl: string,
+  urls: RichMenuUrls,
   images: { guest: RichMenuImageInput; member: RichMenuImageInput; admin: RichMenuImageInput },
   previousIds?: Partial<RichMenuIds>
 ): Promise<CreateAllRichMenusResult> {
@@ -138,8 +159,8 @@ export async function createAllRichMenus(
   if (previousIds?.member) await deleteRichMenu(token, previousIds.member);
   if (previousIds?.admin) await deleteRichMenu(token, previousIds.admin);
 
-  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(liffLoginUrl), images.guest.buffer, images.guest.mimeType);
-  const memberId = await createOne(token, "Member Menu", "เมนูสมาชิก", memberAreas(liffPaymentUrl), images.member.buffer, images.member.mimeType);
+  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(urls.liffLoginUrl, urls.contactUrl), images.guest.buffer, images.guest.mimeType);
+  const memberId = await createOne(token, "Member Menu", "เมนูสมาชิก", memberAreas(urls), images.member.buffer, images.member.mimeType);
   const adminId = await createOne(token, "Admin Menu", "เมนูผู้ดูแลระบบ", adminAreas(), images.admin.buffer, images.admin.mimeType);
 
   const ids: RichMenuIds = { guest: guestId, member: memberId, admin: adminId };

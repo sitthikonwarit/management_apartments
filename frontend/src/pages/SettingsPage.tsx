@@ -248,6 +248,9 @@ export default function SettingsPage() {
   // ── LINE Rich Menu ──
   const [liffLoginUrl, setLiffLoginUrl] = useState("");
   const [liffPaymentUrl, setLiffPaymentUrl] = useState("");
+  const [liffProfileUrl, setLiffProfileUrl] = useState("");
+  const [liffRepairUrl, setLiffRepairUrl] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
   const [richMenuImages, setRichMenuImages] = useState({ guest: "", member: "", admin: "" });
   const [richMenuIds, setRichMenuIds] = useState({ guest: "", member: "", admin: "" });
   const [uploadingRichMenu, setUploadingRichMenu] = useState({ guest: false, member: false, admin: false });
@@ -345,6 +348,9 @@ export default function SettingsPage() {
     setLineAutoSendEnabled(config.lineMessaging.autoSendEnabled);
     setLiffLoginUrl(config.richMenu.liffLoginUrl);
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
+    setLiffProfileUrl(config.richMenu.liffProfileUrl);
+    setLiffRepairUrl(config.richMenu.liffRepairUrl);
+    setContactPhone(config.richMenu.contactPhone);
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
     setPaymentBankName(config.payment.bankName);
@@ -518,7 +524,12 @@ export default function SettingsPage() {
         yearFormat,
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
         lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(), autoSendEnabled: lineAutoSendEnabled },
-        richMenu: { ...DEFAULT_APP_CONFIG.richMenu, liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim() },
+        richMenu: {
+          ...DEFAULT_APP_CONFIG.richMenu,
+          liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim(),
+          liffProfileUrl: liffProfileUrl.trim(), liffRepairUrl: liffRepairUrl.trim(),
+          contactPhone: contactPhone.trim(),
+        },
         payment: {
           bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
           accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage,
@@ -1121,8 +1132,23 @@ export default function SettingsPage() {
                     <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
                       value={liffPaymentUrl} onChange={(e) => setLiffPaymentUrl(e.target.value)} />
                   </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Profile URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffProfileUrl} onChange={(e) => setLiffProfileUrl(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Repair URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "แจ้งซ่อม" บนเมนู Member)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffRepairUrl} onChange={(e) => setLiffRepairUrl(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ" บนเมนู Guest/Member)</span></label>
+                    <input type="text" className="form-control" placeholder="081-234-5678"
+                      value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+                  </div>
                   <div className="col-12">
-                    <div className="form-text small">แก้ไข URL แล้วต้องกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้ก่อน ถึงจะมีผลตอนกดสร้าง Rich Menu ด้านล่าง</div>
+                    <div className="form-text small">แก้ไขค่าด้านบนแล้วต้องกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้ก่อน ถึงจะมีผลตอนกดสร้าง Rich Menu ด้านล่าง — ช่องที่ไม่บังคับถ้าเว้นว่างไว้ ปุ่มนั้นจะยังส่งข้อความเข้าแชทแบบเดิม</div>
                   </div>
                 </div>
 
@@ -1183,7 +1209,7 @@ export default function SettingsPage() {
                   <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
                   <ol className="mb-0 ps-3 mt-1">
                     <li>เตรียมรูปเมนู 3 รูป ขนาด {RICHMENU_WIDTH}x{RICHMENU_HEIGHT} พิกเซลเป๊ะ (นามสกุล .png หรือ .jpg เท่านั้น) แล้วอัปโหลดให้ครบทั้ง Guest/Member/Admin ด้านบน</li>
-                    <li>สร้างหน้า LIFF สำหรับเข้าสู่ระบบ และหน้า LIFF สำหรับชำระเงินไว้ก่อน (จาก LINE Developers Console) แล้ววาง URL ทั้งสองในช่องด้านบน จากนั้นกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้</li>
+                    <li>สร้างหน้า LIFF สำหรับเข้าสู่ระบบและชำระเงินไว้ก่อน (จาก LINE Developers Console) — จำเป็นทั้งคู่ ส่วนหน้า LIFF สำหรับ "ข้อมูลผู้เช่า"/"แจ้งซ่อม" และเบอร์ติดต่อเป็นตัวเลือกเสริม ไม่ตั้งไว้ก็ได้ (ปุ่มจะยังส่งข้อความเข้าแชทแบบเดิม) วาง URL/เบอร์ในช่องด้านบน แล้วกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้</li>
                     <li>กด "สร้าง/อัปเดต Rich Menu ทั้ง 3 แบบ" — ระบบจะสร้างเมนูใหม่ 3 อัน (ลบของเดิมที่เคยสร้างไว้ทิ้งอัตโนมัติ) แล้วตั้งเมนู Guest เป็นค่าเริ่มต้นให้ผู้ใช้ทุกคน</li>
                     <li>เมนู Member/Admin ยังต้องผูกเข้ากับ LINE User ID รายคนเองผ่าน LINE API เพิ่มเติม (หน้านี้ยังไม่มีปุ่มผูกอัตโนมัติ) — เก็บ ID ที่แสดงด้านบนไว้ใช้งาน</li>
                   </ol>

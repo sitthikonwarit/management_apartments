@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { appSettings, appConfig } from "../db/schema";
 import { createAllRichMenus } from "../services/richMenu";
+import { toPublicUrl } from "../services/line";
 
 const CONFIG_ID = "default";
 
@@ -54,6 +55,9 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
     richMenu: {
       liffLoginUrl: r.liffLoginUrl || "",
       liffPaymentUrl: r.liffPaymentUrl || "",
+      liffProfileUrl: r.liffProfileUrl || "",
+      liffRepairUrl: r.liffRepairUrl || "",
+      contactPhone: r.contactPhone || "",
       images: {
         guest: r.richMenuGuestImage || "",
         member: r.richMenuMemberImage || "",
@@ -170,6 +174,9 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       // ด้านล่าง เพราะเป็น action ที่มีผลข้างเคียง (อัปโหลดไฟล์/เรียก LINE API จริง) ไม่ใช่แค่บันทึกค่าฟอร์ม
       liffLoginUrl: String(b.richMenu?.liffLoginUrl ?? ""),
       liffPaymentUrl: String(b.richMenu?.liffPaymentUrl ?? ""),
+      liffProfileUrl: String(b.richMenu?.liffProfileUrl ?? ""),
+      liffRepairUrl: String(b.richMenu?.liffRepairUrl ?? ""),
+      contactPhone: String(b.richMenu?.contactPhone ?? ""),
       paymentBankName: String(b.payment?.bankName ?? ""),
       paymentAccountName: String(b.payment?.accountName ?? ""),
       paymentAccountNumber: String(b.payment?.accountNumber ?? ""),
@@ -248,7 +255,12 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
     }
 
     try {
-      const result = await createAllRichMenus(token, liffLoginUrl, liffPaymentUrl, images, {
+      const result = await createAllRichMenus(token, {
+        liffLoginUrl, liffPaymentUrl,
+        liffProfileUrl: row.liffProfileUrl || "",
+        liffRepairUrl: row.liffRepairUrl || "",
+        contactUrl: toPublicUrl("/contact"),
+      }, images, {
         guest: row.richMenuGuestId || undefined,
         member: row.richMenuMemberId || undefined,
         admin: row.richMenuAdminId || undefined,
