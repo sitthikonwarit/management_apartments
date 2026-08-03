@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { tenantsApi, roomsApi, vehiclesApi, billsApi } from "../api/client";
 
 import { useBreadcrumb } from "../context/BreadcrumbContext";
+import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import TenantTableView from "../components/TenantTableView";
@@ -76,6 +77,7 @@ function TenantDetailView({
   onTenantUpdate: (t: any) => void; onEdit: () => void; onDelete: () => void;
 }) {
   const navigate = useNavigate();
+  const { config } = useAppConfig();
   const room = rooms.find((r) => String(r.id) === String(tenant.idRoom) || String(r.number) === String(tenant.idRoom));
   const roomNumber = room ? String(room.number) : (tenant.idRoom ? String(tenant.idRoom) : "");
   const allRoomsLabel = getTenantRoomsLabel(rooms, tenant); // ห้องหลัก + ห้องเพิ่มเติมทั้งหมด
@@ -627,6 +629,35 @@ function TenantDetailView({
             </div>
           ) : (
             <div className="file-view-empty"><i className="fas fa-door-closed me-2 text-muted" />ไม่มีห้องเพิ่มเติม</div>
+          )}
+        </div>
+
+        {/* ─── ค่าปรับเกินกำหนด (ตั้งเฉพาะบุคคลได้ ไม่ตั้งก็ได้ — ถ้าไม่ตั้งใช้ค่ากลางจากหน้าตั้งค่าระบบ) ─── */}
+        <div className="detail-section">
+          <div className="detail-section-header">
+            <h6 className="mb-0"><i className="fas fa-user-clock me-2" />ค่าปรับเกินกำหนด</h6>
+            <button className="btn btn-sm btn-outline-primary" onClick={onEdit}>
+              <i className="fas fa-pen me-1" />แก้ไข
+            </button>
+          </div>
+          {tenant.overdue?.override ? (
+            <div className="file-view-container">
+              <div className="file-view-item">
+                <i className={`fas ${tenant.overdue.enabled ? "fa-check-circle text-success" : "fa-times-circle text-muted"} file-icon`} />
+                <span className="file-name">
+                  ตั้งค่าเฉพาะบุคคล — {tenant.overdue.enabled
+                    ? `ปรับ${tenant.overdue.type === "daily" ? "วันละ" : ""} ${money(tenant.overdue.amount)} ฿ หลังวันที่ ${tenant.overdue.day === 0 ? "สิ้นเดือน" : tenant.overdue.day}`
+                    : "ปิดใช้งานค่าปรับ"}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="file-view-empty">
+              <i className="fas fa-sliders-h me-2 text-muted" />
+              ใช้ค่ากลางจากหน้าตั้งค่าระบบ{config.overdue.enabled
+                ? ` (ปรับ${config.overdue.type === "daily" ? "วันละ" : ""} ${money(config.overdue.amount)} ฿ หลังวันที่ ${config.overdue.day === 0 ? "สิ้นเดือน" : config.overdue.day})`
+                : " (ปิดใช้งาน)"}
+            </div>
           )}
         </div>
 

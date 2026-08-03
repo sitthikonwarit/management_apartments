@@ -196,6 +196,21 @@ export function closeOutstandingBills(
   return result;
 }
 
+// ── ค่าปรับล่าช้าเฉพาะบุคคล ────────────────────────────────────────────────────
+// ผู้เช่าแต่ละคนตั้งค่าเกินกำหนดของตัวเองได้ (ผ่านหน้ารายละเอียดผู้เช่า) หรือจะไม่ตั้งก็ได้ — ถ้าไม่ตั้ง
+// (tenant.overdue.override = false/ไม่มี) ให้ใช้ค่ากลางจากหน้า Settings ตามปกติ
+export function resolveOverdueConfig(tenant: any, config: AppConfig): AppConfig["overdue"] {
+  if (tenant?.overdue?.override) {
+    return {
+      enabled: !!tenant.overdue.enabled,
+      day: Number(tenant.overdue.day) || 0,
+      type: tenant.overdue.type === "daily" ? "daily" : "fixed",
+      amount: Number(tenant.overdue.amount) || 0,
+    };
+  }
+  return config.overdue;
+}
+
 // ── ค่าปรับล่าช้า ──────────────────────────────────────────────────────────────
 export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue"] | undefined, monthYear: string) {
   item.fineAmount = 0;
@@ -239,7 +254,8 @@ export function recalcItem(
   item: BillItem,
   config: AppConfig,
   defaults: { water: string; electric: string },
-  monthYear: string
+  monthYear: string,
+  tenant?: any
 ) {
   const meterBase = Math.pow(10, config.meterDigits || 4);
   item.meterWater.unit = item.waterActive ? calcUnit(item.meterWater.curr, item.meterWater.prev, meterBase) : 0;
@@ -251,7 +267,7 @@ export function recalcItem(
   const electricDefault = item.electricDefaultFormula ?? defaults.electric;
   item.waterDefaultFormula = waterDefault;
   item.electricDefaultFormula = electricDefault;
-  const overdueCfg = item.overdueConfig ?? { ...config.overdue };
+  const overdueCfg = item.overdueConfig ?? resolveOverdueConfig(tenant, config);
   item.overdueConfig = overdueCfg;
 
   const wf = item.waterFormula || waterDefault;
@@ -351,7 +367,7 @@ export function generateBillForMonth(monthYear: string, ctx: GenCtx): BillItem[]
       electricFormula: "",
       waterDefaultFormula: defaults.water,
       electricDefaultFormula: defaults.electric,
-      overdueConfig: { ...ctx.config.overdue },
+      overdueConfig: resolveOverdueConfig(tenant, ctx.config),
       waterActive: room.meterWaterActive !== false,
       electricActive: room.meterElectricActive !== false,
       meterWater: { prev: waterPrev, curr: waterCurr, unit: 0 },
@@ -474,7 +490,8 @@ export function refreshDerivedFields(items: BillItem[], monthYear: string, ctx: 
     const outstanding = getOutstandingBalance(ctx.allBills, item.roomId, monthYear, item.tenantId, item.tenantName);
     item.outstandingAmount = outstanding.amount;
     item.outstandingItems = outstanding.items;
-    recalcItem(item, ctx.config, defaults, monthYear);
+    const tenant = item.tenantId ? ctx.tenants.find((t) => String(t.id) === String(item.tenantId)) : undefined;
+    recalcItem(item, ctx.config, defaults, monthYear, tenant);
   });
   return items;
 }
@@ -517,6 +534,6 @@ export function syncTenantForItem(item: BillItem, ctx: GenCtx, monthYear: string
   item.outstandingItems = outstanding.items;
 
   const defaults = resolveDefaultFormulas(ctx.formulas);
-  recalcItem(item, ctx.config, defaults, monthYear);
+  recalcItem(item, ctx.config, defaults, monthYear, tenant);
   return item;
 }

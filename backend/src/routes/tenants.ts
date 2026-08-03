@@ -38,6 +38,13 @@ function parseTenant(r: TenantRow) {
     coResidents: j(r.coResidents, []),
     pdfLinks: j(r.pdfLinks, []),
     driveImageUrl: r.driveImageUrl,
+    overdue: {
+      override: r.overdueOverride === "true",
+      enabled: r.overdueEnabled === "true",
+      day: Number(r.overdueDay) || 0,
+      type: r.overdueFineType || "fixed",
+      amount: Number(r.overdueFineAmount) || 0,
+    },
   };
 }
 
@@ -181,6 +188,11 @@ export const tenantsRoute = new Elysia({ prefix: "/tenants" })
       contractEndDate: String(formData.contractEndDate ?? ""),
       driveImageUrl,
       pdfLinks: JSON.stringify(pdfLinksArr),
+      overdueOverride: formData.overdue?.override ? "true" : "false",
+      overdueEnabled: formData.overdue?.enabled ? "true" : "false",
+      overdueDay: String(Number(formData.overdue?.day) || 0),
+      overdueFineType: String(formData.overdue?.type ?? "fixed"),
+      overdueFineAmount: String(Number(formData.overdue?.amount) || 0),
     }).where(eq(tenants.id, id));
 
     const [updated] = await db.select().from(tenants).where(eq(tenants.id, id));

@@ -47,6 +47,14 @@ export const tenants = pgTable("tenants", {
   tags: json("tags"),
   lineUserId: str("line_user_id"),
   coResidents: json("co_residents"),
+  // ── ค่าปรับเกินกำหนดเฉพาะบุคคล (override ค่ากลางใน app_config) ──
+  // overdueOverride = "false" (ค่าเริ่มต้น) หมายถึงผู้เช่าคนนี้ยังไม่ได้ตั้งค่าเอง ใช้ค่ากลางจากหน้า Settings
+  // เสมอ ถ้าเป็น "true" ฟิลด์ overdueEnabled/Day/FineType/FineAmount ด้านล่างจะถูกใช้แทนค่ากลางสำหรับคนนี้
+  overdueOverride: text("overdue_override").notNull().default("false"),
+  overdueEnabled: text("overdue_enabled").notNull().default("false"),
+  overdueDay: str("overdue_day"),
+  overdueFineType: str("overdue_fine_type"),
+  overdueFineAmount: str("overdue_fine_amount"),
 });
 
 export const bookings = pgTable("bookings", {

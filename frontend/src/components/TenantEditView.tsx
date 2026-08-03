@@ -4,6 +4,7 @@ import CustomSelect2 from "./CustomSelect2";
 import CustomCreatableSelect2 from "./CustomCreatableSelect2";
 import ThaiDatePicker from "./ThaiDatePicker";
 import { TENANT_TITLE_OPTIONS } from "../utils/tenantName";
+import { useAppConfig } from "../context/AppConfigContext";
 
 const AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
@@ -73,6 +74,23 @@ export default function TenantEditView({
     contractStartDate: tenant.contractStartDate ?? "",
     contractEndDate: tenant.contractEndDate ?? "",
   });
+
+  const { config } = useAppConfig();
+
+  // ── ค่าปรับเกินกำหนดเฉพาะบุคคล — ไม่ตั้งก็ได้ (จะใช้ค่ากลางจากหน้าตั้งค่าระบบแทน) ──
+  const initOverdueDay = tenant.overdue?.override ? tenant.overdue.day : config.overdue.day;
+  const [overdueOverride, setOverdueOverride] = useState<boolean>(!!tenant.overdue?.override);
+  const [overdueEnabled, setOverdueEnabled] = useState<boolean>(
+    tenant.overdue?.override ? !!tenant.overdue.enabled : config.overdue.enabled
+  );
+  const [dueEom, setDueEom] = useState<boolean>(initOverdueDay === 0);
+  const [dueDay, setDueDay] = useState<number>(initOverdueDay || 5);
+  const [fineType, setFineType] = useState<"fixed" | "daily">(
+    tenant.overdue?.override ? (tenant.overdue.type as "fixed" | "daily") : config.overdue.type
+  );
+  const [fineAmount, setFineAmount] = useState<number>(
+    tenant.overdue?.override ? Number(tenant.overdue.amount) || 0 : config.overdue.amount
+  );
 
   const [imgSrc, setImgSrc] = useState(getDriveImgSrc(tenant.driveImageUrl));
   const [imageBase64, setImageBase64] = useState<string>("");
@@ -163,7 +181,16 @@ export default function TenantEditView({
         }))
       );
       const updated = await tenantsApi.update(tenant.id, {
-        formData: form,
+        formData: {
+          ...form,
+          overdue: {
+            override: overdueOverride,
+            enabled: overdueEnabled,
+            day: dueEom ? 0 : Math.min(31, Math.max(1, Number(dueDay) || 1)),
+            type: fineType,
+            amount: Number(fineAmount) || 0,
+          },
+        },
         imageBase64: imageBase64 || undefined,
         pdfFiles: pdfData.length > 0 ? pdfData : undefined,
         pdfLinksToKeep: existingPdfs,
@@ -333,6 +360,71 @@ export default function TenantEditView({
             onChange={(v) => set("contractEndDate", v)}
             placeholder="เลือกวันหมดสัญญา"
           />
+        </div>
+
+        {/* ── ค่าปรับเกินกำหนดเฉพาะบุคคล ── */}
+        <div className="col-12 mt-2">
+          <h5 className="form-section-title">ค่าปรับเกินกำหนด</h5>
+        </div>
+        <div className="col-12">
+          <div className="detail-section" style={{ border: "1px solid var(--color-light)", borderRadius: 12, padding: "1rem" }}>
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <div className="fw-bold"><i className="fas fa-user-clock me-2 text-danger" />ตั้งค่าเฉพาะผู้เช่ารายนี้</div>
+                <small className="text-muted">ไม่เปิดก็ได้ — ถ้าไม่เปิดจะใช้ค่ากลางจากหน้าตั้งค่าระบบตามปกติ</small>
+              </div>
+              <div className="form-check form-switch mb-0">
+                <input className="form-check-input" type="checkbox" id="tenantOverdueOverride"
+                  checked={overdueOverride} onChange={(e) => setOverdueOverride(e.target.checked)} />
+              </div>
+            </div>
+            {overdueOverride && (
+              <div className="row g-3 mt-1">
+                <div className="col-12">
+                  <div className="form-check form-switch">
+                    <input className="form-check-input" type="checkbox" id="tenantOverdueEnabled"
+                      checked={overdueEnabled} onChange={(e) => setOverdueEnabled(e.target.checked)} />
+                    <label className="form-check-label fw-bold" htmlFor="tenantOverdueEnabled">เปิดใช้งานค่าปรับล่าช้า</label>
+                  </div>
+                </div>
+                <div className="col-md-4" style={{ opacity: overdueEnabled ? 1 : 0.5, pointerEvents: overdueEnabled ? "auto" : "none" }}>
+                  <label className="form-label small fw-bold">กำหนดจ่ายไม่เกินวันที่</label>
+                  <div className="input-group mb-1">
+                    <span className="input-group-text"><i className="fas fa-calendar-day" /></span>
+                    <input type="number" className="form-control fw-bold" min={1} max={31} disabled={dueEom}
+                      value={dueEom ? "" : dueDay} placeholder={dueEom ? "สิ้นเดือน" : "วันที่ (1-31)"}
+                      onChange={(e) => setDueDay(Math.min(31, Math.max(1, Number(e.target.value) || 1)))} />
+                  </div>
+                  <div className="form-check">
+                    <input className="form-check-input" type="checkbox" id="tenantDueEom"
+                      checked={dueEom} onChange={(e) => setDueEom(e.target.checked)} />
+                    <label className="form-check-label small text-muted" htmlFor="tenantDueEom">ทุกสิ้นเดือน</label>
+                  </div>
+                </div>
+                <div className="col-md-8" style={{ opacity: overdueEnabled ? 1 : 0.5, pointerEvents: overdueEnabled ? "auto" : "none" }}>
+                  <div className="row g-3">
+                    <div className="col-6">
+                      <label className="form-label small fw-bold">รูปแบบ</label>
+                      <CustomSelect2
+                        value={{ value: fineType, label: fineType === "fixed" ? "เหมาจ่ายครั้งเดียว" : "คิดรายวัน (ต่อวัน)" }}
+                        options={[{ value: "fixed", label: "เหมาจ่ายครั้งเดียว" }, { value: "daily", label: "คิดรายวัน (ต่อวัน)" }]}
+                        onChange={(o: any) => setFineType(o?.value ?? "fixed")}
+                        isSearchable={false}
+                      />
+                    </div>
+                    <div className="col-6">
+                      <label className="form-label small fw-bold text-danger">จำนวนเงิน</label>
+                      <div className="input-group">
+                        <input type="number" className="form-control text-end fw-bold text-danger"
+                          value={fineAmount} onChange={(e) => setFineAmount(Number(e.target.value))} />
+                        <span className="input-group-text">บาท</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── เอกสาร ── */}
