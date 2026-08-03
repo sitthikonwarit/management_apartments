@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAppConfig, resolveNameCharColor } from "../../context/AppConfigContext";
 import { guardNavigation } from "../../utils/unsavedGuard";
+import { chatApi } from "../../api/client";
+import { useLiveRefreshTick } from "../../utils/useLiveSync";
 
 const CLOSE_ANIM_MS = 400;
 
@@ -29,6 +31,17 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { logoUrl, logoBg, nameText, nameColors } = config.appIdentity;
   const [phase, setPhase] = useState<Phase>(open ? "open" : "closed");
   const prevOpenRef = useRef(open);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  // นับข้อความแชท LINE ที่ยังไม่อ่านรวมทุกการสนทนา ไว้ขึ้นแบดจ์ที่เมนู "แชท LINE" — โหลดครั้งแรกตอน mount
+  // แล้วรีเฟรชทุกครั้งที่มีข้อความเข้าใหม่/มีการมาร์คอ่านจากที่อื่น (ผ่าน WebSocket "chat" broadcast เดียวกับ
+  // ที่หน้าแชทใช้ ดู utils/useLiveSync.ts)
+  const chatLiveTick = useLiveRefreshTick(["chat"]);
+  useEffect(() => {
+    chatApi.getConversations()
+      .then((rows) => setChatUnread(rows.reduce((sum, c) => sum + c.unreadCount, 0)))
+      .catch(() => {});
+  }, [chatLiveTick]);
 
   // อัปเดต phase ระหว่าง render (ไม่ใช่ใน useEffect) เพื่อกัน frame ที่ className ว่างเปล่า
   // ซึ่งจะทำให้ CSS default (display:none) ทำงานก่อนแล้วค่อยเด้งกลับมาเล่นแอนิเมชันปิด (บัคกระพริบ)
@@ -82,7 +95,12 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 if (guardNavigation(go)) go();
               }}
             >
-              <span className="material-icons-sharp">{item.icon}</span>
+              <span className="sidebar-icon-wrap">
+                <span className="material-icons-sharp">{item.icon}</span>
+                {item.to === "/chat" && chatUnread > 0 && (
+                  <span className="sidebar-badge">{chatUnread > 99 ? "99+" : chatUnread}</span>
+                )}
+              </span>
               <h3>{item.label}</h3>
             </NavLink>
           ))}

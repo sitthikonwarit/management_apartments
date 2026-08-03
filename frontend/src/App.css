@@ -518,6 +518,20 @@ aside .sidebar a.active span { color: var(--color-primary); margin-left: 0.6rem;
 aside .sidebar a:hover { color: var(--color-primary); }
 aside .sidebar a:hover span { margin-left: 0.6rem; }
 
+/* แบดจ์แจ้งเตือนข้อความแชท LINE ที่ยังไม่อ่าน — ลอยมุมขวาบนของไอคอนเสมอ (position:absolute) ไม่โดน
+   margin-left ที่ตั้งไว้กับ span ทุกตัวตอน hover/active ด้านบนรบกวน และยังใช้ได้ทั้งโหมดไอคอนอย่างเดียว
+   (จอ 768-1200px) กับโหมดมีข้อความกำกับ */
+aside .sidebar-icon-wrap { position: relative; display: inline-flex; }
+aside .sidebar a .sidebar-badge {
+  position: absolute; top: -6px; right: -9px;
+  background-color: var(--color-danger) !important; color: #fff !important;
+  font-size: 0.62rem; font-weight: 700; line-height: 1;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px var(--color-white);
+  margin-left: 0 !important;
+}
+
 /* =================================================================
  * MAIN
  * ================================================================= */
