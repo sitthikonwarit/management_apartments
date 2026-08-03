@@ -6,7 +6,8 @@
     "start": "bun src/index.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:migrate": "bun src/db/migrate-from-sheets.ts"
+    "db:migrate": "bun src/db/migrate-from-sheets.ts",
+    "rich-menu": "bun src/scripts/createRichMenu.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.3",
