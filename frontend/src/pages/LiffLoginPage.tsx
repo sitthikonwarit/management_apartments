@@ -18,6 +18,10 @@ export default function LiffLoginPage() {
   const [lineUserId, setLineUserId] = useState("");
   const [copied, setCopied] = useState(false);
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
+  const [accessToken, setAccessToken] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkingPhone, setLinkingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -35,10 +39,11 @@ export default function LiffLoginPage() {
         // แล้วเด้งกลับมาที่หน้านี้อีกครั้งพร้อมสถานะล็อกอินแล้ว (โค้ดด้านล่างจะไม่ทำงานต่อในรอบนี้)
         if (!liff.isLoggedIn()) { liff.login(); return; }
 
-        const accessToken = liff.getAccessToken();
-        if (!accessToken) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
+        const token = liff.getAccessToken();
+        if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
+        setAccessToken(token);
 
-        const result = await liffApi.login(accessToken);
+        const result = await liffApi.login(token);
         if (cancelled) return;
         if (result.linked) {
           setTenantName(result.tenantName);
@@ -61,6 +66,22 @@ export default function LiffLoginPage() {
     navigator.clipboard.writeText(lineUserId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleLinkPhone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!phone.trim()) { setPhoneError("กรุณากรอกเบอร์โทรศัพท์"); return; }
+    setLinkingPhone(true); setPhoneError("");
+    try {
+      const result = await liffApi.linkPhone(accessToken, phone.trim());
+      setTenantName(result.tenantName);
+      setRoomNumber(result.roomNumber);
+      setStatus("linked");
+    } catch (e: any) {
+      setPhoneError(e?.response?.data?.error ?? e?.message ?? "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setLinkingPhone(false);
+    }
   }
 
   return (
@@ -96,7 +117,29 @@ export default function LiffLoginPage() {
             <div className="room-modal-error mb-3">
               <i className="fas fa-exclamation-circle me-2" />ยังไม่พบข้อมูลผู้เช่าที่ผูกกับบัญชี LINE นี้
             </div>
-            <p className="text-muted small">กรุณาแจ้ง LINE User ID ด้านล่างนี้ให้ผู้ดูแลหอพัก เพื่อผูกบัญชีให้ที่หน้า "ผู้เช่า" ในระบบ</p>
+
+            <p className="text-muted small mb-2">กรอกเบอร์โทรศัพท์ที่แจ้งไว้กับหอพัก เพื่อเข้าสู่ระบบทันที</p>
+            <form onSubmit={handleLinkPhone}>
+              <div className="input-group mb-1">
+                <span className="input-group-text"><i className="fas fa-phone" /></span>
+                <input type="tel" className="form-control" placeholder="08xxxxxxxx" autoFocus
+                  value={phone} onChange={(e) => setPhone(e.target.value)} disabled={linkingPhone} />
+              </div>
+              {phoneError && (
+                <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{phoneError}</div>
+              )}
+              <button type="submit" className="btn btn-primary w-100 mb-3" disabled={linkingPhone}>
+                {linkingPhone
+                  ? <><span className="spinner-border spinner-border-sm me-2" />กำลังเข้าสู่ระบบ...</>
+                  : <><i className="fas fa-sign-in-alt me-2" />เข้าสู่ระบบด้วยเบอร์โทร</>}
+              </button>
+            </form>
+
+            <div className="d-flex align-items-center gap-2 text-muted small mb-3">
+              <hr className="flex-grow-1 m-0" /><span>หรือ</span><hr className="flex-grow-1 m-0" />
+            </div>
+
+            <p className="text-muted small">ถ้าเบอร์โทรไม่ตรงกับข้อมูลในระบบ ให้แจ้ง LINE User ID ด้านล่างนี้กับผู้ดูแลหอพักแทน</p>
             <div className="input-group mb-2">
               <input type="text" className="form-control font-monospace small" readOnly value={lineUserId} />
               <button className="btn btn-outline-secondary" type="button" onClick={copyLineUserId} title="คัดลอก">

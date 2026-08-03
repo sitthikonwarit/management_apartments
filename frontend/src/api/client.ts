@@ -235,6 +235,9 @@ export const liffApi = {
     | { linked: false; lineUserId: string; displayName: string }
     | { linked: true; tenantName: string; roomNumber: string; menuLinked: boolean }
   ),
+  linkPhone: (accessToken: string, phone: string) => api.post("/liff/link-phone", { accessToken, phone }).then((r) => r.data as
+    { linked: true; tenantName: string; roomNumber: string; menuLinked: boolean }
+  ),
   payment: (accessToken: string) => api.post("/liff/payment", { accessToken }).then((r) => r.data as
     | { linked: false }
     | {

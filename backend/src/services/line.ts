@@ -82,6 +82,24 @@ export async function findTenantByLineUserId(lineUserId: string) {
   return null;
 }
 
+// เหลือแต่ตัวเลข + ปรับรูปแบบเบอร์ไทยให้เทียบกันได้ (คนละฟอร์แมต เช่น "081-234-5678" กับ "0812345678"
+// หรือ "66812345678" ต้องนับเป็นเบอร์เดียวกัน) ใช้ตอนผู้เช่าพิมพ์เบอร์เข้ามาผูกบัญชี LINE เอง (ดู
+// findTenantsByPhone ด้านล่าง + routes/liff.ts)
+function normalizePhone(raw: string): string {
+  let digits = (raw || "").replace(/\D/g, "");
+  if (digits.startsWith("66") && digits.length === 11) digits = "0" + digits.slice(2);
+  return digits;
+}
+
+// หาผู้เช่าทั้งหมดที่เบอร์โทร (tenants.tel) ตรงกับเบอร์ที่กรอกมา — ปกติควรเจอแค่คนเดียว (1 เบอร์ต่อ 1 คน)
+// แต่คืนเป็น array เผื่อข้อมูลเดิมมีเบอร์ซ้ำกันหลายคน ให้ผู้เรียกตัดสินใจว่าจะปฏิเสธ/แจ้งเตือนอย่างไร
+export async function findTenantsByPhone(phone: string) {
+  const target = normalizePhone(phone);
+  if (!target) return [];
+  const rows = await db.select().from(tenants);
+  return rows.filter((t) => normalizePhone(t.tel || "") === target);
+}
+
 const CONFIG_ID = "default";
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
 const LINE_PROFILE_URL = "https://api.line.me/v2/bot/profile";
