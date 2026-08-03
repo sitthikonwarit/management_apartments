@@ -13,6 +13,7 @@ import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import BreadcrumbBar from "./components/layout/BreadcrumbBar";
 import LockScreen from "./components/LockScreen";
+import ChatToastHost from "./components/ChatToastHost";
 import LoginPage from "./pages/LoginPage";
 import TenantsPage from "./pages/TenantsPage";
 import RoomsPage from "./pages/RoomsPage";
@@ -85,6 +86,7 @@ function AuthenticatedShell() {
           </Routes>
         </div>
       </main>
+      <ChatToastHost />
     </div>
   );
 }

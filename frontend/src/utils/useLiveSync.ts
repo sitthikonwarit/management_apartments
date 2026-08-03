@@ -31,6 +31,10 @@ export function useLiveSyncConnection(enabled: boolean) {
           const data = JSON.parse(e.data);
           if (data?.type === "change" && data.entityType) {
             window.dispatchEvent(new CustomEvent("live:change", { detail: data }));
+          } else if (data?.type === "chat-message") {
+            // ข้อความแชทใหม่จากผู้เช่า (ไม่ใช่ที่เราส่งเอง) — พ่วงรูป/ชื่อ/ห้อง/ตัวอย่างข้อความมาด้วย
+            // ให้ ChatToastHost เด้งเป็นป็อปอัพแจ้งเตือนมุมขวาล่างได้เลยโดยไม่ต้องยิง request ถามซ้ำ
+            window.dispatchEvent(new CustomEvent("chat:new-message", { detail: data }));
           } else if (data?.type === "session-revoked") {
             // มีคน login ด้วยบัญชีเดียวกันจากเครื่อง/แท็บอื่น — เครื่องนี้ถูกแทนที่แล้ว บังคับออกจากระบบทันที
             window.dispatchEvent(new Event("auth:session-revoked"));

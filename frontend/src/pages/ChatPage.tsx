@@ -267,7 +267,10 @@ export default function ChatPage() {
                       {m.messageType === "image" && m.imageUrl ? (
                         <img
                           src={m.imageUrl} alt="รูปภาพ"
-                          style={{ maxWidth: "100%", borderRadius: 8, display: "block", cursor: "pointer" }}
+                          // maxWidth เดิมเป็น 100% ของฟองข้อความ ซึ่งกว้างได้ถึง 70% ของพื้นที่แชท (ดู maxWidth
+                          // ของ wrapper ด้านบน) บนจอเดสก์ท็อปที่กว้างมากรูปเลยดูใหญ่เกินไป — จำกัดเพดานตายตัวไว้
+                          // ที่ 260px แต่ยังหดตามพื้นที่ที่มีได้ถ้าฟองข้อความแคบกว่านั้น (เช่นจอมือถือ)
+                          style={{ maxWidth: "min(260px, 100%)", maxHeight: 320, borderRadius: 8, display: "block", cursor: "pointer" }}
                           onClick={() => setLightboxIndex(threadImages.indexOf(m.imageUrl as string))}
                         />
                       ) : m.messageType === "file" ? (

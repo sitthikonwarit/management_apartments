@@ -4,12 +4,12 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, lineProfiles } from "../db/schema";
+import { chatMessages, lineProfiles, rooms } from "../db/schema";
 import {
   getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent,
   findTenantByLineUserId, cacheLineProfile,
 } from "../services/line";
-import { broadcastChange } from "../lib/wsHub";
+import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
 
 const PROFILE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 วัน — ไม่ต้องยิง LINE API ทุกข้อความที่เข้ามา
 
@@ -119,6 +119,18 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
           createdAt: new Date().toISOString(),
         });
         received = true;
+
+        // ป็อปอัพแจ้งเตือนมุมขวาล่างในหน้าเว็บ — พ่วงรูปโปรไฟล์ (แคชล่าสุด หลัง refreshProfileCacheIfStale
+        // ด้านบนแล้ว) + เลขห้อง (ถ้าผูกผู้เช่าไว้) + ตัวอย่างข้อความไปด้วย ไม่ต้องให้ frontend ยิงถามซ้ำ
+        const [room] = tenant?.idRoom ? await db.select().from(rooms).where(eq(rooms.id, tenant.idRoom)) : [];
+        const [profileRow] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, lineUserId));
+        broadcastChatMessage({
+          lineUserId,
+          displayName: senderName || "ไม่ทราบชื่อ",
+          roomNumber: room?.number || null,
+          pictureUrl: profileRow?.pictureUrl || null,
+          preview: text,
+        });
       }
 
       if (received) broadcastChange("chat", "create", "มีข้อความแชทใหม่จาก LINE", "LINE");

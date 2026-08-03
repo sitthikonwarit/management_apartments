@@ -30,6 +30,29 @@ export function broadcastChange(entityType: string, action: string, label?: stri
   }
 }
 
+export interface ChatMessageNotification {
+  lineUserId: string;
+  displayName: string;
+  roomNumber: string | null;
+  pictureUrl: string | null;
+  preview: string;
+}
+
+// เรียกจาก lineWebhook.ts ทุกครั้งที่มีข้อความเข้าใหม่จากผู้เช่า (ไม่เรียกตอนพนักงาน/ระบบส่งออกไป กัน
+// เด้งแจ้งเตือน "ข้อความใหม่" ทับข้อความที่ตัวเองเพิ่งส่งเอง) — แยกจาก broadcastChange (type "change") เพราะ
+// ต้องพ่วงข้อมูลรูป/ชื่อ/ห้อง/ตัวอย่างข้อความไปด้วย ให้หน้าเว็บเด้งเป็นป็อปอัพแจ้งเตือนมุมขวาล่างได้ทันที
+// โดยไม่ต้องยิง request แยกไปถามรายละเอียดอีกรอบ
+export function broadcastChatMessage(notification: ChatMessageNotification) {
+  const payload = JSON.stringify({ type: "chat-message", ...notification, timestamp: new Date().toISOString() });
+  for (const ws of clients.keys()) {
+    try {
+      ws.send(payload);
+    } catch {
+      clients.delete(ws);
+    }
+  }
+}
+
 // เรียกจาก /auth/login ตอนมีคน login ด้วยบัญชีเดียวกันซ้ำ (จากเครื่อง/แท็บอื่น) — ยิงหาทุก connection ของ
 // userId นี้ที่ยังต่ออยู่ (ปกติคือเครื่องเก่าที่เพิ่งถูกแทนที่) ให้ frontend บังคับออกจากระบบทันที ไม่ต้อง
 // รอให้ request ถัดไปโดน 401 เฉยๆ (การ์ดฝั่ง backend ก็ปฏิเสธ sid เก่าอยู่แล้วเป็นชั้นป้องกันจริง อันนี้แค่
