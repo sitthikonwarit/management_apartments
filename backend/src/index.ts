@@ -14,6 +14,7 @@ import { addressRoute } from "./routes/address";
 import { logsRoute } from "./routes/logs";
 import { chatRoute } from "./routes/chat";
 import { lineWebhookRoute } from "./routes/lineWebhook";
+import { liffRoute } from "./routes/liff";
 import { authPublicRoute, authProtectedRoute } from "./routes/auth";
 import { authDerive } from "./lib/authDerive";
 import { recordLog } from "./lib/activityLog";
@@ -76,6 +77,9 @@ const app = new Elysia()
   // /line/webhook — LINE เป็นคนยิงมาเอง ไม่มี Authorization: Bearer ของระบบเรา ต้องเปิดสาธารณะเช่นกัน
   // (ตรวจสิทธิ์ด้วย x-line-signature ของตัวเองแทน ดู verifyLineSignature ใน services/line.ts)
   .use(lineWebhookRoute)
+  // /liff/* — หน้า LIFF ฝั่งผู้เช่า (Login/Payment) ผู้เช่าไม่มีบัญชีพนักงาน เปิดสาธารณะเช่นกัน (ยืนยัน
+  // ตัวตนด้วย LIFF access token ของ LINE เองแทน ดู verifyLiffAccessToken ใน services/line.ts)
+  .use(liffRoute)
   // ── WebSocket แจ้งเตือนแบบเรียลไทม์ — auth เองในตัว (แนบ token มาทาง query string เพราะ browser
   // WebSocket API แนบ custom header ไม่ได้) แยกจากการ์ด HTTP ด้านล่างเพราะ WS ไม่ผ่าน onBeforeHandle
   // แบบเดียวกับ HTTP request ปกติ ไม่ broadcast ข้อมูลอะไร แค่บอกว่า "entityType นี้เปลี่ยนแล้วนะ ไปโหลดใหม่"

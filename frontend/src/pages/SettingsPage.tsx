@@ -18,6 +18,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 ];
 
 const MAX_LOGO_SIZE = 120;
+const MAX_QR_SIZE = 600;
 const RICHMENU_WIDTH = 2500;
 const RICHMENU_HEIGHT = 1686;
 type RichMenuKey = "guest" | "member" | "admin";
@@ -256,6 +257,14 @@ export default function SettingsPage() {
   const memberFileRef = useRef<HTMLInputElement>(null);
   const adminFileRef = useRef<HTMLInputElement>(null);
 
+  // ── ข้อมูลบัญชีรับชำระเงิน (แสดงในหน้า LIFF Payment) ──
+  const [paymentBankName, setPaymentBankName] = useState("");
+  const [paymentAccountName, setPaymentAccountName] = useState("");
+  const [paymentAccountNumber, setPaymentAccountNumber] = useState("");
+  const [paymentQrImage, setPaymentQrImage] = useState("");
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const qrFileRef = useRef<HTMLInputElement>(null);
+
   const [logoUrl, setLogoUrl] = useState("");
   const [logoBgEnabled, setLogoBgEnabled] = useState(false);
   const [logoBgColor, setLogoBgColor] = useState("#ffffff");
@@ -335,6 +344,10 @@ export default function SettingsPage() {
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
+    setPaymentBankName(config.payment.bankName);
+    setPaymentAccountName(config.payment.accountName);
+    setPaymentAccountNumber(config.payment.accountNumber);
+    setPaymentQrImage(config.payment.qrImage);
     setLogoUrl(config.appIdentity.logoUrl);
     setLogoBgEnabled(config.appIdentity.logoBg.enabled);
     setLogoBgColor(config.appIdentity.logoBg.color);
@@ -432,6 +445,32 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
+  // ย่อรูป QR ให้ไม่ใหญ่เกินไปเหมือน handleLogoFile ด้านบน แต่เก็บขนาดที่ยังสแกนได้จริง (ใหญ่กว่าโลโก้มาก)
+  function handleQrFile(file: File) {
+    setUploadingQr(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width, height = img.height;
+        if (width > height) {
+          if (width > MAX_QR_SIZE) { height *= MAX_QR_SIZE / width; width = MAX_QR_SIZE; }
+        } else {
+          if (height > MAX_QR_SIZE) { width *= MAX_QR_SIZE / height; height = MAX_QR_SIZE; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        setPaymentQrImage(canvas.toDataURL("image/png"));
+        setUploadingQr(false);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleCreateRichMenus() {
     setCreatingRichMenu(true); setRichMenuMsg(null);
     try {
@@ -475,6 +514,10 @@ export default function SettingsPage() {
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
         lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(), autoSendEnabled: lineAutoSendEnabled },
         richMenu: { ...DEFAULT_APP_CONFIG.richMenu, liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim() },
+        payment: {
+          bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
+          accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage,
+        },
       };
       const updated = await settingsApi.updateConfig(payload);
       setConfig({
@@ -488,6 +531,7 @@ export default function SettingsPage() {
           images: { ...DEFAULT_APP_CONFIG.richMenu.images, ...updated.richMenu?.images },
           menuIds: { ...DEFAULT_APP_CONFIG.richMenu.menuIds, ...updated.richMenu?.menuIds },
         },
+        payment: { ...DEFAULT_APP_CONFIG.payment, ...updated.payment },
       });
       const successText = "บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว";
       setSaveMsg({ type: "success", text: successText });
@@ -788,6 +832,54 @@ export default function SettingsPage() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                </Searchable>
+
+                <Searchable query={q} keywords="บัญชีธนาคาร โอนเงิน qr code liff payment ชำระเงิน พร้อมเพย์">
+                  <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                    <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
+                      <i className="fas fa-qrcode me-2" />ข้อมูลบัญชีรับชำระเงิน
+                    </h6>
+                    <p className="text-muted small mb-3">แสดงในหน้า LIFF Payment ให้ผู้เช่าดูยอดค้างชำระและโอนเงินเองผ่าน LINE</p>
+                    <div className="row g-4">
+                      <div className="col-md-4 col-lg-3">
+                        <label className="form-label small fw-bold">QR รับเงิน</label>
+                        <div className="p-2 rounded text-center" style={{ border: "1px solid var(--color-light)", background: "var(--color-background)" }}>
+                          <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {paymentQrImage
+                              ? <img src={paymentQrImage} alt="QR รับเงิน" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                              : <span className="text-muted small"><i className="fas fa-qrcode me-1" />ยังไม่มีรูป</span>}
+                          </div>
+                          <button className="btn btn-sm btn-outline-secondary w-100 mt-2" type="button" disabled={uploadingQr}
+                            onClick={() => qrFileRef.current?.click()}>
+                            {uploadingQr
+                              ? <><span className="spinner-border spinner-border-sm me-1" />กำลังอัปโหลด...</>
+                              : <><i className="fas fa-upload me-1" />{paymentQrImage ? "เปลี่ยนรูป" : "อัปโหลดรูป"}</>}
+                          </button>
+                          <input ref={qrFileRef} type="file" accept="image/*" style={{ display: "none" }}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleQrFile(f); e.target.value = ""; }} />
+                        </div>
+                      </div>
+                      <div className="col-md-8 col-lg-9">
+                        <div className="row g-3">
+                          <div className="col-md-6">
+                            <label className="form-label small fw-bold">ธนาคาร</label>
+                            <input type="text" className="form-control" placeholder="เช่น ธนาคารกสิกรไทย"
+                              value={paymentBankName} onChange={(e) => setPaymentBankName(e.target.value)} />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label small fw-bold">ชื่อบัญชี</label>
+                            <input type="text" className="form-control" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
+                              value={paymentAccountName} onChange={(e) => setPaymentAccountName(e.target.value)} />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label small fw-bold">เลขบัญชี</label>
+                            <input type="text" className="form-control" placeholder="xxx-x-xxxxx-x"
+                              value={paymentAccountNumber} onChange={(e) => setPaymentAccountNumber(e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Searchable>

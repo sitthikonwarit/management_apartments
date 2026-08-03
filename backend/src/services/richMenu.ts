@@ -6,6 +6,7 @@
 const LINE_RICHMENU_URL = "https://api.line.me/v2/bot/richmenu";
 const LINE_RICHMENU_CONTENT_URL = "https://api-data.line.me/v2/bot/richmenu";
 const LINE_DEFAULT_RICHMENU_URL = "https://api.line.me/v2/bot/user/all/richmenu";
+const LINE_USER_RICHMENU_URL = "https://api.line.me/v2/bot/user";
 
 // เทมเพลตใหญ่สุดของ LINE — รูปทุกไฟล์ต้องเป็นขนาดนี้เป๊ะ (ตรวจฝั่ง frontend ก่อนอัปโหลดแล้ว ดู
 // handleRichMenuFile ใน SettingsPage.tsx)
@@ -85,6 +86,23 @@ async function deleteRichMenu(token: string, richMenuId: string): Promise<void> 
     await fetch(`${LINE_RICHMENU_URL}/${richMenuId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
   } catch {
     // เพิกเฉย — ดู comment ด้านบน
+  }
+}
+
+// ผูก Rich Menu แบบหนึ่งเข้ากับ LINE User ID รายคน (แทนที่เมนูเริ่มต้น (all-user default) เฉพาะคนนี้) —
+// เรียกจาก routes/liff.ts ตอนผู้เช่ากด "เข้าสู่ระบบ" ผ่านหน้า LIFF Login แล้วพบว่าผูกกับผู้เช่าอยู่แล้ว
+// เพื่อสลับจากเมนู Guest เป็นเมนู Member ให้อัตโนมัติ คืนค่า false เฉยๆ ถ้าไม่สำเร็จ (ไม่ throw เพราะไม่ควร
+// บล็อกการ login ทั้งขั้นตอนด้วยเหตุผลรอง)
+export async function linkRichMenuToUser(token: string, userId: string, richMenuId: string): Promise<boolean> {
+  if (!richMenuId) return false;
+  try {
+    const res = await fetch(`${LINE_USER_RICHMENU_URL}/${userId}/richmenu/${richMenuId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

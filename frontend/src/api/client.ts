@@ -221,3 +221,26 @@ export const settingsApi = {
       warning?: string;
     }),
 };
+
+// ── หน้า LIFF ฝั่งผู้เช่า (Login/Payment) — public endpoints ไม่ต้องแนบ token พนักงาน (ไม่ผ่าน
+// interceptor ข้างบนก็ได้เพราะไม่มี token ให้แนบอยู่แล้วในเบราว์เซอร์ผู้เช่า แต่ใช้ instance `api` เดิม
+// ร่วมกันเพื่อ baseURL "/api" เดียวกัน) ยืนยันตัวตนด้วย LIFF access token ของ LINE เอง ไม่ใช่ JWT ของเรา
+export const liffApi = {
+  getConfig: () => api.get("/liff/config").then((r) => r.data as {
+    liffLoginUrl: string;
+    liffPaymentUrl: string;
+    appIdentity: { logoUrl: string; nameText: string; logoBg: { enabled: boolean; color: string } };
+  }),
+  login: (accessToken: string) => api.post("/liff/login", { accessToken }).then((r) => r.data as
+    | { linked: false; lineUserId: string; displayName: string }
+    | { linked: true; tenantName: string; roomNumber: string; menuLinked: boolean }
+  ),
+  payment: (accessToken: string) => api.post("/liff/payment", { accessToken }).then((r) => r.data as
+    | { linked: false }
+    | {
+        linked: true; tenantName: string; roomNumber: string;
+        outstanding: { items: { billId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; amount: number }[]; total: number };
+        paymentInfo: { bankName: string; accountName: string; accountNumber: string; qrImage: string };
+      }
+  ),
+};

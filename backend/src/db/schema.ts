@@ -279,5 +279,10 @@ export const appConfig = pgTable("app_config", {
   richMenuGuestId: str("rich_menu_guest_id"),
   richMenuMemberId: str("rich_menu_member_id"),
   richMenuAdminId: str("rich_menu_admin_id"),
+  // ── ข้อมูลบัญชีรับชำระเงิน — แสดงในหน้า LIFF Payment ให้ผู้เช่าโอนเงินเอง (ดู routes/liff.ts) ──
+  paymentBankName: str("payment_bank_name"),
+  paymentAccountName: str("payment_account_name"),
+  paymentAccountNumber: str("payment_account_number"),
+  paymentQrImage: str("payment_qr_image"), // base64 data URI เหมือน logoUrl (ดู comment ที่ logoUrl)
   updatedAt: str("updated_at"),
 });

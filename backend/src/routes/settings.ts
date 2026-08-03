@@ -65,6 +65,12 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
         admin: r.richMenuAdminId || "",
       },
     },
+    payment: {
+      bankName: r.paymentBankName || "",
+      accountName: r.paymentAccountName || "",
+      accountNumber: r.paymentAccountNumber || "",
+      qrImage: r.paymentQrImage || "",
+    },
     updatedAt: r.updatedAt,
   };
 }
@@ -162,6 +168,10 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       // ด้านล่าง เพราะเป็น action ที่มีผลข้างเคียง (อัปโหลดไฟล์/เรียก LINE API จริง) ไม่ใช่แค่บันทึกค่าฟอร์ม
       liffLoginUrl: String(b.richMenu?.liffLoginUrl ?? ""),
       liffPaymentUrl: String(b.richMenu?.liffPaymentUrl ?? ""),
+      paymentBankName: String(b.payment?.bankName ?? ""),
+      paymentAccountName: String(b.payment?.accountName ?? ""),
+      paymentAccountNumber: String(b.payment?.accountNumber ?? ""),
+      paymentQrImage: String(b.payment?.qrImage ?? ""),
       updatedAt: new Date().toISOString(),
     }).where(eq(appConfig.id, CONFIG_ID));
     const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));

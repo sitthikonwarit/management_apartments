@@ -6,6 +6,7 @@
       "name": "lineweb-frontend",
       "dependencies": {
         "@fortawesome/fontawesome-free": "^6.7.2",
+        "@line/liff": "^2.29.2",
         "axios": "^1.16.1",
         "bootstrap": "^5.3.8",
         "chart.js": "^4.5.1",
@@ -95,6 +96,108 @@
 
     "@kurkle/color": ["@kurkle/color@0.3.4", "", {}, "sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w=="],
 
+    "@liff/activity": ["@liff/activity@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-yg/KmIzu+dgSFJ1zGzX0HvZsUfUifFmF5jToI2hseUplgmZwKYCHxuxLimM7X55NVJU3bOcemdZiA52URahDuQ=="],
+
+    "@liff/add-to-home-screen": ["@liff/add-to-home-screen@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/open-window": "2.29.2", "@liff/types": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-DORNbpjZV8/cyiJnoVaXDAFbJpUY6AUg/OvwQ4hg9n44/II1vwKBAaE2+7qr7cxwItnm/rII8Kw3mlkzwJiihQ=="],
+
+    "@liff/analytics": ["@liff/analytics@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/core": "2.29.2", "@liff/get-profile": "2.29.2", "@liff/get-version": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/logger": "2.29.2", "@liff/store": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-GJlHRi1AIKs04CLZwXgpL5lhGG75voDvoHwOVQ1BQs1m6SCNmjJIt92Ev4mFieDJB5FUOGtH9QsALGoYDB6wHQ=="],
+
+    "@liff/check-availability": ["@liff/check-availability@2.29.2", "", { "dependencies": { "@liff/get-version": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/types": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-tcThkB71yfEVvD+qYV3TkjpCVm3faLKh4Kd8T+EV6I0qq9ajIODwiriR88LkrnqpE/bM49ESHT0gJ9dQ+fzIzA=="],
+
+    "@liff/close-window": ["@liff/close-window@2.29.2", "", { "dependencies": { "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-0qZHSpdT8bihQXLOw3wXk5suTfAhGri3OqOhsAMNT8b9ez/JoUg/C2nOg54OSywqdCLoZ5Y75GHXNVD5rx3tFg=="],
+
+    "@liff/consts": ["@liff/consts@2.29.2", "", { "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-YnEemOHAOvqwrt4tx6EyYrldQxHKTdjdoU3VMF78y5/I65Tu36Vw2ZyPlA9EOGjrj/2lGqPrsinXvkJTJQaZBg=="],
+
+    "@liff/core": ["@liff/core@2.29.2", "", { "dependencies": { "@liff/get-version": "2.29.2", "@liff/init": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/ready": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-LW3/gAm2lcIAvo6rwJ/6H2ZT3Ac4JHqEknvCwrJhqMRXyQ2K6VGuxAuMmuti/FWOHpIaxUTPgzTVVN6CMT9vzg=="],
+
+    "@liff/create-shortcut-on-home-screen": ["@liff/create-shortcut-on-home-screen@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/open-window": "2.29.2", "@liff/permanent-link": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-cM5YAHaXuiQKZC1QWESKCmyHwNjvpB9vAl9Pti1xgICJf2r8nVfxZblwzr0FenNA8vIPGcc4rouvhPO+cW8MSA=="],
+
+    "@liff/extensions": ["@liff/extensions@2.29.2", "", { "dependencies": { "@liff/add-to-home-screen": "2.29.2", "@liff/check-availability": "2.29.2", "@liff/consts": "2.29.2", "@liff/get-advertising-id": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/logger": "2.29.2", "@liff/scan-code": "2.29.2", "@liff/store": "2.29.2", "@liff/types": "2.29.2", "@liff/util": "2.29.2" } }, "sha512-YaPlIy4ClrENi2JY3t5l7YwJzV/Z7w0MmLdrURetzyYqRQr+tjX41mLw3i+2jAOOROLspSgTQB8pJZgRdA/diQ=="],
+
+    "@liff/get-advertising-id": ["@liff/get-advertising-id@2.29.2", "", { "dependencies": { "@liff/types": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-udi2cFOghclCHWfLInKzpRMkp+do5rpUf0apx9mxoiI4+YG1Ga5bn8w4ricM6uBkxuDkbq7QJ972Z94qou+waA=="],
+
+    "@liff/get-app-language": ["@liff/get-app-language@2.29.2", "", { "dependencies": { "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-G7lG95Sr+knbsAEtJUNKSgQkWaIVacfOubpYuQG2qV/mYKsq8yl8RPFtRJ2lchOBWr5WnK+Uaa/DEKGvUeN/WA=="],
+
+    "@liff/get-friendship": ["@liff/get-friendship@2.29.2", "", { "dependencies": { "@liff/permission": "2.29.2", "@liff/server-api": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-bBkzsiogoWw+JqtE+ma4JiAABz9iPSQ03Tl4yKvDzRhAgNCL2hY2BwzzSQj0ziZtShgeYBGVnOjxl17aoRx6OQ=="],
+
+    "@liff/get-language": ["@liff/get-language@2.29.2", "", { "dependencies": { "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-fEUt/aXZ8J88OKXDCfppXVjr1BvbFlIHC9MOhJC4dQDcQmmKlZMLwTTKLjxdLfiqmw0T/0lGT8OJ6kgijMjPFA=="],
+
+    "@liff/get-line-version": ["@liff/get-line-version@2.29.2", "", { "dependencies": { "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-6lmu4Bb+j8is4vTCLgjgnDwqocLsYrgxvg4RG+h4BRTUmyqFiUdfHe9p23VHkg88bewYXShi6fKADujwF/dNvA=="],
+
+    "@liff/get-origins": ["@liff/get-origins@2.29.2", "", { "dependencies": { "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-WarbKFQiFI9E/+wciGIHzToqEk4cUGFVbgKI/qrIMrFbG765hbspoujo8FbDkPuISThqK9T3kItYLcn7Iam4zQ=="],
+
+    "@liff/get-os": ["@liff/get-os@2.29.2", "", { "dependencies": { "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-IPFbfdJIKIMQIJE2x6epR34/lh32mPqSc5IFUbhdDEo09EarcJK6C0jqL3KT1mkTdY9oFbqlRcpXEnzPBHgcJg=="],
+
+    "@liff/get-profile": ["@liff/get-profile@2.29.2", "", { "dependencies": { "@liff/permission": "2.29.2", "@liff/server-api": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-Wgc6hAvpW1ovqp5YFM7YbctheHzeOgH/gc+2/lvAcCwbtHfk+ZL6isf1Hhgsab+SE+IgX7gGPLJy/pL9dweXnw=="],
+
+    "@liff/get-version": ["@liff/get-version@2.29.2", "", { "dependencies": { "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-Mr6lJXCDa5yeQ52raN6a5eJfBxroAmxGFdbKbMG3O9owcGdT8b3Deh87/E5iG7iEyb7iVYYbJ+gSF9bOmBdP/Q=="],
+
+    "@liff/hooks": ["@liff/hooks@2.29.2", "", { "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-0zhvabuLhsUqegu7KECIjOFgRgCU9LRhD959ZYaJ+rBmiUbfYfero5BoY4joV3PNBoBFl/6jlVYYSwu1hANnlA=="],
+
+    "@liff/i18n": ["@liff/i18n@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/logger": "2.29.2", "@liff/server-api": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-A+/hsSwN4GNXwcSYcdKLSa+Dxi2IiIxDnAq+h33kgKtXHRSEGgBoY+PyjIjt4V7Q7e46ht+Zk9Q4B9ov9zOuEg=="],
+
+    "@liff/iap": ["@liff/iap@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-gaqiGYIKWWnJxMBqM49d7d3M2H12+3eTJfZvNTbEF83iQlmEdc8jfmo1bCtqcV7eUlTUPOsq88sWstCLuId81g=="],
+
+    "@liff/init": ["@liff/init@2.29.2", "", { "dependencies": { "@liff/check-availability": "2.29.2", "@liff/close-window": "2.29.2", "@liff/consts": "2.29.2", "@liff/extensions": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/hooks": "2.29.2", "@liff/i18n": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/logger": "2.29.2", "@liff/login": "2.29.2", "@liff/logout": "2.29.2", "@liff/message-bus": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/permanent-link": "2.29.2", "@liff/ready": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "@liff/verify-id-token": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-Eq31/01N0EYipE9wkrXoUXPzyTPO+4fUDzR5SK7q8UVXrTrZn5KjPRzrNx5TtUsE6QSZ+Y0hjhdymilB0/o7Mw=="],
+
+    "@liff/is-api-available": ["@liff/is-api-available@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-hcLRoY216gU2UYNA4lWIw/BWAw5gMz/T+TEoe8Yht4MyP7ZZh2ZrwhzUOr/eXEKqW8sbAExoFfNdBZUiOWOAiw=="],
+
+    "@liff/is-in-client": ["@liff/is-in-client@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-32K2jh42y/fOTIR1wgLQjVUjowGFatztt4+scMCCm/u7rqLi9gaSl8CCECWvLXkvJiFuKRtOlMNX2KWY3YiV4A=="],
+
+    "@liff/is-logged-in": ["@liff/is-logged-in@2.29.2", "", { "dependencies": { "@liff/store": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-WG+iiupVxU2c1ZNN4r8IgXNc+lRrKh4WRnCNRLbvyqb64CoUvrAMUhjnRLWqXg9f5lSDhS0X2E6IoUIbZMOVSg=="],
+
+    "@liff/is-sub-window": ["@liff/is-sub-window@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-a4VztE0OApLESVByeb62dAKkbIcGqvZx7EYYt0LcklKwSbzpGuy2iHI3uYWJrxaKRPeOCi42UY1aePqR9ubVbA=="],
+
+    "@liff/liff-types": ["@liff/liff-types@2.29.2", "", { "dependencies": { "@liff/activity": "2.29.2", "@liff/analytics": "2.29.2", "@liff/close-window": "2.29.2", "@liff/create-shortcut-on-home-screen": "2.29.2", "@liff/get-app-language": "2.29.2", "@liff/get-friendship": "2.29.2", "@liff/get-language": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-origins": "2.29.2", "@liff/get-os": "2.29.2", "@liff/get-profile": "2.29.2", "@liff/get-version": "2.29.2", "@liff/i18n": "2.29.2", "@liff/iap": "2.29.2", "@liff/init": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/login": "2.29.2", "@liff/logout": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/open-window": "2.29.2", "@liff/permanent-link": "2.29.2", "@liff/permission": "2.29.2", "@liff/ready": "2.29.2", "@liff/request-friendship": "2.29.2", "@liff/scan-code-v2": "2.29.2", "@liff/send-messages": "2.29.2", "@liff/share-target-picker": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-AbNST/4gl5TvGJMu95pM9IlcYlAemCpllalr9X35F4tD1dTmAACLqKCslpz0n636C9f9jgPAuGpzHlMfTtraoA=="],
+
+    "@liff/logger": ["@liff/logger@2.29.2", "", { "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-ImQqfugWrtiPh7bMsp0QrG2r1SoYoB/0xwFn0su5nxRzEt4+PCeO2matUh6jjpkWqMu9f1HE1srN40ur53HGJw=="],
+
+    "@liff/login": ["@liff/login@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/get-version": "2.29.2", "@liff/hooks": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/logger": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "tiny-sha256": "^1.0.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-lNeZ4EKKgx+kDQmvKP6oXRiQ+QaPav5rvOxGSA1me6Iu5IVhGLQdQ0+XknwE+GQBz6aUISB1hOxV5FCUAE7mdg=="],
+
+    "@liff/logout": ["@liff/logout@2.29.2", "", { "dependencies": { "@liff/store": "2.29.2", "@liff/use": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-PFcuQhMYKHCGKBgiRUqkuScOOOakOr0TB+a1nmPVIbMTrDFbP0eX7ZTiFrs4JuO7XxN+MAsRL8HJ7PhYPdnD5w=="],
+
+    "@liff/message-bus": ["@liff/message-bus@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/store": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-ZdsY4Uj4cyZB85OLFPOnJuHqDj0I6J7xgXbNK1rmgNSvQmsvGNG4ucZyKjFF/O2UDeuVCVMMqWYbmwU0xdBVKQ=="],
+
+    "@liff/native-bridge": ["@liff/native-bridge@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/logger": "2.29.2", "@liff/store": "2.29.2", "@liff/types": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-k6MyLCauA6r9cQ3yeLx6LHM29UACF/sL6+lM8qR0eS5FaESq41W3x8NATpwBlp9EfYE+VggUBOdJfao+K6vUAg=="],
+
+    "@liff/open-window": ["@liff/open-window@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-898yP427CMRl7FIz469/gDey8EsEO3GbNGlsbPBZcupombdbtq0d4V9RJDvexG9zJ/oDZiVaU1TifYu6RC0mLA=="],
+
+    "@liff/permanent-link": ["@liff/permanent-link@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-LDWK0w/c7iUrZmcP3Dz9lQum00o55AZ0jJtyJVSouxDDGo3RQzBfQlpAELfEbR5BC2c8LbK82Hujc3WC1ZahsA=="],
+
+    "@liff/permission": ["@liff/permission@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "@liff/verify-id-token": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-zSUjvJ70nXfBbf9iLBFE3bnfV1LKiw2EXCOYSP+bJzHk4oKWq84IkrNo9I1AeyE341Lk3zmR1uEXRYFZ6cwFVA=="],
+
+    "@liff/ready": ["@liff/ready@2.29.2", "", { "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-0HoPV8GWe+TNoNC9BbtDB/HtkqnANYav5Sfxx0cl2aEnygMybkI99gDj05M7vJK4DHjmSpOgAktoWHisGcBRyw=="],
+
+    "@liff/request-friendship": ["@liff/request-friendship@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-HOhE8HEfKOFuPYJlPUHLh60WoG75BT4ulFW/L0arITyOnIbM6L7HIbC35VxO2b6ykJ8b1jfOM7IpIDoZIst+fA=="],
+
+    "@liff/scan-code": ["@liff/scan-code@2.29.2", "", { "dependencies": { "@liff/types": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-u7sByE76orj9iOsOU6JQK9kjMe2t3yy8LkYReSIV7iLRP5bHdWZ+HkKdZefvGuRYlbmQl/2m+Ix3mfZirOmOWA=="],
+
+    "@liff/scan-code-v2": ["@liff/scan-code-v2@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-6SAYMNY5TxM3N4A2FE1XagxIiyd3AB5ZAJfglxfqbd0tGcRY+QWKjZgaMPCdspt759sixZPTwWhmJfzzOFlLTA=="],
+
+    "@liff/send-messages": ["@liff/send-messages@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/permission": "2.29.2", "@liff/server-api": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "@line/bot-sdk": "^10.0.0" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-OiN4LXv5Ro/F7nQvL/yJY+pvQ9G9LYn51zWOfcc5vEeUfdVyq9/3k1fCT7Ff2T7HyP1JElFhlQJHDmhFaYf2eg=="],
+
+    "@liff/server-api": ["@liff/server-api@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/store": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-49O4TGbwisK6N7bY0PMf9sONg4sgbtxXALZSWoUB2uCQb2fBT1zd6ruPJhPBNx3ZIyKaivUU1W41LxI4zj0BNQ=="],
+
+    "@liff/share-target-picker": ["@liff/share-target-picker@2.29.2", "", { "dependencies": { "@liff/analytics": "2.29.2", "@liff/consts": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/logger": "2.29.2", "@liff/send-messages": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "@liff/window-postmessage": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-RTH+csfuMsyuh7Wr9u8/gyA0dCZdOty3q6KRkGSlokeUlutvS9jvT4x8OuY1wY34tudjxcm2PBxu0pp581CQQg=="],
+
+    "@liff/store": ["@liff/store@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/types": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-GAOeK7T3EhXYxPGi+/3mcq2C+xVhTRlniCxqztw62mA8Kdiz0WRQlGl//WIFpno55IeodZ//ORMsV4gRzpjQkw=="],
+
+    "@liff/sub-window": ["@liff/sub-window@2.29.2", "", { "dependencies": { "@liff/close-window": "2.29.2", "@liff/consts": "2.29.2", "@liff/get-os": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/logger": "2.29.2", "@liff/message-bus": "2.29.2", "@liff/server-api": "2.29.2", "@liff/store": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-88DoSAvpk4p5MNraiAxIHtreeMdVaNNIvVDs1oZhcaYcogcpK/6SyATHqTWLLfrth40FV+6Od3pGujubkFrtZw=="],
+
+    "@liff/types": ["@liff/types@2.29.2", "", {}, "sha512-mfgMQv5mprdUNBSg7zvkWBKJOzCpE9Fmz1vskVVSLtWyaPAjr5CI46B4Vb7f8Wn/UIZu9B9C3JLVCdJDXrZawA=="],
+
+    "@liff/use": ["@liff/use@2.29.2", "", { "dependencies": { "@liff/hooks": "2.29.2", "@liff/logger": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-iJ1Rjkj6ZPhbmFiXK/wGXPTAuNqM/0Udf6TNaiJ+Eoza5PEJ6IB1a/OnQLpEpg7XbhtWCwroUe+VgbMEbRZOOw=="],
+
+    "@liff/util": ["@liff/util@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/logger": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-cPBBjsZer/kmY6hYEDtKTcEmHAcZgSckraYEWpG4YJDfLJ/CN26hx2AnP7JHCKrVhMvhxxUCLTgeMrRcGUtmgA=="],
+
+    "@liff/verify-id-token": ["@liff/verify-id-token@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/server-api": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-fu+v3SrzoezEPoplDo+69xOX6+qV081vzXRAMXJQ4WXB2k9ieHhwHLUzK2WN1YSwLDq7VMlvHvEfqcjxH6EQKA=="],
+
+    "@liff/window-postmessage": ["@liff/window-postmessage@2.29.2", "", { "dependencies": { "@liff/consts": "2.29.2", "@liff/logger": "2.29.2", "@liff/util": "2.29.2" }, "peerDependencies": { "tslib": "^2.3.0" } }, "sha512-bv+jLH7u4dVkIVpuqAWhvGXfEegmlEYGv3KEN0s9vrEalK8nkL2XTbfaHPkR369ZAR9nd09YEA3V+nGxqSM+tA=="],
+
+    "@line/bot-sdk": ["@line/bot-sdk@10.8.0", "", { "dependencies": { "@types/node": "^24.0.0" }, "optionalDependencies": { "axios": "^1.7.4" } }, "sha512-1Mdpw/WPS3QP6fGiwPRTL27k8MgmMe7rVKCKsItP/kPzogX7a/X1ipQqk/F6RkorP9DNyJIx590hnVUkfBQf3w=="],
+
+    "@line/liff": ["@line/liff@2.29.2", "", { "dependencies": { "@liff/activity": "2.29.2", "@liff/analytics": "2.29.2", "@liff/close-window": "2.29.2", "@liff/consts": "2.29.2", "@liff/core": "2.29.2", "@liff/create-shortcut-on-home-screen": "2.29.2", "@liff/extensions": "2.29.2", "@liff/get-app-language": "2.29.2", "@liff/get-friendship": "2.29.2", "@liff/get-language": "2.29.2", "@liff/get-line-version": "2.29.2", "@liff/get-origins": "2.29.2", "@liff/get-os": "2.29.2", "@liff/get-profile": "2.29.2", "@liff/get-version": "2.29.2", "@liff/hooks": "2.29.2", "@liff/i18n": "2.29.2", "@liff/iap": "2.29.2", "@liff/init": "2.29.2", "@liff/is-api-available": "2.29.2", "@liff/is-in-client": "2.29.2", "@liff/is-logged-in": "2.29.2", "@liff/is-sub-window": "2.29.2", "@liff/liff-types": "2.29.2", "@liff/login": "2.29.2", "@liff/logout": "2.29.2", "@liff/native-bridge": "2.29.2", "@liff/open-window": "2.29.2", "@liff/permanent-link": "2.29.2", "@liff/permission": "2.29.2", "@liff/ready": "2.29.2", "@liff/request-friendship": "2.29.2", "@liff/scan-code-v2": "2.29.2", "@liff/send-messages": "2.29.2", "@liff/server-api": "2.29.2", "@liff/share-target-picker": "2.29.2", "@liff/store": "2.29.2", "@liff/sub-window": "2.29.2", "@liff/use": "2.29.2", "@liff/util": "2.29.2", "tslib": "^2.3.0", "whatwg-fetch": "^3.0.0" } }, "sha512-HKHN/jlQiMo0rrvXKAPzTfk4hDU1tvKbSRXrgGvZKzoCHV322ddPWbBDSQGxUI/ybUvV5iiDE3Dm1Vk3aMzoOA=="],
+
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.130.0", "", {}, "sha512-ibD2usx9JRu7f5pu2tMKMI4cpA4NgXJQoYRP4pQ7Pxmn1l6k/53qWtQWZayhYy3X4QZkt90Ot+mJEaeXouio6Q=="],
@@ -134,6 +237,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg=="],
+
+    "@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
 
     "@types/parse-json": ["@types/parse-json@4.0.2", "", {}, "sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw=="],
 
@@ -331,15 +436,21 @@
 
     "thai-provinces": ["thai-provinces@1.0.2", "", {}, "sha512-wTIOnaniWkbwcsz9F1D5/D+ia8Cka+vDjGasyQuZ4D3HlsAF2Qgp9InP6HHnkprq5AAaU4D15lIoU8jOuv+vEQ=="],
 
+    "tiny-sha256": ["tiny-sha256@1.0.2", "", {}, "sha512-IdsPtu8eJ0SwuCWUFm2euFH3jJvtpGQC0VpZNZlqxRvQ2zGvSjbXDO+4T8Rm5ETsmCQHHvKUGds69bJYrlb3Tg=="],
+
     "tinyglobby": ["tinyglobby@0.2.16", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-pn99VhoACYR8nFHhxqix+uvsbXineAasWm5ojXoN8xEwK5Kd3/TrhNn1wByuD52UxWRLy8pu+kRMniEi6Eq9Zg=="],
 
     "tslib": ["tslib@2.8.1", "", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
     "typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
+    "undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+
     "use-isomorphic-layout-effect": ["use-isomorphic-layout-effect@1.2.1", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" }, "optionalPeers": ["@types/react"] }, "sha512-tpZZ+EX0gaghDAiFR37hj5MgY6ZN55kLiPkJsKxBMZ6GZdOSPJXiOzPM984oPYZ5AnehYx5WQp1+ME8I/P/pRA=="],
 
     "vite": ["vite@8.0.13", "", { "dependencies": { "lightningcss": "^1.32.0", "picomatch": "^4.0.4", "postcss": "^8.5.14", "rolldown": "1.0.1", "tinyglobby": "^0.2.16" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.1.18", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-MFtjBYgzmSxmgA4RAfjIyXWpGe1oALnjgUTzzV7QLx/TKxCzjtMH6Fd9/eVK+5Fg1qNoz5VAwsmMs/NofrmJvw=="],
+
+    "whatwg-fetch": ["whatwg-fetch@3.6.20", "", {}, "sha512-EqhiFU6daOA8kpjOWTL0olhVOF3i7OrFzSYiGsEMB8GcXS+RrzauAERX65xMeNWVqxA6HXH2m69Z9LaKKdisfg=="],
 
     "yaml": ["yaml@1.10.3", "", {}, "sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA=="],
   }

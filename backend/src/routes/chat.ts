@@ -1,17 +1,12 @@
 import { Elysia } from "elysia";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { bills, chatMessages, lineProfiles, rooms, tenants, users } from "../db/schema";
+import { chatMessages, lineProfiles, rooms, tenants, users } from "../db/schema";
 import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
   uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
+  getOutstandingBillsForTenant,
 } from "../services/line";
-
-// แปลง "MM/YYYY" เป็นตัวเลขเทียบลำดับได้ (พอร์ตมาจาก frontend/src/utils/billCalc.ts myScore())
-function myScore(my: string): number {
-  const [m, y] = (my || "").split("/");
-  return (parseInt(y, 10) || 0) * 100 + (parseInt(m, 10) || 0);
-}
 
 // ข้อความตัวอย่างแสดงในรายชื่อสนทนา — "bill"/"receipt" เก็บ JSON ดิบไว้ใน text (ดู services/line.ts:
 // logOutboundChatMessage) ต้องแปลงเป็นข้อความสั้นๆ อ่านง่ายแทน ไม่งั้นโชว์ JSON ดิบๆ ในหน้ารายชื่อ
@@ -266,23 +261,6 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   .get("/conversations/:lineUserId/outstanding-bills", async ({ params }) => {
     const tenant = await findTenantByLineUserId(params.lineUserId);
     if (!tenant) return { tenantId: null, items: [], total: 0 };
-
-    const billRows = await db.select().from(bills);
-    const items: Array<{ billId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; amount: number }> = [];
-    for (const row of billRows) {
-      let data: any[] = [];
-      try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
-      for (const item of data) {
-        if (String(item?.tenantId ?? "") !== tenant.id) continue;
-        const total = Number(item?.total) || 0;
-        const paidAmount = Number(item?.paidAmount) || 0;
-        const amount = total - paidAmount;
-        if (amount > 0.005) {
-          items.push({ billId: row.id, monthYear: row.monthYear, roomNumber: String(item?.roomNumber ?? ""), total, paidAmount, amount });
-        }
-      }
-    }
-    items.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
-    const total = items.reduce((sum, it) => sum + it.amount, 0);
+    const { items, total } = await getOutstandingBillsForTenant(tenant.id);
     return { tenantId: tenant.id, items, total };
   });

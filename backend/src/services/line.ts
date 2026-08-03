@@ -9,6 +9,61 @@ import { db } from "../db";
 import { appConfig, bills, chatMessages, lineProfiles, tenants } from "../db/schema";
 import { broadcastChange } from "../lib/wsHub";
 
+const LINE_PROFILE_VERIFY_URL = "https://api.line.me/v2/profile";
+
+// ตรวจสอบ LIFF access token ของผู้ใช้ (จาก liff.getAccessToken() ฝั่ง frontend) กับ LINE โดยตรง — ไม่เชื่อ
+// lineUserId ที่ client ส่งมาตรงๆ (ปลอมง่าย) ต้องให้ LINE เป็นคนยืนยันตัวตนคืน userId ที่แท้จริงมาให้เท่านั้น
+// ใช้ตอนผู้เช่าเปิดหน้า LIFF Login/Payment (ดู routes/liff.ts) คืนค่า null ถ้า token ไม่ถูกต้อง/หมดอายุ
+export async function verifyLiffAccessToken(accessToken: string): Promise<{ userId: string; displayName: string; pictureUrl: string } | null> {
+  try {
+    const res = await fetch(LINE_PROFILE_VERIFY_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.userId) return null;
+    return { userId: String(data.userId), displayName: String(data.displayName ?? ""), pictureUrl: String(data.pictureUrl ?? "") };
+  } catch {
+    return null;
+  }
+}
+
+// แปลง "MM/YYYY" เป็นตัวเลขเทียบลำดับได้ (พอร์ตมาจาก frontend/src/utils/billCalc.ts myScore())
+function myScore(my: string): number {
+  const [m, y] = (my || "").split("/");
+  return (parseInt(y, 10) || 0) * 100 + (parseInt(m, 10) || 0);
+}
+
+export interface OutstandingBillItem {
+  billId: string;
+  monthYear: string;
+  roomNumber: string;
+  total: number;
+  paidAmount: number;
+  amount: number;
+}
+
+// ยอดค้างชำระทั้งหมดของผู้เช่าคนหนึ่ง (ทุกบิลที่ยังไม่จ่ายครบ ไม่จำกัดแค่เดือนก่อนหน้า) — ใช้ทั้งจากหน้า
+// แชท (routes/chat.ts) และหน้า LIFF Payment (routes/liff.ts) เลยแยกมาไว้ที่เดียวกันไม่ให้ query ต่างกัน
+export async function getOutstandingBillsForTenant(tenantId: string): Promise<{ items: OutstandingBillItem[]; total: number }> {
+  const billRows = await db.select().from(bills);
+  const items: OutstandingBillItem[] = [];
+  for (const row of billRows) {
+    let data: any[] = [];
+    try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
+    for (const item of data) {
+      if (String(item?.tenantId ?? "") !== tenantId) continue;
+      const total = Number(item?.total) || 0;
+      const paidAmount = Number(item?.paidAmount) || 0;
+      const amount = total - paidAmount;
+      if (amount > 0.005) {
+        items.push({ billId: row.id, monthYear: row.monthYear, roomNumber: String(item?.roomNumber ?? ""), total, paidAmount, amount });
+      }
+    }
+  }
+  items.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
+  const total = items.reduce((sum, it) => sum + it.amount, 0);
+  return { items, total };
+}
+
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
 // ใช้ทั้งใน webhook (หาชื่อผู้ส่ง) และหน้าแชท (หาบิลค้างชำระของ tenant ที่ผูกกับ conversation นี้)
 export async function findTenantByLineUserId(lineUserId: string) {

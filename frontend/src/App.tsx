@@ -15,6 +15,8 @@ import BreadcrumbBar from "./components/layout/BreadcrumbBar";
 import LockScreen from "./components/LockScreen";
 import ChatToastHost from "./components/ChatToastHost";
 import LoginPage from "./pages/LoginPage";
+import LiffLoginPage from "./pages/LiffLoginPage";
+import LiffPaymentPage from "./pages/LiffPaymentPage";
 import TenantsPage from "./pages/TenantsPage";
 import RoomsPage from "./pages/RoomsPage";
 import MetersPage from "./pages/MetersPage";
@@ -101,6 +103,10 @@ export default function App() {
       <BreadcrumbProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* หน้า LIFF ฝั่งผู้เช่า — สาธารณะ ไม่ผ่าน AuthenticatedShell (ไม่มี Sidebar/Header, ไม่ต้อง
+              ล็อกอินด้วยบัญชีพนักงาน) เปิดจากปุ่มบน LINE Rich Menu ผ่านเบราว์เซอร์ในตัวของ LINE เอง */}
+          <Route path="/liff/login" element={<LiffLoginPage />} />
+          <Route path="/liff/payment" element={<LiffPaymentPage />} />
           <Route path="/*" element={<AuthenticatedShell />} />
         </Routes>
       </BreadcrumbProvider>
