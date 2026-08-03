@@ -3,6 +3,7 @@ import { chatApi, type ChatMessage, type OutstandingBillItem } from "../api/clie
 import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateTimeString } from "../utils/yearFormat";
 import { toastError } from "../utils/toast";
+import ImageLightbox from "./ImageLightbox";
 
 export type ChatDetailTab = "bills" | "images" | "files" | "search";
 
@@ -108,17 +109,31 @@ function BillsTab({ lineUserId }: { lineUserId: string }) {
 }
 
 function ImagesTab({ messages }: { messages: ChatMessage[] }) {
-  const images = messages.filter((m) => m.messageType === "image" && m.imageUrl);
+  const images = messages.filter((m) => m.messageType === "image" && m.imageUrl).map((m) => m.imageUrl as string);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
   if (images.length === 0) return <div className="text-center text-muted py-4">ยังไม่มีรูปภาพที่ส่ง</div>;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-      {images.map((m) => (
-        <a key={m.id} href={m.imageUrl ?? "#"} target="_blank" rel="noopener noreferrer">
-          <img src={m.imageUrl ?? ""} alt="รูปภาพ" style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, display: "block" }} />
-        </a>
-      ))}
-    </div>
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+        {images.map((src, idx) => (
+          <img
+            key={`${src}-${idx}`} src={src} alt="รูปภาพ"
+            style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, display: "block", cursor: "pointer" }}
+            onClick={() => setLightboxIndex(idx)}
+          />
+        ))}
+      </div>
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
+      )}
+    </>
   );
 }
 

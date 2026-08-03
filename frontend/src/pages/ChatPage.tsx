@@ -7,6 +7,7 @@ import { toastError } from "../utils/toast";
 import { LINE_STICKERS, stickerThumbUrl } from "../utils/lineStickers";
 import { AVATAR_URL } from "../components/TenantTableView";
 import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
+import ImageLightbox from "../components/ImageLightbox";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -32,6 +33,7 @@ export default function ChatPage() {
   const [search, setSearch] = useState("");
   const [detailTab, setDetailTab] = useState<ChatDetailTab | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -140,6 +142,7 @@ export default function ChatPage() {
   const filteredConversations = conversations.filter((c) =>
     `${c.displayName} ${c.roomNumber ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())
   );
+  const threadImages = messages.filter((m) => m.messageType === "image" && m.imageUrl).map((m) => m.imageUrl as string);
 
   return (
     <div className={`chat-page-wrap${selected ? " chat-thread-open" : ""}`}>
@@ -257,7 +260,11 @@ export default function ChatPage() {
                       overflowWrap: "anywhere", wordBreak: "break-word",
                     }}>
                       {m.messageType === "image" && m.imageUrl ? (
-                        <img src={m.imageUrl} alt="รูปภาพ" style={{ maxWidth: "100%", borderRadius: 8, display: "block" }} />
+                        <img
+                          src={m.imageUrl} alt="รูปภาพ"
+                          style={{ maxWidth: "100%", borderRadius: 8, display: "block", cursor: "pointer" }}
+                          onClick={() => setLightboxIndex(threadImages.indexOf(m.imageUrl as string))}
+                        />
                       ) : m.messageType === "file" ? (
                         <a
                           href={m.fileUrl ?? "#"} target="_blank" rel="noopener noreferrer"
@@ -337,6 +344,15 @@ export default function ChatPage() {
           initialTab={detailTab}
           onClose={() => setDetailTab(null)}
           onJumpToMessage={jumpToMessage}
+        />
+      )}
+
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={threadImages}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
         />
       )}
     </div>
