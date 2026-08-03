@@ -168,7 +168,10 @@ export default function ChatPage() {
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               {loadingMessages && <div className="text-muted small">กำลังโหลด...</div>}
               {messages.map((m) => (
-                <div key={m.id} style={{ alignSelf: m.direction === "out" ? "flex-end" : "flex-start", maxWidth: "70%" }}>
+                <div key={m.id} style={{
+                  alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
+                  maxWidth: "70%", minWidth: 0,
+                }}>
                   {m.messageType === "sticker" && m.stickerId ? (
                     // สติกเกอร์แสดงแบบลอยเดี่ยวๆ ไม่มีกล่องพื้นหลัง เหมือนแอปแชททั่วไป
                     <img src={stickerThumbUrl(m.stickerId)} alt="สติกเกอร์" style={{ width: 110, height: 110, objectFit: "contain" }} />
@@ -177,6 +180,9 @@ export default function ChatPage() {
                       background: m.direction === "out" ? "var(--color-primary)" : "var(--color-background)",
                       color: m.direction === "out" ? "#fff" : "inherit",
                       borderRadius: "var(--border-radius-1)", padding: "8px 12px",
+                      // ข้อความไทยไม่มีเว้นวรรคระหว่างคำ และลิงก์ไฟล์แนบก็เป็นตัวอักษรยาวไม่มีช่องว่าง — ถ้าไม่บอก
+                      // เบราว์เซอร์ให้ตัดคำได้ทุกจุด (ไม่ใช่แค่ตรงช่องว่าง) ฟองข้อความจะทะลุ maxWidth ด้านบนไป
+                      overflowWrap: "anywhere", wordBreak: "break-word",
                     }}>
                       {m.messageType === "image" && m.imageUrl ? (
                         <img src={m.imageUrl} alt="รูปภาพ" style={{ maxWidth: "100%", borderRadius: 8, display: "block" }} />
@@ -187,7 +193,7 @@ export default function ChatPage() {
                           style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}
                         >
                           <i className="fas fa-file-arrow-down" />
-                          <span style={{ wordBreak: "break-all" }}>{m.fileName || "ไฟล์แนบ"}</span>
+                          <span>{m.fileName || "ไฟล์แนบ"}</span>
                         </a>
                       ) : (
                         <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
