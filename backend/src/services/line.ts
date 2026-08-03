@@ -332,33 +332,33 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
 // เรนเดอร์เป็นการ์ดหน้าตาเหมือนบิลที่ส่งจริงทาง LINE (ดู buildBillFlexMessage ด้านบน) แถวรายการ/ยอด/เงื่อนไข
 // ต้องตรงกับที่นั่นเป๊ะๆ ต่างกันแค่ใช้ไอคอน FontAwesome (เว็บเรามีอยู่แล้ว) แทนรูปไอคอนของ Flex Message
 function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppearanceSettings) {
-  const rows: { icon: string; iconBg: string; name: string; sub?: string; price: number }[] = [];
-  rows.push({ icon: "fa-door-open", iconBg: "var(--color-primary)", name: "ค่าห้อง/ค่าเช่า", price: Number(item.priceRoom) || 0 });
+  const rows: { icon: string; name: string; sub?: string; price: number }[] = [];
+  rows.push({ icon: ICONS.BED, name: "ค่าห้อง/ค่าเช่า", price: Number(item.priceRoom) || 0 });
   if (item.electricActive) {
     rows.push({
-      icon: "fa-bolt", iconBg: "#fd7e14", name: `ค่าไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`,
+      icon: ICONS.ELEC, name: `ค่าไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`,
       sub: `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · หน่วยละ ${fmtMoney(item.electricRate)} บาท`,
       price: Number(item.priceElectric) || 0,
     });
   }
   if (item.waterActive) {
     rows.push({
-      icon: "fa-tint", iconBg: "#0dcaf0", name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
+      icon: ICONS.WATER, name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
       sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · หน่วยละ ${fmtMoney(item.waterRate)} บาท`,
       price: Number(item.priceWater) || 0,
     });
   }
   (item.billTagItems ?? []).forEach((t: any) => {
-    if (Number(t.price) > 0) rows.push({ icon: "fa-tag", iconBg: t.color || "#6c757d", name: t.name, price: Number(t.price) });
+    if (Number(t.price) > 0) rows.push({ icon: ICONS.TAG, name: t.name, price: Number(t.price) });
   });
   (item.billTenantTagItems ?? []).forEach((t: any) => {
-    if (Number(t.price) > 0) rows.push({ icon: "fa-tag", iconBg: t.color || "var(--color-primary)", name: t.name, price: Number(t.price) });
+    if (Number(t.price) > 0) rows.push({ icon: ICONS.USER, name: t.name, price: Number(t.price) });
   });
   (item.customItems ?? []).forEach((c: any) => {
-    if (Number(c.price) > 0) rows.push({ icon: "fa-plus", iconBg: "var(--color-success)", name: c.name, price: Number(c.price) });
+    if (Number(c.price) > 0) rows.push({ icon: ICONS.PLUS, name: c.name, price: Number(c.price) });
   });
   (item.billVehicleItems ?? []).forEach((v: any) => {
-    if (Number(v.price) > 0) rows.push({ icon: "fa-car", iconBg: "#6610f2", name: v.plate || v.name, price: Number(v.price) });
+    if (Number(v.price) > 0) rows.push({ icon: ICONS.CAR, name: v.plate || v.name, price: Number(v.price) });
   });
 
   const outstandingItems = Array.isArray(item.outstandingItems)
@@ -370,6 +370,9 @@ function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppea
 
   return {
     kind: "bill",
+    logoUrl: isUsableImageUrl(settings.logoUrl) ? settings.logoUrl : ICONS.HOME,
+    fineIcon: ICONS.FINE,
+    discountIcon: ICONS.DISCOUNT,
     roomNumber: String(item.roomNumber ?? ""),
     tenantTitle: item.tenantTitle || "คุณ",
     tenantName: item.tenantName || "-",
@@ -697,6 +700,12 @@ function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppe
   const fullySettled = remaining <= 0.005;
   return {
     kind: "receipt",
+    receiptIcon: ICONS.RECEIPT,
+    methodIcon: input.method === "scan" ? ICONS.SCAN : ICONS.CASH,
+    calendarIcon: ICONS.CALENDAR,
+    cashIcon: ICONS.CASH,
+    noteIcon: ICONS.NOTE,
+    watermarkIcon: ICONS.STAMP_FAINT_RED,
     roomNumber: String(input.roomNumber ?? ""),
     monthLabel: monthYearLabel(input.monthYear, settings.yearFormat),
     method: input.method,

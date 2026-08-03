@@ -1,12 +1,13 @@
 import { useState } from "react";
 import ImageLightbox from "./ImageLightbox";
 
-interface BillRow { icon: string; iconBg: string; name: string; sub?: string; price: number }
+interface BillRow { icon: string; name: string; sub?: string; price: number }
 interface OutstandingRow { label: string; amount: number }
 interface DiscountRow { name: string; price: number }
 
 interface BillSnapshot {
   kind: "bill";
+  logoUrl: string; fineIcon: string; discountIcon: string;
   roomNumber: string; tenantTitle: string; tenantName: string; monthLabel: string;
   rows: BillRow[]; fineAmount: number; overdueDays: number;
   outstandingItems: OutstandingRow[]; outstandingAmount: number;
@@ -16,6 +17,7 @@ interface BillSnapshot {
 
 interface ReceiptSnapshot {
   kind: "receipt";
+  receiptIcon: string; methodIcon: string; calendarIcon: string; cashIcon: string; noteIcon: string; watermarkIcon: string;
   roomNumber: string; monthLabel: string; method: "cash" | "scan";
   amount: number; change: number; note: string; paymentDateLabel: string;
   remaining: number; fullySettled: boolean; slipUrl: string;
@@ -25,15 +27,23 @@ function money(n: number) {
   return new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(n || 0);
 }
 
+// สีตรงกับที่ backend/src/services/line.ts ใช้ตอนสร้าง Flex Message จริง (COLOR_TEXT/COLOR_MUTED/COLOR_RED/
+// BG_BODY/BG_FINE) เพื่อให้การ์ดในหน้าแชทหน้าตาตรงกับที่ผู้เช่าเห็นจริงบน LINE เป๊ะๆ
+const COLOR_TEXT = "#333333";
+const COLOR_MUTED = "#888888";
+const COLOR_RED = "#FF0060";
+const BG_BODY = "#FAFAFA";
+const BG_FINE = "#FFE1EC";
+
 const cardStyle: React.CSSProperties = {
   fontFamily: "'Sarabun', sans-serif", background: "#fff", borderRadius: 14, overflow: "hidden",
-  border: "1px solid #e0e0e0", width: 280, maxWidth: "100%", boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  border: "1px solid #e0e0e0", width: 300, maxWidth: "100%", boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
 };
 
-// การ์ดแจ้งบิลค่าเช่า/ใบเสร็จรับเงินในหน้าแชท — ใช้ตอน messageType เป็น "bill"/"receipt" (ข้อความ
-// อัตโนมัติตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) หน้าตาพอร์ตมาจาก BillLinePreview ในหน้าบิล/แจ้งหนี้ ให้
-// เหมือนกับใบที่ผู้เช่าได้รับจริงทาง LINE มากที่สุด (ดู backend/src/services/line.ts: buildChatBillSnapshot/
-// buildChatReceiptSnapshot ที่สร้าง JSON นี้ตอนส่งสำเร็จ)
+// การ์ดแจ้งบิลค่าเช่า/ใบเสร็จรับเงินในหน้าแชท — ใช้ตอน messageType เป็น "bill"/"receipt" (ข้อความอัตโนมัติ
+// ตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) ต้องหน้าตาตรงกับ Flex Message ที่ผู้เช่าได้รับจริงบน LINE ให้มากที่สุด
+// จึงใช้ไอคอน/ลำดับ/สีเดียวกับที่ buildBillFlexMessage/buildPaymentReceiptFlexMessage ใน
+// backend/src/services/line.ts ส่งจริง (ไอคอน icons8 ตัวเดียวกัน ไม่ใช่ FontAwesome ที่หน้าตาต่างออกไป)
 export function ChatBillMessage({ messageType, raw }: { messageType: string; raw: string }) {
   try {
     const data = JSON.parse(raw);
@@ -49,64 +59,72 @@ export function ChatBillMessage({ messageType, raw }: { messageType: string; raw
   );
 }
 
-function ChatBillCard({ data }: { data: BillSnapshot }) {
+function Row({ icon, name, sub, price, highlight }: { icon: string; name: string; sub?: string; price: string; highlight?: boolean }) {
   return (
-    <div style={cardStyle}>
-      <div style={{ background: "var(--color-primary)", padding: 14 }}>
-        <div style={{ color: "#fff", fontSize: 12, opacity: 0.9, fontWeight: 600 }}>
-          <i className="fas fa-file-invoice me-1" />แจ้งค่าเช่า
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10,
+      ...(highlight ? { background: BG_FINE, borderRadius: 8, padding: "8px 10px" } : {}),
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", minWidth: 0 }}>
+        <img src={icon} alt="" style={{ width: highlight ? 15 : 13, height: highlight ? 15 : 13, objectFit: "contain", marginRight: 8, marginTop: 2, flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: highlight ? COLOR_RED : COLOR_TEXT, fontSize: 13, fontWeight: highlight ? 700 : 400 }}>{name}</div>
+          {sub && <div style={{ color: COLOR_MUTED, fontSize: 11, marginTop: 2 }}>{sub}</div>}
         </div>
-        <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, marginTop: 2 }}>{data.tenantTitle} {data.tenantName}</div>
-        <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 2 }}>ห้อง {data.roomNumber} (ประจำเดือน {data.monthLabel})</div>
       </div>
-      <div style={{ padding: "12px 14px", background: "#FAFAFA" }}>
-        {data.rows.map((r, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", minWidth: 0 }}>
-              <div style={{ width: 18, height: 18, borderRadius: 5, background: r.iconBg, display: "flex", alignItems: "center", justifyContent: "center", marginRight: 8, flexShrink: 0, marginTop: 1 }}>
-                <i className={`fas ${r.icon}`} style={{ color: "#fff", fontSize: 9 }} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#333", fontSize: 12.5 }}>{r.name}</div>
-                {r.sub && <div style={{ color: "#AAAAAA", fontSize: 10.5, marginTop: 1 }}>{r.sub}</div>}
-              </div>
-            </div>
-            <span style={{ color: "#333", fontSize: 12.5, flexShrink: 0, marginLeft: 6 }}>{money(r.price)}</span>
-          </div>
-        ))}
-
-        {data.fineAmount > 0 && <HighlightRow label={`ค่าปรับล่าช้า (${data.overdueDays} วัน)`} amount={data.fineAmount} />}
-        {data.outstandingItems.length > 0
-          ? data.outstandingItems.map((o, i) => <HighlightRow key={i} label={`ค้างชำระ ${o.label}`} amount={o.amount} />)
-          : data.outstandingAmount > 0 && <HighlightRow label="ยอดค้างชำระยกมา" amount={data.outstandingAmount} />}
-        {data.discountItems.map((d, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ color: "var(--color-danger)", fontSize: 12.5 }}>ส่วนลด: {d.name}</span>
-            <span style={{ color: "var(--color-danger)", fontSize: 12.5 }}>-{money(d.price)}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: "10px 14px", background: "#fff", borderTop: "1px solid #EEEEEE" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <span style={{ color: "#333", fontSize: 13, fontWeight: 700 }}>ยอดชำระสุทธิ</span>
-          <span style={{ color: "var(--color-primary)", fontSize: 18, fontWeight: 700 }}>{money(data.total)} ฿</span>
-        </div>
-        {data.showSplit && (
-          <div style={{ textAlign: "right", color: "var(--color-primary)", fontSize: 12, fontWeight: 700, marginTop: 4 }}>
-            หาร {data.residentCount} คน · คนละ {money(data.total / data.residentCount)} บาท
-          </div>
-        )}
-        <div style={{ textAlign: "center", color: "#888", fontSize: 10.5, marginTop: 8 }}>{data.dueDateLabel}</div>
-      </div>
+      <span style={{ color: highlight ? COLOR_RED : COLOR_TEXT, fontSize: 13, fontWeight: highlight ? 700 : 400, flexShrink: 0, marginLeft: 6 }}>{price}</span>
     </div>
   );
 }
 
-function HighlightRow({ label, amount }: { label: string; amount: number }) {
+function ChatBillCard({ data }: { data: BillSnapshot }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, background: "rgba(255,0,96,0.08)", padding: "6px 8px", borderRadius: 6 }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-danger)" }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-danger)" }}>{money(amount)}</span>
+    <div style={cardStyle}>
+      <div style={{ background: "var(--color-primary)", padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <img src={data.logoUrl} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 16, marginLeft: 8 }}>แจ้งค่าเช่าห้อง</span>
+        </div>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, marginTop: 8 }}>{data.tenantTitle} {data.tenantName}</div>
+        <div style={{ color: "#ffffffcc", fontSize: 12, marginTop: 5 }}>ห้อง {data.roomNumber} (ประจำเดือน {data.monthLabel})</div>
+      </div>
+      <div style={{ padding: 16, background: BG_BODY }}>
+        {data.rows.map((r, i) => (
+          <Row key={i} icon={r.icon} name={r.name} sub={r.sub} price={`${money(r.price)} ฿`} />
+        ))}
+
+        {data.fineAmount > 0 && (
+          <Row icon={data.fineIcon} name={`ค่าปรับล่าช้า (${data.overdueDays} วัน)`} price={`${money(data.fineAmount)} ฿`} highlight />
+        )}
+        {data.outstandingItems.length > 0
+          ? data.outstandingItems.map((o, i) => (
+              <Row key={i} icon={data.fineIcon} name={`ค้างชำระ ${o.label}`} price={`${money(o.amount)} ฿`} highlight />
+            ))
+          : data.outstandingAmount > 0 && (
+              <Row icon={data.fineIcon} name="ยอดค้างชำระยกมา" price={`${money(data.outstandingAmount)} ฿`} highlight />
+            )}
+        {data.discountItems.map((d, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start" }}>
+              <img src={data.discountIcon} alt="" style={{ width: 13, height: 13, objectFit: "contain", marginRight: 8, marginTop: 2 }} />
+              <span style={{ color: COLOR_RED, fontSize: 13 }}>ส่วนลด: {d.name}</span>
+            </div>
+            <span style={{ color: COLOR_RED, fontSize: 13 }}>-{money(d.price)} ฿</span>
+          </div>
+        ))}
+
+        <div style={{ borderTop: "1px solid #E0E0E0", margin: "12px 0" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <span style={{ color: COLOR_TEXT, fontSize: 14, fontWeight: 700 }}>ยอดชำระสุทธิ</span>
+          <span style={{ color: "var(--color-primary)", fontSize: 20, fontWeight: 700 }}>{money(data.total)} ฿</span>
+        </div>
+        {data.showSplit && (
+          <div style={{ textAlign: "right", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, marginTop: 4 }}>
+            หาร {data.residentCount} คน · คนละ {money(data.total / data.residentCount)} บาท
+          </div>
+        )}
+        <div style={{ textAlign: "center", color: COLOR_MUTED, fontSize: 11, marginTop: 12 }}>{data.dueDateLabel}</div>
+      </div>
     </div>
   );
 }
@@ -116,44 +134,49 @@ function ChatReceiptCard({ data }: { data: ReceiptSnapshot }) {
 
   return (
     <div style={cardStyle}>
-      <div style={{ background: "var(--color-primary)", padding: 14 }}>
-        <div style={{ color: "#fff", fontSize: 12, opacity: 0.9, fontWeight: 600 }}>
-          <i className="fas fa-receipt me-1" />ใบเสร็จรับเงิน
+      <div style={{ background: "var(--color-primary)", padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <img src={data.receiptIcon} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 16, marginLeft: 8 }}>ใบเสร็จรับเงิน</span>
         </div>
-        <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, marginTop: 2 }}>ห้อง {data.roomNumber}</div>
-        <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 2 }}>รับชำระ {money(data.amount)} ฿</div>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, marginTop: 8 }}>ห้อง {data.roomNumber}</div>
+        <div style={{ color: "#ffffffcc", fontSize: 12, marginTop: 5 }}>รับชำระ {money(data.amount)} ฿</div>
       </div>
-      <div style={{ padding: "12px 14px", background: "#FAFAFA" }}>
-        <InfoRow icon="fa-calendar" label="วันที่ชำระ" value={data.paymentDateLabel} />
-        <InfoRow icon="fa-receipt" label="สำหรับเดือน" value={data.monthLabel} />
-        <InfoRow icon={data.method === "scan" ? "fa-qrcode" : "fa-money-bill"} label="ช่องทาง" value={data.method === "scan" ? "สแกน/โอน" : "เงินสด"} />
-        {data.change > 0 && <InfoRow icon="fa-coins" label="เงินทอน" value={`${money(data.change)} ฿`} />}
-        {data.note && <InfoRow icon="fa-note-sticky" label="หมายเหตุ" value={data.note} />}
-        {data.slipUrl && (
-          <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => setShowSlip(true)}>
-            <i className="fas fa-image me-1" />ดูสลิปการโอน
-          </button>
+      <div style={{ padding: 16, background: BG_BODY, position: "relative", overflow: "hidden" }}>
+        {data.fullySettled && (
+          <div style={{
+            position: "absolute", top: "10%", left: "25%", width: "50%", textAlign: "center",
+            opacity: 0.7, pointerEvents: "none",
+          }}>
+            <img src={data.watermarkIcon} alt="" style={{ width: "100%", height: "auto" }} />
+            <div style={{ marginTop: -20, color: "#FF8FAB", fontWeight: 700, fontSize: 11 }}>ชำระเรียบร้อย</div>
+          </div>
         )}
-      </div>
-      <div style={{ padding: "10px 14px", background: "#fff", borderTop: "1px solid #EEEEEE", textAlign: "center" }}>
-        {data.fullySettled ? (
-          <span style={{ color: "var(--color-success)", fontWeight: 700, fontSize: 13 }}>ชำระเงินครบถ้วนแล้ว</span>
-        ) : (
-          <span style={{ color: "var(--color-danger)", fontWeight: 700, fontSize: 13 }}>คงเหลือที่ต้องชำระ {money(data.remaining)} ฿</span>
-        )}
+        <div style={{ position: "relative" }}>
+          <Row icon={data.methodIcon} name={data.method === "scan" ? "ช่องทาง: สแกน/โอน" : "ช่องทาง: เงินสด"} price="" />
+          <Row icon={data.calendarIcon} name="วันที่ชำระ" price={data.paymentDateLabel} />
+          <Row icon={data.receiptIcon} name="สำหรับเดือน" price={data.monthLabel} />
+          {data.change > 0 && <Row icon={data.cashIcon} name="เงินทอน" price={`${money(data.change)} ฿`} />}
+          {data.note && <Row icon={data.noteIcon} name="หมายเหตุ" price={data.note} />}
+
+          <div style={{ borderTop: "1px solid #E0E0E0", margin: "12px 0" }} />
+          {data.fullySettled ? (
+            <div style={{ textAlign: "center", color: "var(--color-success)", fontWeight: 700, fontSize: 14 }}>
+              ชำระเงินครบถ้วนแล้ว ขอบคุณค่ะ/ครับ
+            </div>
+          ) : (
+            <Row icon={data.receiptIcon} name="คงเหลือที่ต้องชำระ" price={`${money(data.remaining)} ฿`} highlight />
+          )}
+          {data.slipUrl && (
+            <button type="button" className="btn btn-sm btn-outline-secondary mt-2" onClick={() => setShowSlip(true)}>
+              <i className="fas fa-image me-1" />ดูสลิปการโอน
+            </button>
+          )}
+        </div>
       </div>
       {showSlip && (
         <ImageLightbox images={[data.slipUrl]} index={0} onClose={() => setShowSlip(false)} onIndexChange={() => {}} />
       )}
-    </div>
-  );
-}
-
-function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
-      <span style={{ color: "#888", fontSize: 12, flexShrink: 0 }}><i className={`fas ${icon} me-1`} />{label}</span>
-      <span style={{ color: "#333", fontSize: 12, fontWeight: 600, textAlign: "right" }}>{value}</span>
     </div>
   );
 }
