@@ -896,11 +896,11 @@ export default function SettingsPage() {
                 <Searchable query={q} keywords="easyslip ตรวจสลิป promptpay สแกนจ่าย qr อัตโนมัติ ยืนยันการชำระเงิน">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                     <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
-                      <i className="fas fa-robot me-2" />EasySlip — สร้าง QR ระบุยอด + ตรวจสลิปอัตโนมัติ
+                      <i className="fas fa-robot me-2" />EasySlip — เลือกจำนวนเงิน + ตรวจสลิปอัตโนมัติ
                     </h6>
                     <p className="text-muted small mb-3">
-                      ให้ผู้เช่าเลือกเดือน/จำนวนเงินที่จะจ่ายเอง (จ่ายเป็นงวดได้) แล้วสร้าง QR PromptPay ระบุยอดนั้นให้สแกน — เมื่อส่งสลิปกลับเข้าแชท LINE
-                      ระบบจะตรวจสอบยอดกับ EasySlip อัตโนมัติ ถ้ายอดตรงและไม่ใช่สลิปซ้ำ จะบันทึกยอดชำระ+ส่งใบเสร็จให้ทันที ไม่ต้องรอพนักงาน
+                      ให้ผู้เช่าเลือกเดือน/จำนวนเงินที่จะจ่ายเอง (จ่ายเป็นงวดได้) — เมื่อส่งสลิปกลับเข้าแชท LINE ระบบจะตรวจสอบยอดกับ EasySlip อัตโนมัติ
+                      ถ้ายอดตรงและไม่ใช่สลิปซ้ำ จะบันทึกยอดชำระ+ส่งใบเสร็จให้ทันที ไม่ต้องรอพนักงาน
                     </p>
 
                     <label className="form-label small">EasySlip API Key</label>
@@ -913,20 +913,21 @@ export default function SettingsPage() {
                         <i className={`fas fa-eye${easySlipApiKeyVisible ? "-slash" : ""}`} />
                       </button>
                     </div>
+                    <div className="form-text small mb-2">อย่างเดียวก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (แสดงเลขบัญชีด้านบนให้คัดลอกแทน QR)</div>
 
-                    <label className="form-label small">PromptPay ID</label>
+                    <label className="form-label small">PromptPay ID <span className="text-muted fw-normal">(ไม่บังคับ — ใส่เพิ่มถ้าอยากให้สร้าง QR สแกนจ่ายได้จริง)</span></label>
                     <div className="input-group mb-2">
-                      <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้"
+                      <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้ (เว้นว่างได้ถ้าผูกแค่บัญชีธนาคารธรรมดา)"
                         value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} />
                     </div>
 
                     <div className="alert alert-light border small mb-0" style={{ background: "var(--color-background)" }}>
                       <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
                       <ol className="mb-0 ps-3 mt-1">
-                        <li>สมัครใช้งาน EasySlip ที่ easyslip.com แล้วคัดลอก API Key มาวางในช่องด้านบน</li>
-                        <li>กรอกเบอร์มือถือหรือเลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริง (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
-                        <li>กด "บันทึกการตั้งค่าทั้งหมด" ด้านบนสุดของหน้านี้ — หน้า LIFF Payment จะเปลี่ยนไปให้เลือกจำนวนเงิน+สร้าง QR เองอัตโนมัติ</li>
-                        <li>ระบบตรวจสลิปให้เฉพาะสลิปที่ส่งเข้าแชทหลังกดสร้าง QR ภายใน 2 ชั่วโมง และยอดต้องตรงกับที่เลือกไว้เป๊ะเท่านั้น — นอกเหนือจากนี้พนักงานยังบันทึกยอดเองได้ตามปกติ</li>
+                        <li>สมัครใช้งาน EasySlip ที่ easyslip.com แล้วคัดลอก API Key มาวางในช่องด้านบน — แค่นี้ก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (ผูกบัญชีธนาคารธรรมดากับ EasySlip ก็ใช้ได้ ไม่จำเป็นต้องมี PromptPay)</li>
+                        <li>ถ้าอยากให้ผู้เช่าสแกน QR จ่ายได้เลยแทนการโอนด้วยเลขบัญชี ให้กรอกเบอร์มือถือ/เลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริงในช่อง PromptPay ID ด้วย (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
+                        <li>กด "บันทึกการตั้งค่าทั้งหมด" ด้านบนสุดของหน้านี้ — หน้า LIFF Payment จะเปลี่ยนไปให้เลือกจำนวนเงินเองอัตโนมัติ</li>
+                        <li>ระบบตรวจสลิปให้เฉพาะสลิปที่ส่งเข้าแชทหลังเลือกจำนวนเงินภายใน 2 ชั่วโมง และยอดต้องตรงกับที่เลือกไว้เป๊ะเท่านั้น — นอกเหนือจากนี้พนักงานยังบันทึกยอดเองได้ตามปกติ</li>
                       </ol>
                     </div>
                   </div>

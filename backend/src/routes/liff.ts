@@ -136,9 +136,12 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         accountName: row?.paymentAccountName || "",
         accountNumber: row?.paymentAccountNumber || "",
         qrImage: row?.paymentQrImage || "",
-        // มี API key + PromptPay ID ครบ ถึงจะให้เลือกจำนวนเงินเอง+สร้าง QR แบบระบุยอดได้ (endpoint
-        // /payment/qr ด้านล่าง) ไม่งั้น fallback ไปโชว์แค่ QR/เลขบัญชีคงที่ตามที่ตั้งไว้ด้านบนแทน
-        dynamicQrAvailable: !!(row?.easySlipApiKey && row?.paymentPromptPayId),
+        // มี API key ก็เลือกจำนวนเงินเอง+ตรวจสลิปอัตโนมัติได้แล้ว (endpoint /payment/qr ด้านล่าง) — ไม่
+        // จำเป็นต้องมี PromptPay ID ด้วย (บางที่ผูกบัญชีธนาคารธรรมดากับ EasySlip ไว้ ไม่มี PromptPay ID
+        // ให้ใช้สร้าง QR จริง) ถ้าไม่มี PromptPay ID จะโชว์เลขบัญชีให้คัดลอกแทน QR แต่ยังตรวจสลิปอัตโนมัติได้
+        // เหมือนเดิม ไม่มี API key เลยถึงจะ fallback ไปโชว์แค่ QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้
+        autoTrackingAvailable: !!row?.easySlipApiKey,
+        qrGenerationAvailable: !!(row?.easySlipApiKey && row?.paymentPromptPayId),
       },
     };
   })
@@ -161,8 +164,10 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const settings = await getLineSettings();
     return { snapshot: buildChatBillSnapshot(found.item, found.monthYear, settings) };
   })
-  // เลือกจำนวนเงินที่จะจ่ายรอบนี้ (ไม่ต้องเต็มยอดบิล จ่ายเป็นงวดได้) แล้วสร้าง QR PromptPay ระบุยอดนั้นผ่าน
-  // EasySlip พร้อมบันทึก "รายการรอชำระ" ไว้จับคู่กับสลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts)
+  // เลือกจำนวนเงินที่จะจ่ายรอบนี้ (ไม่ต้องเต็มยอดบิล จ่ายเป็นงวดได้) แล้วบันทึก "รายการรอชำระ" ไว้จับคู่กับ
+  // สลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts) — สร้าง QR PromptPay ระบุยอดจริงให้ด้วยถ้ามี
+  // PromptPay ID ตั้งไว้ ไม่งั้นคืนแค่เลขบัญชีให้โชว์เป็นข้อความคัดลอกแทน (ตรวจสลิปอัตโนมัติได้เหมือนกันทั้ง
+  // สองแบบ เพราะขึ้นกับ "รายการรอชำระ" ที่บันทึกไว้ ไม่ได้ขึ้นกับว่าสร้าง QR ได้จริงหรือเปล่า)
   .post("/payment/qr", async ({ body, set }) => {
     const { accessToken, billId, roomId, amount } = body as { accessToken?: string; billId?: string; roomId?: string; amount?: number };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
@@ -188,17 +193,20 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const row = await getConfigRow();
     const apiKey = row?.easySlipApiKey || "";
     const promptPayId = row?.paymentPromptPayId || "";
-    if (!apiKey || !promptPayId) {
+    if (!apiKey) {
       set.status = 400;
-      return { error: "ระบบยังไม่ได้ตั้งค่า EasySlip API Key หรือ PromptPay ID กรุณาติดต่อผู้ดูแลระบบ" };
+      return { error: "ระบบยังไม่ได้ตั้งค่า EasySlip API Key กรุณาติดต่อผู้ดูแลระบบ" };
     }
 
-    let qr;
-    try {
-      qr = await generatePromptPayQr(apiKey, promptPayId, payAmount);
-    } catch (e: any) {
-      set.status = 502;
-      return { error: e?.message ?? "สร้าง QR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
+    let qrImage: string | null = null;
+    if (promptPayId) {
+      try {
+        const qr = await generatePromptPayQr(apiKey, promptPayId, payAmount);
+        qrImage = `data:${qr.mime};base64,${qr.image}`;
+      } catch (e: any) {
+        set.status = 502;
+        return { error: e?.message ?? "สร้าง QR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
+      }
     }
 
     const intentId = `PINT-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -215,7 +223,16 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       createdAt: new Date().toISOString(),
     });
 
-    return { intentId, qrImage: `data:${qr.mime};base64,${qr.image}`, amount: payAmount };
+    return {
+      intentId,
+      qrImage,
+      amount: payAmount,
+      accountInfo: qrImage ? null : {
+        bankName: row?.paymentBankName || "",
+        accountName: row?.paymentAccountName || "",
+        accountNumber: row?.paymentAccountNumber || "",
+      },
+    };
   })
   // หน้า LIFF โพลสถานะเป็นระยะหลังสร้าง QR — ให้รู้ทันทีที่ตรวจสลิปสำเร็จอัตโนมัติ (ดู
   // tryAutoConfirmSlipPayment ใน services/payments.ts ที่อัปเดตสถานะนี้จาก routes/lineWebhook.ts)

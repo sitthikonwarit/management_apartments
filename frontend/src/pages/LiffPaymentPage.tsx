@@ -3,7 +3,9 @@
 // (จ่ายเป็นงวดได้ ไม่ต้องเต็มยอด) แล้วสร้าง QR PromptPay ระบุยอดนั้นผ่าน EasySlip — เมื่อส่งสลิปกลับเข้าแชท
 // LINE ระบบจะตรวจสอบยอดอัตโนมัติและบันทึกยอดชำระ+ส่งใบเสร็จให้ทันทีถ้ายอดตรง (ดู backend/src/services/
 // payments.ts) หน้านี้โพลสถานะเป็นระยะเพื่อโชว์ผลให้เห็นสดๆ โดยไม่ต้องรอใบเสร็จมาในแชทเงียบๆ
-// ถ้ายังไม่ได้ตั้งค่า EasySlip ไว้ (dynamicQrAvailable = false) จะ fallback ไปแสดง QR/เลขบัญชีคงที่แทน
+// ถ้ายังไม่ได้ตั้งค่า EasySlip API Key ไว้เลย จะ fallback ไปแสดง QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้แทน — ถ้ามี
+// API Key แต่ไม่มี PromptPay ID (เช่นผูกบัญชีธนาคารธรรมดาไว้ ไม่มี PromptPay ให้สร้าง QR จริง) ยังเลือกจำนวน
+// เงิน+ตรวจสลิปอัตโนมัติได้เหมือนกัน แค่โชว์เลขบัญชีให้คัดลอกแทนรูป QR เท่านั้น
 import { useEffect, useRef, useState } from "react";
 import liff from "@line/liff";
 import { liffApi } from "../api/client";
@@ -32,7 +34,10 @@ export default function LiffPaymentPage() {
   const [roomNumber, setRoomNumber] = useState("");
   const [items, setItems] = useState<OutstandingItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [paymentInfo, setPaymentInfo] = useState({ bankName: "", accountName: "", accountNumber: "", qrImage: "", dynamicQrAvailable: false });
+  const [paymentInfo, setPaymentInfo] = useState({
+    bankName: "", accountName: "", accountNumber: "", qrImage: "",
+    autoTrackingAvailable: false, qrGenerationAvailable: false,
+  });
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
   const [accessToken, setAccessToken] = useState("");
   const [copied, setCopied] = useState(false);
@@ -48,6 +53,9 @@ export default function LiffPaymentPage() {
   const [generatingQr, setGeneratingQr] = useState(false);
   const [qrError, setQrError] = useState("");
   const [qrImage, setQrImage] = useState("");
+  const [intentAccountInfo, setIntentAccountInfo] = useState<{ bankName: string; accountName: string; accountNumber: string } | null>(null);
+  const [intentStarted, setIntentStarted] = useState(false);
+  const [intentCopied, setIntentCopied] = useState(false);
   const [payStatus, setPayStatus] = useState<"" | "pending" | "confirmed">("");
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -122,7 +130,7 @@ export default function LiffPaymentPage() {
   function openPay(item: OutstandingItem) {
     setPayItem(item);
     setPayAmount(String(item.amount));
-    setQrImage(""); setQrError(""); setPayStatus("");
+    setQrImage(""); setIntentAccountInfo(null); setIntentStarted(false); setQrError(""); setPayStatus("");
     stopPolling();
   }
 
@@ -141,7 +149,9 @@ export default function LiffPaymentPage() {
     setGeneratingQr(true); setQrError("");
     try {
       const result = await liffApi.generateQr(accessToken, payItem.billId, payItem.roomId, amountNum);
-      setQrImage(result.qrImage);
+      setQrImage(result.qrImage || "");
+      setIntentAccountInfo(result.accountInfo);
+      setIntentStarted(true);
       setPayStatus("pending");
       let attempts = 0;
       pollTimer.current = setInterval(async () => {
@@ -169,6 +179,13 @@ export default function LiffPaymentPage() {
     navigator.clipboard.writeText(paymentInfo.accountNumber);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function copyIntentAccountNumber() {
+    if (!intentAccountInfo) return;
+    navigator.clipboard.writeText(intentAccountInfo.accountNumber);
+    setIntentCopied(true);
+    setTimeout(() => setIntentCopied(false), 2000);
   }
 
   if (status === "loading" || status === "error" || status === "unlinked") {
@@ -214,7 +231,7 @@ export default function LiffPaymentPage() {
           <div className="alert alert-success text-center py-3 mb-0">
             <i className="fas fa-check-circle me-2" />ไม่มียอดค้างชำระในขณะนี้
           </div>
-        ) : paymentInfo.dynamicQrAvailable ? (
+        ) : paymentInfo.autoTrackingAvailable ? (
           <>
             <div className="d-flex justify-content-between align-items-center small text-muted mb-2">
               <span>ยอดค้างชำระทั้งหมด</span>
@@ -312,14 +329,27 @@ export default function LiffPaymentPage() {
                 <div className="alert alert-success py-2 px-3 small mb-3">ตรวจสลิปสำเร็จ บันทึกยอดชำระเรียบร้อยแล้ว ใบเสร็จส่งเข้าแชทให้แล้ว</div>
                 <button className="btn btn-primary w-100" onClick={closePay}>ปิด</button>
               </div>
-            ) : qrImage ? (
+            ) : intentStarted ? (
               <div className="text-center">
-                <img src={qrImage} alt="QR ชำระเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
+                {qrImage ? (
+                  <img src={qrImage} alt="QR ชำระเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
+                ) : intentAccountInfo && (
+                  <div className="text-start small">
+                    {intentAccountInfo.bankName && <div className="text-muted">ธนาคาร: {intentAccountInfo.bankName}</div>}
+                    {intentAccountInfo.accountName && <div className="text-muted">ชื่อบัญชี: {intentAccountInfo.accountName}</div>}
+                    <div className="input-group mt-1">
+                      <input type="text" className="form-control font-monospace" readOnly value={intentAccountInfo.accountNumber} />
+                      <button className="btn btn-outline-secondary" type="button" onClick={copyIntentAccountNumber} title="คัดลอกเลขบัญชี">
+                        <i className={`fas ${intentCopied ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="fw-bold fs-5 mt-2" style={{ color: "var(--color-primary)" }}>{fmtMoney(Number(payAmount))} ฿</div>
                 <div className="alert alert-light border small mt-3 mb-2">
                   {payStatus === "pending"
-                    ? <><span className="spinner-border spinner-border-sm me-2" />กำลังรอตรวจสลิป — สแกนแล้วโอนเงิน จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย ระบบจะตรวจและอัปเดตให้อัตโนมัติ</>
-                    : "สแกนแล้วโอนเงิน จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย"}
+                    ? <><span className="spinner-border spinner-border-sm me-2" />กำลังรอตรวจสลิป — {qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย ระบบจะตรวจและอัปเดตให้อัตโนมัติ</>
+                    : `${qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย`}
                 </div>
                 <button className="btn btn-outline-secondary w-100" onClick={closePay}>ปิด</button>
               </div>
@@ -336,8 +366,10 @@ export default function LiffPaymentPage() {
                   <button className="btn btn-outline-secondary" onClick={closePay} disabled={generatingQr}>ยกเลิก</button>
                   <button className="btn btn-primary" onClick={handleGenerateQr} disabled={generatingQr}>
                     {generatingQr
-                      ? <><span className="spinner-border spinner-border-sm me-2" />กำลังสร้าง QR...</>
-                      : <><i className="fas fa-qrcode me-1" />สร้าง QR</>}
+                      ? <><span className="spinner-border spinner-border-sm me-2" />กำลังดำเนินการ...</>
+                      : paymentInfo.qrGenerationAvailable
+                        ? <><i className="fas fa-qrcode me-1" />สร้าง QR</>
+                        : <><i className="fas fa-check me-1" />ยืนยันจำนวนเงิน</>}
                   </button>
                 </div>
               </>

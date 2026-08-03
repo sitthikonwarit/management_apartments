@@ -243,15 +243,21 @@ export const liffApi = {
     | {
         linked: true; tenantName: string; roomNumber: string;
         outstanding: { items: { billId: string; roomId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; amount: number }[]; total: number };
-        paymentInfo: { bankName: string; accountName: string; accountNumber: string; qrImage: string; dynamicQrAvailable: boolean };
+        paymentInfo: {
+          bankName: string; accountName: string; accountNumber: string; qrImage: string;
+          autoTrackingAvailable: boolean; qrGenerationAvailable: boolean;
+        };
       }
   ),
   billDetail: (accessToken: string, billId: string, roomId: string) =>
     api.post("/liff/bill-detail", { accessToken, billId, roomId }).then((r) => r.data as { snapshot: any }),
   generateQr: (accessToken: string, billId: string, roomId: string, amount: number) =>
-    api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }).then((r) => r.data as
-      { intentId: string; qrImage: string; amount: number }
-    ),
+    api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }).then((r) => r.data as {
+      intentId: string;
+      qrImage: string | null;
+      amount: number;
+      accountInfo: { bankName: string; accountName: string; accountNumber: string } | null;
+    }),
   paymentStatus: (accessToken: string, intentId: string) =>
     api.post("/liff/payment/status", { accessToken, intentId }).then((r) => r.data as { status: "pending" | "confirmed" }),
 };
