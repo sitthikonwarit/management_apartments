@@ -85,11 +85,6 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
           messageType = "image";
           imageUrl = await downloadLineContent(settings.token, String(msg.id ?? ""), "jpg");
           text = "[รูปภาพ]";
-          // ผู้เช่าอาจส่งรูปสลิปเข้ามาหลังกดสร้าง QR ในหน้า LIFF Payment — ลองตรวจ+บันทึกยอดชำระอัตโนมัติ
-          // ด้วย EasySlip (ไม่มีผลอะไรถ้าไม่มี "รายการรอชำระ" ค้างอยู่ หรือยังไม่ได้ตั้งค่า EasySlip ไว้)
-          if (imageUrl) {
-            await tryAutoConfirmSlipPayment(lineUserId, imageUrl);
-          }
         } else if (msg.type === "sticker") {
           messageType = "sticker";
           packageId = String(msg.packageId ?? "");
@@ -137,6 +132,14 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
           pictureUrl: profileRow?.pictureUrl || null,
           preview: text,
         });
+
+        // ผู้เช่าอาจส่งรูปสลิปเข้ามาหลังกดสร้าง QR ในหน้า LIFF Payment — ลองตรวจ+บันทึกยอดชำระอัตโนมัติด้วย
+        // EasySlip (ไม่มีผลอะไรถ้าไม่มี "รายการรอชำระ" ค้างอยู่ หรือยังไม่ได้ตั้งค่า EasySlip ไว้) ต้องทำ "หลัง"
+        // บันทึกข้อความรูปสลิปข้างบนเสร็จแล้วเท่านั้น ไม่งั้นใบเสร็จที่ tryAutoConfirmSlipPayment ส่งเข้าแชท
+        // จะได้ createdAt เร็วกว่ารูปสลิปเอง ทำให้เรียงลำดับผิด (ใบเสร็จโผล่ขึ้นก่อนสลิปที่มันอ้างอิงถึง)
+        if (msg.type === "image" && imageUrl) {
+          await tryAutoConfirmSlipPayment(lineUserId, imageUrl);
+        }
       }
 
       if (received) broadcastChange("chat", "create", "มีข้อความแชทใหม่จาก LINE", "LINE");
