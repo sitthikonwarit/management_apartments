@@ -6,7 +6,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { resolve } from "path";
 import { db } from "../db";
-import { appConfig, bills, lineProfiles, tenants } from "../db/schema";
+import { appConfig, bills, chatMessages, lineProfiles, tenants } from "../db/schema";
+import { broadcastChange } from "../lib/wsHub";
 
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
 // ใช้ทั้งใน webhook (หาชื่อผู้ส่ง) และหน้าแชท (หาบิลค้างชำระของ tenant ที่ผูกกับ conversation นี้)
@@ -403,6 +404,26 @@ export async function cacheLineProfile(lineUserId: string, profile: { displayNam
   }
 }
 
+// บันทึกข้อความแจ้งเตือนอัตโนมัติ (ส่งบิล/ใบเสร็จทาง LINE) ลง chat_messages ด้วย — ให้ขึ้นในหน้าแชท LINE
+// ของเว็บเราเหมือนข้อความที่พนักงานพิมพ์ตอบเอง (ไม่ใช่แค่ push ไปที่ LINE ของผู้เช่าเฉยๆ) มาร์คว่าอ่านแล้ว
+// ทันทีเพราะเป็นข้อความขาออก แล้ว broadcast ให้หน้าแชทที่เปิดอยู่รีเฟรชสดๆ เหมือนตอนมีข้อความเข้าใหม่
+async function logOutboundChatMessage(lineUserId: string, tenantId: string, text: string, senderName: string) {
+  if (!lineUserId || !lineUserId.startsWith("U")) return;
+  const now = new Date().toISOString();
+  await db.insert(chatMessages).values({
+    id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    lineUserId,
+    tenantId,
+    direction: "out",
+    messageType: "text",
+    text,
+    senderName,
+    createdAt: now,
+    readAt: now,
+  });
+  broadcastChange("chat", "create", "มีข้อความแชทใหม่จาก LINE", senderName);
+}
+
 // ดาวน์โหลดเนื้อหาที่ผู้เช่าส่งเข้ามาทาง LINE (รูปภาพ/ไฟล์) มาเก็บไว้ใน uploads/chat/ แล้วคืน path สัมพัทธ์
 // (เสิร์ฟผ่าน route /uploads/* ที่มีอยู่แล้วใน index.ts) — คืนค่าว่างถ้าดาวน์โหลดไม่สำเร็จ ไม่ทำให้ webhook
 // ทั้งฉบับล้ม — ext กำหนดนามสกุลไฟล์ที่เซฟ (รูปภาพใช้ "jpg" เสมอ, ไฟล์ทั่วไปใช้นามสกุลจาก fileName ที่ LINE ส่งมา)
@@ -507,6 +528,13 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
   if (mainOk) {
     log.detail = `ส่งบิลทาง LINE สำเร็จ (${method === "auto" ? "อัตโนมัติ" : "ส่งเอง"})`
       + (coLineUserIds.length > 0 ? ` — ผู้ร่วมพักอาศัย ${coOk}/${coLineUserIds.length} คน` : "");
+
+    const monthLabel = monthYearLabel(billRow.monthYear, settings.yearFormat);
+    await logOutboundChatMessage(
+      lineUserId, String(item.tenantId ?? ""),
+      `📄 แจ้งบิลค่าเช่าห้อง ${item.roomNumber} เดือน ${monthLabel}\nยอด ${fmtMoney(item.total)} ฿`,
+      log.by || "พนักงาน"
+    );
   }
 
   if (!Array.isArray(item.sendLogs)) item.sendLogs = [];
@@ -531,6 +559,7 @@ export interface PaymentReceiptInput {
   billTotal: number; // ยอดรวมสุทธิของบิล (หลังปรับค่าปรับ/ส่วนลดในป็อปอัพนี้แล้ว)
   paidTotal: number; // ยอดที่จ่ายสะสมรวมทั้งหมดของบิลนี้ หลังรวมยอดที่เพิ่งบันทึก
   slipUrl?: string; // path/URL รูปสลิปการโอน — ว่าง = ไม่แสดงปุ่มดูสลิป (ดู resolveSlipUrl ด้านบน)
+  actor?: string; // ชื่อพนักงานที่บันทึกการชำระเงิน — ไว้แสดงเป็นผู้ส่งในประวัติแชท LINE ของเว็บ
 }
 
 // ใบเสร็จรับเงิน (Flex Message) — ส่งให้ผู้เช่าทันทีที่กดยืนยันการชำระในป็อปอัพบันทึกการชำระเงิน
@@ -618,6 +647,16 @@ export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promis
 
   try {
     await pushLineMessage(settings.token, lineUserId, [buildPaymentReceiptFlexMessage(input, settings)]);
+
+    const remaining = Math.max(0, input.billTotal - input.paidTotal);
+    const fullySettled = remaining <= 0.005;
+    await logOutboundChatMessage(
+      lineUserId, String(input.tenantId ?? ""),
+      `🧾 ใบเสร็จรับเงิน ห้อง ${input.roomNumber} (เดือน ${monthYearLabel(input.monthYear, settings.yearFormat)})\n`
+      + `รับชำระ ${fmtMoney(input.amount)} ฿ — ${fullySettled ? "ชำระครบถ้วนแล้ว" : `คงเหลือ ${fmtMoney(remaining)} ฿`}`,
+      input.actor || "พนักงาน"
+    );
+
     return { success: true, message: "ส่งใบเสร็จทาง LINE สำเร็จ" };
   } catch (e: any) {
     return { success: false, message: `ส่งใบเสร็จไม่สำเร็จ: ${e?.message ?? "Unknown error"}` };

@@ -1,5 +1,8 @@
-// ป็อปอัพดูรูปเต็มจอ พร้อมปุ่มเลื่อนซ้าย/ขวา — สไตล์เดียวกับที่ใช้ดูรูปห้องพัก/ผู้เช่า/ยานพาหนะ/บิล
-// ทั่วทั้งเว็บ (เดิมแต่ละหน้า copy โค้ดเดียวกันนี้ซ้ำกันเอง ดึงมารวมไว้ที่นี่ให้หน้าแชทเรียกใช้ร่วมด้วย)
+import { useEffect } from "react";
+
+// ป็อปอัพดูรูปเต็มๆ — ใช้คลาส .lightbox-overlay/.lightbox-close/.lightbox-img ชุดเดียวกับที่หน้าผู้เช่าใช้ดูรูป
+// (App.css) เพื่อให้หน้าตา/ขนาดรูปตรงกันทั้งเว็บ เพิ่มปุ่มเลื่อนซ้าย/ขวา+ตัวนับให้เฉพาะตอนมีหลายรูป (เช่น
+// ดูรูปในเธรดแชทที่มีหลายรูป) ซึ่งหน้าผู้เช่าไม่ต้องใช้เพราะมีรูปเดียว
 interface ImageLightboxProps {
   images: string[];
   index: number;
@@ -10,42 +13,41 @@ interface ImageLightboxProps {
 export default function ImageLightbox({ images, index, onClose, onIndexChange }: ImageLightboxProps) {
   const hasMultiple = images.length > 1;
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <button
-        style={{ position: "absolute", top: 16, right: 20, background: "none", border: "none", color: "#fff", fontSize: "2rem", cursor: "pointer" }}
-        onClick={onClose}
-      >
-        ×
+    <div className="lightbox-overlay" onClick={onClose}>
+      <button className="lightbox-close" onClick={onClose}>
+        <i className="fas fa-times" />
       </button>
       {hasMultiple && (
         <button
-          style={{ position: "absolute", left: 16, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, fontSize: "1.2rem", cursor: "pointer" }}
+          className="lightbox-nav lightbox-nav-prev"
           onClick={(e) => { e.stopPropagation(); onIndexChange((index - 1 + images.length) % images.length); }}
         >
           <i className="fas fa-chevron-left" />
         </button>
       )}
       <img
-        src={images[index]} alt=""
-        style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: 8, boxShadow: "0 4px 32px rgba(0,0,0,0.5)" }}
+        className="lightbox-img"
+        src={images[index]}
+        alt="ขยายรูป"
         onClick={(e) => e.stopPropagation()}
       />
       {hasMultiple && (
         <button
-          style={{ position: "absolute", right: 16, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, fontSize: "1.2rem", cursor: "pointer" }}
+          className="lightbox-nav lightbox-nav-next"
           onClick={(e) => { e.stopPropagation(); onIndexChange((index + 1) % images.length); }}
         >
           <i className="fas fa-chevron-right" />
         </button>
       )}
       {hasMultiple && (
-        <div style={{ position: "absolute", bottom: 12, color: "rgba(255,255,255,0.7)", fontSize: "0.85rem" }}>
-          {index + 1} / {images.length}
-        </div>
+        <div className="lightbox-counter">{index + 1} / {images.length}</div>
       )}
     </div>
   );

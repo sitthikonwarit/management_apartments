@@ -57,7 +57,7 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
     const rows = await db.select().from(payments);
     return rows.map(parsePayment);
   })
-  .post("/payments", async ({ body, set }) => {
+  .post("/payments", async ({ body, set, authUser }) => {
     const b = body as any;
     if (!b.billId || !b.roomId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
     let slipUrl = "";
@@ -93,6 +93,11 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
     // ส่งใบเสร็จรับเงินทาง LINE ทันทีที่บันทึกยอดสำเร็จ (best-effort — ไม่ทำให้การบันทึกยอดล้มเหลวถ้าส่งไม่ได้
     // เช่น ผู้เช่ายังไม่ผูก LINE User ID หรือปิดใช้งาน LINE Messaging ไว้)
     try {
+      let actor = "พนักงาน";
+      if (authUser?.id) {
+        const [u] = await db.select().from(users).where(eq(users.id, authUser.id));
+        actor = u?.displayName || u?.username || authUser.username || "พนักงาน";
+      }
       await sendPaymentReceiptLine({
         tenantId: b.tenantId ? String(b.tenantId) : null,
         roomNumber: String(b.roomNumber ?? ""),
@@ -105,6 +110,7 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
         billTotal: Number(b.billTotal) || 0,
         paidTotal: Number(b.paidTotal) || 0,
         slipUrl,
+        actor,
       });
     } catch (e) {
       console.error("[send-payment-receipt]", e);
