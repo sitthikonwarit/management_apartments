@@ -21,6 +21,7 @@ import BillsPage from "./pages/BillsPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import SettingsPage from "./pages/SettingsPage";
 import LogPage from "./pages/LogPage";
+import ChatPage from "./pages/ChatPage";
 
 const PAGE_TITLES: Record<string, string> = {
   "/tenants": "ผู้เช่า",
@@ -28,6 +29,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/meters": "จดมิเตอร์",
   "/bills": "ใบแจ้งหนี้",
   "/vehicles": "ยานพาหนะ",
+  "/chat": "แชท LINE",
   "/settings": "Settings",
   "/logs": "Log กิจกรรม",
 };
@@ -77,6 +79,7 @@ function AuthenticatedShell() {
             <Route path="/meters" element={<MetersPage />} />
             <Route path="/bills" element={<BillsPage />} />
             <Route path="/vehicles" element={<VehiclesPage />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/logs" element={<LogPage />} />
           </Routes>

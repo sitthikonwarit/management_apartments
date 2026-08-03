@@ -11,6 +11,7 @@ const navItems = [
   { to: "/meters", icon: "speed", label: "จดมิเตอร์" },
   { to: "/bills", icon: "receipt", label: "บิล/แจ้งหนี้" },
   { to: "/vehicles", icon: "directions_car", label: "ยานพาหนะ" },
+  { to: "/chat", icon: "chat", label: "แชท LINE" },
   { to: "/settings", icon: "settings", label: "Settings" },
   { to: "/logs", icon: "history", label: "Log กิจกรรม" },
 ];

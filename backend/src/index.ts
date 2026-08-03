@@ -12,6 +12,8 @@ import { vehiclesRoute } from "./routes/vehicles";
 import { settingsRoute } from "./routes/settings";
 import { addressRoute } from "./routes/address";
 import { logsRoute } from "./routes/logs";
+import { chatRoute } from "./routes/chat";
+import { lineWebhookRoute } from "./routes/lineWebhook";
 import { authPublicRoute, authProtectedRoute } from "./routes/auth";
 import { authDerive } from "./lib/authDerive";
 import { recordLog } from "./lib/activityLog";
@@ -71,6 +73,9 @@ const app = new Elysia()
   // /auth/setup-status, /auth/register, /auth/login — เปิดสาธารณะ ไม่ต้องล็อกอินก่อน (ต้องเรียกได้ตอนยัง
   // ไม่มี token) ต้องเมานต์ "ก่อน" การ์ดด้านล่าง เพราะ onBeforeHandle มีผลกับ route ที่ประกาศตามหลังเท่านั้น
   .use(authPublicRoute)
+  // /line/webhook — LINE เป็นคนยิงมาเอง ไม่มี Authorization: Bearer ของระบบเรา ต้องเปิดสาธารณะเช่นกัน
+  // (ตรวจสิทธิ์ด้วย x-line-signature ของตัวเองแทน ดู verifyLineSignature ใน services/line.ts)
+  .use(lineWebhookRoute)
   // ── WebSocket แจ้งเตือนแบบเรียลไทม์ — auth เองในตัว (แนบ token มาทาง query string เพราะ browser
   // WebSocket API แนบ custom header ไม่ได้) แยกจากการ์ด HTTP ด้านล่างเพราะ WS ไม่ผ่าน onBeforeHandle
   // แบบเดียวกับ HTTP request ปกติ ไม่ broadcast ข้อมูลอะไร แค่บอกว่า "entityType นี้เปลี่ยนแล้วนะ ไปโหลดใหม่"
@@ -139,6 +144,7 @@ const app = new Elysia()
   .use(vehiclesRoute)
   .use(settingsRoute)
   .use(logsRoute)
+  .use(chatRoute)
   .listen({ port: 3001, hostname: "0.0.0.0", maxRequestBodySize: 50 * 1024 * 1024 });
 
 console.log(`Backend running at http://localhost:${app.server?.port} (also reachable via your LAN IP)`);

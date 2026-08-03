@@ -2,18 +2,24 @@
 // ตั้งค่า Channel Access Token + เปิด/ปิดใช้งานได้จากหน้า Settings (ตาราง app_config)
 // ใช้ทั้งตอนกดส่งเอง (bills.ts: POST /bills/:id/send-line) และตอนส่งอัตโนมัติตามวันนัด (runLineAutoSend)
 import { eq } from "drizzle-orm";
+import { createHmac, timingSafeEqual } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
+import { resolve } from "path";
 import { db } from "../db";
 import { appConfig, bills, tenants } from "../db/schema";
 
 const CONFIG_ID = "default";
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
+const LINE_PROFILE_URL = "https://api.line.me/v2/bot/profile";
+const LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message";
 
-async function getLineSettings() {
+export async function getLineSettings() {
   const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));
   return {
     enabled: row?.lineMessagingEnabled === "true",
     autoSendEnabled: row?.lineAutoSendEnabled === "true",
     token: row?.lineChannelAccessToken ?? "",
+    channelSecret: row?.lineChannelSecret ?? "",
     appName: row?.appName ?? "",
     logoUrl: row?.logoUrl ?? "",
     yearFormat: (row?.yearFormat === "CE" ? "CE" : "BE") as "BE" | "CE",
@@ -295,7 +301,7 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
   };
 }
 
-async function pushLineMessage(token: string, to: string, messages: any[]) {
+export async function pushLineMessage(token: string, to: string, messages: any[]) {
   const res = await fetch(LINE_PUSH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -304,6 +310,55 @@ async function pushLineMessage(token: string, to: string, messages: any[]) {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`LINE API Error (${res.status}): ${text}`);
+  }
+}
+
+// ส่งข้อความตัวอักษรธรรมดา — ใช้ตอนพนักงานตอบแชทจากหน้า Inbox (ดู routes/chat.ts)
+export async function sendTextMessage(token: string, to: string, text: string) {
+  await pushLineMessage(token, to, [{ type: "text", text }]);
+}
+
+// ตรวจลายเซ็น webhook (header "x-line-signature") — ต้องคำนวณจาก raw body ตรงๆ ก่อนแปลงเป็น JSON
+// (ดูคอมเมนต์ใน routes/lineWebhook.ts เรื่องทำไมต้องอ่าน raw body ก่อน) เทียบแบบ timing-safe กันโจมตี
+export function verifyLineSignature(channelSecret: string, rawBody: string, signatureHeader: string | undefined): boolean {
+  if (!channelSecret || !signatureHeader) return false;
+  const expected = createHmac("sha256", channelSecret).update(rawBody).digest("base64");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signatureHeader);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+// ดึงชื่อโปรไฟล์ LINE ของผู้ส่ง — ใช้ตอนหาไม่เจอผู้เช่าที่ผูก lineUserId นี้ไว้ (best-effort เฉยๆ ไม่ throw)
+export async function getLineProfile(token: string, userId: string): Promise<string> {
+  try {
+    const res = await fetch(`${LINE_PROFILE_URL}/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    return String(data?.displayName ?? "");
+  } catch {
+    return "";
+  }
+}
+
+// ดาวน์โหลดรูปภาพที่ผู้เช่าส่งเข้ามาทาง LINE มาเก็บไว้ใน uploads/chat/ แล้วคืน path สัมพัทธ์ (เสิร์ฟผ่าน
+// route /uploads/* ที่มีอยู่แล้วใน index.ts) — คืนค่าว่างถ้าดาวน์โหลดไม่สำเร็จ ไม่ทำให้ webhook ทั้งฉบับล้ม
+export async function downloadLineImage(token: string, messageId: string): Promise<string> {
+  try {
+    const res = await fetch(`${LINE_CONTENT_URL}/${messageId}/content`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return "";
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const dir = resolve(process.cwd(), "uploads", "chat");
+    await mkdir(dir, { recursive: true });
+    const fileName = `${messageId}.jpg`;
+    await writeFile(resolve(dir, fileName), buffer);
+    return `/uploads/chat/${fileName}`;
+  } catch {
+    return "";
   }
 }
 

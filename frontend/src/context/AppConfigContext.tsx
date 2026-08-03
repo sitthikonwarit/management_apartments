@@ -22,7 +22,7 @@ export interface AppConfig {
   // นาทีที่ไม่มีการใช้งานแล้วให้เด้งออกจากระบบ (auto-logout) อัตโนมัติ — 0 = ปิดใช้งาน
   sessionTimeoutMinutes: number;
   // ส่งบิลแจ้งเตือนทาง LINE (LINE Messaging API) — ต้องกรอก Channel Access Token ของ LINE OA ก่อน
-  lineMessaging: { enabled: boolean; channelAccessToken: string; autoSendEnabled: boolean };
+  lineMessaging: { enabled: boolean; channelAccessToken: string; channelSecret: string; autoSendEnabled: boolean };
   updatedAt?: string;
 }
 
@@ -50,7 +50,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   meterDigits: 5,
   yearFormat: "BE",
   sessionTimeoutMinutes: 30,
-  lineMessaging: { enabled: false, channelAccessToken: "", autoSendEnabled: false },
+  lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false },
 };
 
 const AppConfigContext = createContext<{

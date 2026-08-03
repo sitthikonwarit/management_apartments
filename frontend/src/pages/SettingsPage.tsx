@@ -236,6 +236,8 @@ export default function SettingsPage() {
   const [lineEnabled, setLineEnabled] = useState(false);
   const [lineToken, setLineToken] = useState("");
   const [lineTokenVisible, setLineTokenVisible] = useState(false);
+  const [lineSecret, setLineSecret] = useState("");
+  const [lineSecretVisible, setLineSecretVisible] = useState(false);
   const [lineAutoSendEnabled, setLineAutoSendEnabled] = useState(false);
 
   const [logoUrl, setLogoUrl] = useState("");
@@ -311,6 +313,7 @@ export default function SettingsPage() {
     setSessionTimeoutMinutes(config.sessionTimeoutMinutes);
     setLineEnabled(config.lineMessaging.enabled);
     setLineToken(config.lineMessaging.channelAccessToken);
+    setLineSecret(config.lineMessaging.channelSecret);
     setLineAutoSendEnabled(config.lineMessaging.autoSendEnabled);
     setLogoUrl(config.appIdentity.logoUrl);
     setLogoBgEnabled(config.appIdentity.logoBg.enabled);
@@ -400,7 +403,7 @@ export default function SettingsPage() {
         meterDigits: Math.max(3, Math.min(9, Number(meterDigits) || 5)),
         yearFormat,
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
-        lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), autoSendEnabled: lineAutoSendEnabled },
+        lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(), autoSendEnabled: lineAutoSendEnabled },
       };
       const updated = await settingsApi.updateConfig(payload);
       setConfig({
@@ -785,7 +788,7 @@ export default function SettingsPage() {
                   </div>
                 </Searchable>
 
-                <Searchable query={q} keywords="line line messaging ส่งบิล แจ้งเตือน line oa channel access token line user id">
+                <Searchable query={q} keywords="line line messaging ส่งบิล แจ้งเตือน line oa channel access token channel secret line user id webhook แชท chat">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                     <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid #06C755", paddingBottom: 8 }}>
                       <h6 className="mb-0" style={{ fontWeight: 700, color: "#06C755", border: "none", padding: 0, margin: 0 }}>
@@ -812,6 +815,29 @@ export default function SettingsPage() {
                       </button>
                     </div>
 
+                    <label className="form-label small">LINE Channel Secret</label>
+                    <div className="input-group mb-2">
+                      <input type={lineSecretVisible ? "text" : "password"} className="form-control" autoComplete="off"
+                        placeholder="วาง Channel secret จาก LINE Developers Console (ใช้ตรวจสอบข้อความที่เข้ามา)"
+                        value={lineSecret} onChange={(e) => setLineSecret(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" onClick={() => setLineSecretVisible((v) => !v)}
+                        title={lineSecretVisible ? "ซ่อน Secret" : "แสดง Secret"}>
+                        <i className={`fas fa-eye${lineSecretVisible ? "-slash" : ""}`} />
+                      </button>
+                    </div>
+
+                    <label className="form-label small">Webhook URL (สำหรับตั้งค่าใน LINE Developers Console)</label>
+                    <div className="input-group mb-3">
+                      <input type="text" className="form-control" readOnly
+                        value={`${window.location.origin}/api/line/webhook`} />
+                      <button type="button" className="btn btn-outline-secondary" onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/api/line/webhook`);
+                        toastSuccess("คัดลอก Webhook URL แล้ว");
+                      }} title="คัดลอก">
+                        <i className="fas fa-copy" />
+                      </button>
+                    </div>
+
                     <div className="form-check form-switch mb-3">
                       <input className="form-check-input" type="checkbox" id="lineAutoSendSwitch"
                         checked={lineAutoSendEnabled} onChange={(e) => setLineAutoSendEnabled(e.target.checked)} />
@@ -825,9 +851,12 @@ export default function SettingsPage() {
                       <ol className="mb-0 ps-3 mt-1">
                         <li>สร้าง LINE Official Account (ฟรี) แล้วเปิดใช้งาน Messaging API ที่เมนู "การตั้งค่า &gt; Messaging API" ใน LINE Official Account Manager</li>
                         <li>ไปที่ LINE Developers Console เลือก Channel ของ OA นี้ แล้วกด Issue ที่ช่อง "Channel access token (long-lived)" คัดลอกมาวางในช่องด้านบน</li>
+                        <li>เปิด "Use webhook" ในหน้า Messaging API เดียวกัน แล้ววาง Webhook URL จากช่องด้านบนลงไป กด Verify ให้ผ่าน (เซิร์ฟเวอร์ต้องเข้าถึงได้จากอินเทอร์เน็ตจริง เช่น ตั้งค่า reverse proxy/โดเมนสาธารณะชี้มาที่เครื่องนี้ — เหมือนที่ต้องตั้งไว้สำหรับปุ่ม "ดูสลิป" ในใบเสร็จ LINE)</li>
+                        <li>กด Issue ที่ช่อง "Channel access token (long-lived)" คัดลอกมาวางในช่องด้านบน และคัดลอก "Channel secret" จากหน้า Basic settings มาวางในช่อง Channel Secret ด้านบนด้วย</li>
                         <li>เปิดสวิตช์ด้านบนแล้วกด "บันทึกการตั้งค่าทั้งหมด" ด้านล่างสุดของหน้านี้</li>
                         <li>ให้ผู้เช่าแอด LINE OA เป็นเพื่อน แล้วนำ LINE User ID (ขึ้นต้นด้วย U ตามด้วยตัวอักษร/ตัวเลข 32 ตัว) ไปกรอกที่หน้า "ผู้เช่า" &gt; แก้ไขผู้เช่าคนนั้น &gt; ช่อง LINE User ID</li>
                         <li>ไปหน้า "บิล/แจ้งหนี้" เปิดบิลของห้องที่ต้องการ กดเข้าไปที่ห้องนั้น แล้วกดปุ่ม "ส่งบิลทาง LINE" — หรือถ้าเปิดส่งอัตโนมัติไว้ ระบบจะส่งให้เองเมื่อถึง "วันนัดส่ง" ที่ตั้งไว้ตอนแก้ไขบิล</li>
+                        <li>ข้อความที่ผู้เช่าตอบกลับมาทาง LINE จะเข้ามาที่หน้า "แชท" ในเมนูด้านซ้าย ตอบกลับได้จากหน้านั้นเลย</li>
                       </ol>
                     </div>
                   </div>

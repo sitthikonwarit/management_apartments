@@ -218,6 +218,20 @@ export const activityLogs = pgTable("activity_logs", {
   ip: str("ip"),
 });
 
+// ประวัติแชท LINE 2 ทาง — ข้อความเข้า (จาก webhook) และข้อความออก (พนักงานตอบจากหน้า Inbox)
+export const chatMessages = pgTable("chat_messages", {
+  id: text("id").primaryKey(),
+  lineUserId: text("line_user_id").notNull(),
+  tenantId: str("tenant_id"),
+  direction: text("direction").notNull(), // "in" | "out"
+  messageType: str("message_type"), // "text" | "image" | "unsupported"
+  text: str("text"),
+  imageUrl: str("image_url"),
+  senderName: str("sender_name"),
+  createdAt: str("created_at"),
+  readAt: str("read_at"), // ว่าง = ยังไม่อ่าน (เฉพาะข้อความ direction=in)
+});
+
 export const appConfig = pgTable("app_config", {
   id: text("id").primaryKey(),
   electricRate: str("electric_rate"),
@@ -240,6 +254,7 @@ export const appConfig = pgTable("app_config", {
   // ── ส่งบิลทาง LINE (LINE Messaging API — Push Message ไปยัง lineUserId ของผู้เช่าแต่ละคน) ──
   lineMessagingEnabled: text("line_messaging_enabled").notNull().default("false"),
   lineChannelAccessToken: str("line_channel_access_token"),
+  lineChannelSecret: str("line_channel_secret"),
   lineAutoSendEnabled: text("line_auto_send_enabled").notNull().default("false"),
   updatedAt: str("updated_at"),
 });

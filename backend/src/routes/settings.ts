@@ -47,6 +47,7 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
     lineMessaging: {
       enabled: r.lineMessagingEnabled === "true",
       channelAccessToken: r.lineChannelAccessToken || "",
+      channelSecret: r.lineChannelSecret || "",
       autoSendEnabled: r.lineAutoSendEnabled === "true",
     },
     updatedAt: r.updatedAt,
@@ -140,6 +141,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       sessionTimeoutMinutes: String(Math.max(0, Number(b.sessionTimeoutMinutes) || 0)),
       lineMessagingEnabled: b.lineMessaging?.enabled ? "true" : "false",
       lineChannelAccessToken: String(b.lineMessaging?.channelAccessToken ?? ""),
+      lineChannelSecret: String(b.lineMessaging?.channelSecret ?? ""),
       lineAutoSendEnabled: b.lineMessaging?.autoSendEnabled ? "true" : "false",
       updatedAt: new Date().toISOString(),
     }).where(eq(appConfig.id, CONFIG_ID));

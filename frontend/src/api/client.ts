@@ -143,6 +143,40 @@ export const vehiclesApi = {
   deleteType: (id: string) => api.delete(`/vehicles/types/${id}`).then((r) => r.data),
 };
 
+export interface ChatConversation {
+  lineUserId: string;
+  tenantId: string | null;
+  displayName: string;
+  roomNumber: string | null;
+  lastMessage: string;
+  lastMessageAt: string;
+  lastDirection: "in" | "out";
+  unreadCount: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  lineUserId: string;
+  tenantId: string | null;
+  direction: "in" | "out";
+  messageType: string;
+  text: string;
+  imageUrl: string | null;
+  senderName: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export const chatApi = {
+  getConversations: () => api.get("/chat/conversations").then((r) => r.data as ChatConversation[]),
+  getMessages: (lineUserId: string) =>
+    api.get(`/chat/conversations/${lineUserId}/messages`).then((r) => r.data as ChatMessage[]),
+  sendReply: (lineUserId: string, text: string) =>
+    api.post(`/chat/conversations/${lineUserId}/reply`, { text }).then((r) => r.data as ChatMessage),
+  markRead: (lineUserId: string) =>
+    api.patch(`/chat/conversations/${lineUserId}/read`).then((r) => r.data),
+};
+
 export const settingsApi = {
   getAll: () => api.get("/settings").then((r) => r.data),
   createFormula: (data: any) => api.post("/settings", data).then((r) => r.data),

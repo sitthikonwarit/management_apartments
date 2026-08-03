@@ -34,6 +34,7 @@ const ENTITY_META: Record<string, { label: string; icon: string; color: string }
   "vehicle-type": { label: "ประเภทยานพาหนะ", icon: "fa-car", color: "#fd7e14" },
   formula: { label: "สูตรคำนวณ", icon: "fa-calculator", color: "#b8860b" },
   settings: { label: "การตั้งค่า", icon: "fa-cog", color: "var(--color-info-dark)" },
+  chat: { label: "แชท LINE", icon: "fa-comment", color: "#06C755" },
   user: { label: "ผู้ใช้งาน", icon: "fa-users-cog", color: "var(--color-primary)" },
   auth: { label: "เข้า/ออกระบบ", icon: "fa-sign-in-alt", color: "var(--color-danger)" },
   other: { label: "อื่นๆ", icon: "fa-circle", color: "var(--color-info-dark)" },

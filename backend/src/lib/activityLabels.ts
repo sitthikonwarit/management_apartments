@@ -60,6 +60,10 @@ const RULES: LogRule[] = [
   { method: "PUT", pattern: /^\/settings\/[^/]+$/, entityType: "formula", action: "update", label: "แก้ไขสูตรคำนวณ" },
   { method: "DELETE", pattern: /^\/settings\/[^/]+$/, entityType: "formula", action: "delete", label: "ลบสูตรคำนวณ" },
 
+  // chat (แชท LINE) — เฉพาะการตอบกลับ, ข้อความเข้าจาก webhook ไม่ผ่านตารางนี้ (ไม่มี authUser ตอนนั้น)
+  { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/reply$/, entityType: "chat", action: "create", label: "ส่งข้อความแชทตอบผู้เช่า" },
+  { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/read$/, entityType: "chat", action: "read", label: "อ่านข้อความแชท" },
+
   // auth — เฉพาะจัดการบัญชี (login/register/logout log แยกต่างหากในจุดที่เกิดเหตุการณ์จริง)
   { method: "POST", pattern: /^\/auth\/users$/, entityType: "user", action: "create", label: "เพิ่มผู้ใช้งาน" },
   { method: "PUT", pattern: /^\/auth\/users\/[^/]+$/, entityType: "user", action: "update", label: "แก้ไขผู้ใช้งาน" },
