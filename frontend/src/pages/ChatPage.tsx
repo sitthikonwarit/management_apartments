@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { chatApi, type ChatConversation, type ChatMessage } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { thaiDateTimeString } from "../utils/yearFormat";
@@ -35,9 +36,15 @@ export default function ChatPage() {
   const [detailTab, setDetailTab] = useState<ChatDetailTab | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const atBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const location = useLocation();
+  const handledDeepLinkRef = useRef(false);
 
   function loadConversations() {
     chatApi.getConversations().then(setConversations).catch(() => {});
@@ -45,18 +52,52 @@ export default function ChatPage() {
 
   useEffect(() => { loadConversations(); }, []);
 
+  // เปิดตรงไปยังสนทนาที่ระบุ เมื่อมีคนนำทางมาจากหน้าอื่น (เช่น กดที่ป็อปอัพแจ้งเตือนข้อความแชทใหม่มุมขวาล่าง)
+  // ผ่าน navigate("/chat", { state: { openLineUserId } }) — ดู ChatToastHost.tsx — ทำครั้งเดียวหลังโหลดรายชื่อสนทนาเสร็จ
+  useEffect(() => {
+    const state = location.state as { openLineUserId?: string } | null;
+    if (!state?.openLineUserId || handledDeepLinkRef.current || conversations.length === 0) return;
+    handledDeepLinkRef.current = true;
+    setSelected(state.openLineUserId);
+  }, [conversations, location.state]);
+
   // เปิดการสนทนาที่เลือก — โหลดข้อความ + มาร์คว่าอ่านแล้วทันที (ไม่ต้องรอตอบก่อน)
   useEffect(() => {
     setDetailTab(null);
+    atBottomRef.current = true;
+    setAtBottom(true);
+    setHasNewMessages(false);
     if (!selected) { setMessages([]); return; }
     setLoadingMessages(true);
     chatApi.getMessages(selected).then(setMessages).finally(() => setLoadingMessages(false));
     chatApi.markRead(selected).then(loadConversations).catch(() => {});
   }, [selected]);
 
+  // เลื่อนลงล่างสุดอัตโนมัติเฉพาะตอนที่ยังอยู่ล่างสุดอยู่แล้ว (กำลังไล่อ่านข้อความล่าสุด) — ถ้าเลื่อนขึ้นไป
+  // ดูข้อความเก่าอยู่ ไม่บังคับเด้งลงทับ แค่ขึ้นปุ่ม "ข้อความล่าสุด" ให้กดเองแทน (ดู scrollToBottom ด้านล่าง)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (atBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (messages.length > 0) {
+      setHasNewMessages(true);
+    }
   }, [messages]);
+
+  function handleScroll() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    atBottomRef.current = near;
+    setAtBottom(near);
+    if (near) setHasNewMessages(false);
+  }
+
+  function scrollToBottom() {
+    atBottomRef.current = true;
+    setAtBottom(true);
+    setHasNewMessages(false);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
 
   // แชทเก่าที่ยังไม่เคยแคชรูปโปรไฟล์ไว้ (ก่อนมีฟีเจอร์นี้) — ดึงรูปมาแคชครั้งเดียวตอนเปิดดู ไม่ต้องรอ
   // ข้อความเข้าใหม่จาก LINE ถึงจะมีรูป
@@ -97,6 +138,7 @@ export default function ChatPage() {
     setSending(true);
     try {
       const msg = await chatApi.sendReply(selected, value);
+      atBottomRef.current = true; setAtBottom(true);
       setMessages((prev) => [...prev, msg]);
       setText("");
       loadConversations();
@@ -115,6 +157,7 @@ export default function ChatPage() {
     try {
       const base64 = await readFileAsBase64(file);
       const msg = await chatApi.sendAttachment(selected, base64, file.name);
+      atBottomRef.current = true; setAtBottom(true);
       setMessages((prev) => [...prev, msg]);
       loadConversations();
     } catch (e: any) {
@@ -130,6 +173,7 @@ export default function ChatPage() {
     setSending(true);
     try {
       const msg = await chatApi.sendSticker(selected, packageId, stickerId);
+      atBottomRef.current = true; setAtBottom(true);
       setMessages((prev) => [...prev, msg]);
       loadConversations();
     } catch (e: any) {
@@ -231,69 +275,85 @@ export default function ChatPage() {
                 <i className="fas fa-ellipsis-vertical" />
               </button>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-              {loadingMessages && <div className="text-muted small">กำลังโหลด...</div>}
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  ref={(node) => {
-                    if (node) messageRefs.current.set(m.id, node);
-                    else messageRefs.current.delete(m.id);
-                  }}
-                  style={{
-                    alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
-                    maxWidth: "70%", minWidth: 0,
-                    borderRadius: "var(--border-radius-1)",
-                    transition: "background-color 0.3s ease",
-                    backgroundColor: highlightId === m.id ? "rgba(255, 214, 0, 0.35)" : "transparent",
-                  }}
-                >
-                  {m.messageType === "sticker" && m.stickerId ? (
-                    // สติกเกอร์แสดงแบบลอยเดี่ยวๆ ไม่มีกล่องพื้นหลัง เหมือนแอปแชททั่วไป
-                    <img src={stickerThumbUrl(m.stickerId)} alt="สติกเกอร์" style={{ width: 110, height: 110, objectFit: "contain" }} />
-                  ) : m.messageType === "bill" || m.messageType === "receipt" ? (
-                    // การ์ดแจ้งบิล/ใบเสร็จ (ส่งอัตโนมัติตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) มีหน้าตา/สีพื้นหลัง
-                    // ของตัวเองอยู่แล้ว ไม่ต้องห่อด้วยฟองข้อความสีปกติ
-                    <ChatBillMessage messageType={m.messageType} raw={m.text} />
-                  ) : (
-                    <div style={{
-                      background: m.direction === "out" ? "var(--color-primary)" : "var(--color-background)",
-                      color: m.direction === "out" ? "#fff" : "inherit",
-                      borderRadius: "var(--border-radius-1)", padding: "8px 12px",
-                      // ข้อความไทยไม่มีเว้นวรรคระหว่างคำ และลิงก์ไฟล์แนบก็เป็นตัวอักษรยาวไม่มีช่องว่าง — ถ้าไม่บอก
-                      // เบราว์เซอร์ให้ตัดคำได้ทุกจุด (ไม่ใช่แค่ตรงช่องว่าง) ฟองข้อความจะทะลุ maxWidth ด้านบนไป
-                      overflowWrap: "anywhere", wordBreak: "break-word",
-                    }}>
-                      {m.messageType === "image" && m.imageUrl ? (
-                        <img
-                          src={m.imageUrl} alt="รูปภาพ"
-                          // maxWidth เดิมเป็น 100% ของฟองข้อความ ซึ่งกว้างได้ถึง 70% ของพื้นที่แชท (ดู maxWidth
-                          // ของ wrapper ด้านบน) บนจอเดสก์ท็อปที่กว้างมากรูปเลยดูใหญ่เกินไป — จำกัดเพดานตายตัวไว้
-                          // ที่ 260px แต่ยังหดตามพื้นที่ที่มีได้ถ้าฟองข้อความแคบกว่านั้น (เช่นจอมือถือ)
-                          style={{ maxWidth: "min(260px, 100%)", maxHeight: 320, borderRadius: 8, display: "block", cursor: "pointer" }}
-                          onClick={() => setLightboxIndex(threadImages.indexOf(m.imageUrl as string))}
-                        />
-                      ) : m.messageType === "file" ? (
-                        <a
-                          href={m.fileUrl ?? "#"} target="_blank" rel="noopener noreferrer"
-                          className={m.direction === "out" ? "text-white" : ""}
-                          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}
-                        >
-                          <i className="fas fa-file-arrow-down" />
-                          <span>{m.fileName || "ไฟล์แนบ"}</span>
-                        </a>
-                      ) : (
-                        <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
-                      )}
+            <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+              <div
+                ref={scrollContainerRef} onScroll={handleScroll}
+                style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                {loadingMessages && <div className="text-muted small">กำลังโหลด...</div>}
+                {messages.map((m) => (
+                  <div
+                    key={m.id}
+                    ref={(node) => {
+                      if (node) messageRefs.current.set(m.id, node);
+                      else messageRefs.current.delete(m.id);
+                    }}
+                    style={{
+                      alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
+                      maxWidth: "70%", minWidth: 0,
+                      borderRadius: "var(--border-radius-1)",
+                      transition: "background-color 0.3s ease",
+                      backgroundColor: highlightId === m.id ? "rgba(255, 214, 0, 0.35)" : "transparent",
+                    }}
+                  >
+                    {m.messageType === "sticker" && m.stickerId ? (
+                      // สติกเกอร์แสดงแบบลอยเดี่ยวๆ ไม่มีกล่องพื้นหลัง เหมือนแอปแชททั่วไป
+                      <img src={stickerThumbUrl(m.stickerId)} alt="สติกเกอร์" style={{ width: 110, height: 110, objectFit: "contain" }} />
+                    ) : m.messageType === "bill" || m.messageType === "receipt" ? (
+                      // การ์ดแจ้งบิล/ใบเสร็จ (ส่งอัตโนมัติตอนกดส่งบิล/บันทึกชำระเงินทาง LINE) มีหน้าตา/สีพื้นหลัง
+                      // ของตัวเองอยู่แล้ว ไม่ต้องห่อด้วยฟองข้อความสีปกติ
+                      <ChatBillMessage messageType={m.messageType} raw={m.text} />
+                    ) : m.messageType === "image" && m.imageUrl ? (
+                      // รูปภาพแสดงแบบลอยเดี่ยวๆ ไม่มีฟองข้อความ/พื้นหลังห่อ (เหมือนสติกเกอร์) — ของเดิมห่อด้วย
+                      // ฟองสีทำให้ดูเหมือนมีกรอบ/ขอบรอบรูปเกินจำเป็น
+                      <img
+                        src={m.imageUrl} alt="รูปภาพ"
+                        // maxWidth เดิมเป็น 100% ของฟองข้อความ ซึ่งกว้างได้ถึง 70% ของพื้นที่แชท (ดู maxWidth
+                        // ของ wrapper ด้านบน) บนจอเดสก์ท็อปที่กว้างมากรูปเลยดูใหญ่เกินไป — จำกัดเพดานตายตัวไว้
+                        // ที่ 260px แต่ยังหดตามพื้นที่ที่มีได้ถ้าฟองข้อความแคบกว่านั้น (เช่นจอมือถือ)
+                        style={{ maxWidth: "min(260px, 100%)", maxHeight: 320, borderRadius: 8, display: "block", cursor: "pointer" }}
+                        onClick={() => setLightboxIndex(threadImages.indexOf(m.imageUrl as string))}
+                      />
+                    ) : (
+                      <div style={{
+                        background: m.direction === "out" ? "var(--color-primary)" : "var(--color-background)",
+                        color: m.direction === "out" ? "#fff" : "inherit",
+                        borderRadius: "var(--border-radius-1)", padding: "8px 12px",
+                        // ข้อความไทยไม่มีเว้นวรรคระหว่างคำ และลิงก์ไฟล์แนบก็เป็นตัวอักษรยาวไม่มีช่องว่าง — ถ้าไม่บอก
+                        // เบราว์เซอร์ให้ตัดคำได้ทุกจุด (ไม่ใช่แค่ตรงช่องว่าง) ฟองข้อความจะทะลุ maxWidth ด้านบนไป
+                        overflowWrap: "anywhere", wordBreak: "break-word",
+                      }}>
+                        {m.messageType === "file" ? (
+                          <a
+                            href={m.fileUrl ?? "#"} target="_blank" rel="noopener noreferrer"
+                            className={m.direction === "out" ? "text-white" : ""}
+                            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}
+                          >
+                            <i className="fas fa-file-arrow-down" />
+                            <span>{m.fileName || "ไฟล์แนบ"}</span>
+                          </a>
+                        ) : (
+                          <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="text-muted" style={{ fontSize: 11, textAlign: m.direction === "out" ? "right" : "left" }}>
+                      {m.direction === "out" && m.senderName ? `${m.senderName} · ` : ""}
+                      {thaiDateTimeString(new Date(m.createdAt))}
                     </div>
-                  )}
-                  <div className="text-muted" style={{ fontSize: 11, textAlign: m.direction === "out" ? "right" : "left" }}>
-                    {m.direction === "out" && m.senderName ? `${m.senderName} · ` : ""}
-                    {thaiDateTimeString(new Date(m.createdAt))}
                   </div>
-                </div>
-              ))}
-              <div ref={bottomRef} />
+                ))}
+                <div ref={bottomRef} />
+              </div>
+              {!atBottom && (
+                <button
+                  type="button" className="chat-jump-bottom-btn" title="ไปที่ข้อความล่าสุด"
+                  onClick={scrollToBottom}
+                >
+                  <i className="fas fa-arrow-down" />
+                  {hasNewMessages && <span className="chat-jump-bottom-dot" />}
+                </button>
+              )}
             </div>
             <div style={{ padding: 12, borderTop: "1px solid var(--color-light)", position: "relative" }}>
               {stickerPickerOpen && (

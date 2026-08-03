@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { chatApi } from "../api/client";
 import { AVATAR_URL } from "./TenantTableView";
 
@@ -22,6 +23,7 @@ const FADE_MS = 300;
 // ระหว่างที่ยังค้างอยู่ conversation นั้นถูกมาร์คอ่านแล้ว (เช่น พนักงานเปิดหน้าแชทดูอยู่พอดี) จะขึ้น "อ่านแล้ว"
 // แทนที่จะปล่อยให้ดูเหมือนยังไม่มีใครสนใจ
 export default function ChatToastHost() {
+  const navigate = useNavigate();
   const [toasts, setToasts] = useState<ChatToast[]>([]);
   const toastsRef = useRef<ChatToast[]>([]);
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -33,6 +35,13 @@ export default function ChatToastHost() {
     if (timer) { clearTimeout(timer); timersRef.current.delete(id); }
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, dismissing: true } : t)));
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), FADE_MS);
+  }
+
+  // กดที่ตัวป็อปอัพ (ยกเว้นปุ่ม ×) ให้นำทางไปหน้าแชทและเปิดสนทนานั้นตรงๆ ทันที ผ่าน location.state
+  // แบบเดียวกับ deep-link ของหน้าอื่นๆ (ดู BillsPage openBillId) — ChatPage จะอ่านค่านี้แล้วเลือกให้เอง
+  function handleToastClick(t: ChatToast) {
+    removeToast(t.id);
+    navigate("/chat", { state: { openLineUserId: t.lineUserId } });
   }
 
   useEffect(() => {
@@ -74,17 +83,16 @@ export default function ChatToastHost() {
   if (toasts.length === 0) return null;
 
   return (
-    <div style={{
-      position: "fixed", bottom: 20, right: 20, zIndex: 10000,
-      display: "flex", flexDirection: "column", gap: 10, width: 320, maxWidth: "calc(100vw - 40px)",
-    }}>
+    <div className="chat-toast-container">
       {toasts.map((t) => (
         <div
           key={t.id}
+          role="button"
+          onClick={() => handleToastClick(t)}
           style={{
             background: "var(--color-white)", borderRadius: "var(--border-radius-1)", boxShadow: "var(--box-shadow)",
             border: "1px solid var(--color-light)", padding: 12,
-            display: "flex", gap: 10, alignItems: "flex-start",
+            display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
             animation: "slideUp 0.3s ease", opacity: t.dismissing ? 0 : 1, transition: "opacity 0.3s ease",
           }}
         >
@@ -99,7 +107,7 @@ export default function ChatToastHost() {
                 {t.displayName}{t.roomNumber ? ` · ห้อง ${t.roomNumber}` : ""}
               </strong>
               <button
-                type="button" onClick={() => removeToast(t.id)}
+                type="button" onClick={(e) => { e.stopPropagation(); removeToast(t.id); }}
                 style={{ background: "none", border: "none", color: "var(--color-dark-variant)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 6, flexShrink: 0 }}
               >
                 ×

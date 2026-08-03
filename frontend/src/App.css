@@ -2707,6 +2707,19 @@ body.dark-mode .import-format-hint code { background: rgba(255,255,255,0.07); co
 .chat-thread-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .chat-mobile-back { display: none; }
 
+/* ปุ่มลอย "ไปที่ข้อความล่าสุด" — โผล่มุมล่างขวาของกล่องข้อความตอนเลื่อนขึ้นไปดูข้อความเก่า (ดู atBottom
+ * ใน ChatPage.tsx) จุดแดงเล็กๆ มุมบนขวาบอกว่ามีข้อความใหม่เข้ามาระหว่างที่เลื่อนขึ้นไปอยู่ */
+.chat-jump-bottom-btn {
+  position: absolute; bottom: 12px; right: 20px; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--color-white); border: 1px solid var(--color-light); box-shadow: var(--box-shadow);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--color-dark-variant);
+  z-index: 5;
+}
+.chat-jump-bottom-dot {
+  position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--color-danger); border: 2px solid var(--color-white);
+}
+
 @media screen and (max-width: 768px) {
   .chat-page-wrap { height: calc(100vh - 130px); gap: 0; }
   .chat-list-pane { width: 100%; border-radius: 0 !important; }
@@ -2715,5 +2728,16 @@ body.dark-mode .import-format-hint code { background: rgba(255,255,255,0.07); co
   .chat-page-wrap.chat-thread-open .chat-list-pane { display: none; }
   .chat-page-wrap.chat-thread-open .chat-thread-pane { display: flex; }
   .chat-mobile-back { display: inline-flex; }
+}
+
+/* ป็อปอัพแจ้งเตือนข้อความแชทใหม่ (ChatToastHost) — จอกว้างอยู่มุมขวาล่างเหมือนแอปทั่วไป แต่บนมือถือ
+ * ย้ายไปไว้ขอบบนแทน เพราะมุมล่างมักโดนคีย์บอร์ด/แถบนำทางบังหรืออยู่นอกสายตา */
+.chat-toast-container {
+  position: fixed; bottom: 20px; right: 20px; z-index: 10000;
+  display: flex; flex-direction: column; gap: 10px; width: 320px; max-width: calc(100vw - 40px);
+}
+
+@media screen and (max-width: 768px) {
+  .chat-toast-container { top: 20px; bottom: auto; left: 20px; right: 20px; width: auto; max-width: none; }
 }
 

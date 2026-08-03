@@ -40,6 +40,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (!detail || detail.type !== "change" || !detail.label) return;
       // ข้ามการกระทำของตัวเอง — มี Toast แจ้งอยู่แล้วตอนกดบันทึก/ลบเอง ไม่ต้องซ้ำที่กระดิ่งอีก
       if (detail.actorUsername && detail.actorUsername === userRef.current?.username) return;
+      // ข้ามข้อความแชทใหม่จาก LINE — มีป็อปอัพ ChatToastHost แจ้งอยู่แล้วมุมขวาล่าง ไม่ต้องซ้ำที่กระดิ่งอีก
+      if (detail.entityType === "chat") return;
       setNotifications((prev) => [
         {
           id: `${detail.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
