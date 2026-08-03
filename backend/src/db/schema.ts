@@ -227,6 +227,10 @@ export const chatMessages = pgTable("chat_messages", {
   messageType: str("message_type"), // "text" | "image" | "unsupported"
   text: str("text"),
   imageUrl: str("image_url"),
+  fileUrl: str("file_url"),     // ไฟล์ที่ไม่ใช่รูปภาพ (ทั้งขาเข้า/ขาออก) — path สัมพัทธ์ /uploads/chat/...
+  fileName: str("file_name"),   // ชื่อไฟล์เดิมไว้แสดงผล
+  packageId: str("package_id"), // สติกเกอร์ (ทั้งขาเข้า/ขาออก)
+  stickerId: str("sticker_id"),
   senderName: str("sender_name"),
   createdAt: str("created_at"),
   readAt: str("read_at"), // ว่าง = ยังไม่อ่าน (เฉพาะข้อความ direction=in)

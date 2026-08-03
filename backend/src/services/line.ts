@@ -187,11 +187,19 @@ function isUsableImageUrl(url: string): boolean {
 // ชี้ไปที่โดเมน/URL สาธารณะของระบบก่อนปุ่มถึงจะโชว์ ถ้าไม่ได้ตั้งไว้จะไม่แสดงปุ่มเลย (เหมือน isUsableImageUrl
 // ด้านบนที่ต้องกรอง URL ที่ไม่ใช่ https:// ทิ้งเช่นกัน)
 function resolveSlipUrl(slipUrl: string | undefined): string {
-  if (!slipUrl) return "";
-  if (isUsableImageUrl(slipUrl)) return slipUrl;
+  return toPublicUrl(slipUrl ?? "");
+}
+
+// ตัวช่วยกลาง — แปลง path สัมพัทธ์ (เช่น "/uploads/chat/xxx.jpg") เป็น URL เต็มโดยเติม PUBLIC_BASE_URL
+// (ใช้ร่วมกันทั้งปุ่ม "ดูสลิป" ในใบเสร็จ และรูปภาพ/ไฟล์แนบที่พนักงานส่งผ่านหน้าแชท) ถ้าเป็น URL https:// อยู่แล้ว
+// (เช่นโลโก้ที่กรอกเป็นลิงก์ตรงๆ) คืนค่าเดิมไม่แตะต้อง ถ้าไม่มี PUBLIC_BASE_URL ตั้งไว้ คืนค่าว่าง (ไม่ส่งลิงก์
+// ที่ LINE/มือถือผู้เช่าเปิดไม่ได้จริงออกไป)
+export function toPublicUrl(path: string): string {
+  if (!path) return "";
+  if (isUsableImageUrl(path)) return path;
   const base = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
   if (!isUsableImageUrl(`${base}/`)) return "";
-  return `${base}${slipUrl.startsWith("/") ? "" : "/"}${slipUrl}`;
+  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
 interface LineAppearanceSettings {
@@ -318,6 +326,24 @@ export async function sendTextMessage(token: string, to: string, text: string) {
   await pushLineMessage(token, to, [{ type: "text", text }]);
 }
 
+// ส่งรูปภาพ — publicImageUrl ต้องเป็น URL https:// เต็มที่ LINE ดึงได้จริงแล้วเท่านั้น (ผ่าน toPublicUrl มาก่อน)
+// ใช้ URL เดียวกันทั้ง originalContentUrl/previewImageUrl เพื่อลดความซับซ้อน (ไม่ทำ thumbnail แยก)
+export async function sendImageMessage(token: string, to: string, publicImageUrl: string) {
+  await pushLineMessage(token, to, [{ type: "image", originalContentUrl: publicImageUrl, previewImageUrl: publicImageUrl }]);
+}
+
+// ส่งสติกเกอร์ทางการของ LINE (packageId/stickerId ต้องเป็นคู่ที่ LINE รองรับให้ส่งจริง — ดู whitelist
+// ALLOWED_STICKERS ใน routes/chat.ts ที่ validate ก่อนเรียกฟังก์ชันนี้)
+export async function sendStickerMessage(token: string, to: string, packageId: string, stickerId: string) {
+  await pushLineMessage(token, to, [{ type: "sticker", packageId, stickerId }]);
+}
+
+// LINE Messaging API ไม่มี message type "file" สำหรับส่งออก (บอทส่งไฟล์ดิบแบบที่ผู้ใช้ส่งเข้ามาไม่ได้)
+// จึงส่งเป็นข้อความตัวอักษรที่มีชื่อไฟล์ + ลิงก์ดาวน์โหลดแทน (LINE render ลิงก์เป็นปุ่มกดเปิดในเบราว์เซอร์ให้เอง)
+export async function sendFileLinkMessage(token: string, to: string, publicFileUrl: string, fileName: string) {
+  await sendTextMessage(token, to, `📎 ${fileName}\n${publicFileUrl}`);
+}
+
 // ตรวจลายเซ็น webhook (header "x-line-signature") — ต้องคำนวณจาก raw body ตรงๆ ก่อนแปลงเป็น JSON
 // (ดูคอมเมนต์ใน routes/lineWebhook.ts เรื่องทำไมต้องอ่าน raw body ก่อน) เทียบแบบ timing-safe กันโจมตี
 export function verifyLineSignature(channelSecret: string, rawBody: string, signatureHeader: string | undefined): boolean {
@@ -343,9 +369,10 @@ export async function getLineProfile(token: string, userId: string): Promise<str
   }
 }
 
-// ดาวน์โหลดรูปภาพที่ผู้เช่าส่งเข้ามาทาง LINE มาเก็บไว้ใน uploads/chat/ แล้วคืน path สัมพัทธ์ (เสิร์ฟผ่าน
-// route /uploads/* ที่มีอยู่แล้วใน index.ts) — คืนค่าว่างถ้าดาวน์โหลดไม่สำเร็จ ไม่ทำให้ webhook ทั้งฉบับล้ม
-export async function downloadLineImage(token: string, messageId: string): Promise<string> {
+// ดาวน์โหลดเนื้อหาที่ผู้เช่าส่งเข้ามาทาง LINE (รูปภาพ/ไฟล์) มาเก็บไว้ใน uploads/chat/ แล้วคืน path สัมพัทธ์
+// (เสิร์ฟผ่าน route /uploads/* ที่มีอยู่แล้วใน index.ts) — คืนค่าว่างถ้าดาวน์โหลดไม่สำเร็จ ไม่ทำให้ webhook
+// ทั้งฉบับล้ม — ext กำหนดนามสกุลไฟล์ที่เซฟ (รูปภาพใช้ "jpg" เสมอ, ไฟล์ทั่วไปใช้นามสกุลจาก fileName ที่ LINE ส่งมา)
+export async function downloadLineContent(token: string, messageId: string, ext: string): Promise<string> {
   try {
     const res = await fetch(`${LINE_CONTENT_URL}/${messageId}/content`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -354,12 +381,25 @@ export async function downloadLineImage(token: string, messageId: string): Promi
     const buffer = Buffer.from(await res.arrayBuffer());
     const dir = resolve(process.cwd(), "uploads", "chat");
     await mkdir(dir, { recursive: true });
-    const fileName = `${messageId}.jpg`;
+    const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "bin";
+    const fileName = `${messageId}.${safeExt}`;
     await writeFile(resolve(dir, fileName), buffer);
     return `/uploads/chat/${fileName}`;
   } catch {
     return "";
   }
+}
+
+// เซฟไฟล์ที่พนักงานอัปโหลดจากหน้าแชท (base64 data URI) ลง uploads/chat/out/ — แพทเทิร์นเดียวกับ
+// uploadRoomImage ใน routes/rooms.ts และ uploadPaymentSlip ใน routes/bills.ts
+export async function uploadChatAttachment(filename: string, base64Data: string): Promise<string> {
+  const dir = resolve(process.cwd(), "uploads", "chat", "out");
+  await mkdir(dir, { recursive: true });
+  const base64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+  const buffer = Buffer.from(base64, "base64");
+  const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  await writeFile(resolve(dir, safeName), buffer);
+  return `/uploads/chat/out/${safeName}`;
 }
 
 export interface SendLineResult {

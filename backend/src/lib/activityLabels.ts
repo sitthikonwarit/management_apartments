@@ -62,6 +62,8 @@ const RULES: LogRule[] = [
 
   // chat (แชท LINE) — เฉพาะการตอบกลับ, ข้อความเข้าจาก webhook ไม่ผ่านตารางนี้ (ไม่มี authUser ตอนนั้น)
   { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/reply$/, entityType: "chat", action: "create", label: "ส่งข้อความแชทตอบผู้เช่า" },
+  { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/send-attachment$/, entityType: "chat", action: "create", label: "ส่งไฟล์แนบทางแชท" },
+  { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/send-sticker$/, entityType: "chat", action: "create", label: "ส่งสติกเกอร์ทางแชท" },
   { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/read$/, entityType: "chat", action: "read", label: "อ่านข้อความแชท" },
 
   // auth — เฉพาะจัดการบัญชี (login/register/logout log แยกต่างหากในจุดที่เกิดเหตุการณ์จริง)

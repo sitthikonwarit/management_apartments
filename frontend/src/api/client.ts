@@ -162,6 +162,10 @@ export interface ChatMessage {
   messageType: string;
   text: string;
   imageUrl: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  packageId: string | null;
+  stickerId: string | null;
   senderName: string;
   createdAt: string;
   read: boolean;
@@ -173,6 +177,10 @@ export const chatApi = {
     api.get(`/chat/conversations/${lineUserId}/messages`).then((r) => r.data as ChatMessage[]),
   sendReply: (lineUserId: string, text: string) =>
     api.post(`/chat/conversations/${lineUserId}/reply`, { text }).then((r) => r.data as ChatMessage),
+  sendAttachment: (lineUserId: string, base64: string, name: string) =>
+    api.post(`/chat/conversations/${lineUserId}/send-attachment`, { base64, name }).then((r) => r.data as ChatMessage),
+  sendSticker: (lineUserId: string, packageId: string, stickerId: string) =>
+    api.post(`/chat/conversations/${lineUserId}/send-sticker`, { packageId, stickerId }).then((r) => r.data as ChatMessage),
   markRead: (lineUserId: string) =>
     api.patch(`/chat/conversations/${lineUserId}/read`).then((r) => r.data),
 };

@@ -5,7 +5,7 @@ import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { chatMessages, tenants } from "../db/schema";
-import { getLineSettings, verifyLineSignature, getLineProfile, downloadLineImage } from "../services/line";
+import { getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent } from "../services/line";
 import { broadcastChange } from "../lib/wsHub";
 
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
@@ -69,16 +69,29 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
         let messageType = "unsupported";
         let text = "";
         let imageUrl = "";
+        let fileUrl = "";
+        let fileName = "";
+        let packageId = "";
+        let stickerId = "";
         const msg = event.message;
         if (msg.type === "text") {
           messageType = "text";
           text = String(msg.text ?? "");
         } else if (msg.type === "image") {
           messageType = "image";
-          imageUrl = await downloadLineImage(settings.token, String(msg.id ?? ""));
+          imageUrl = await downloadLineContent(settings.token, String(msg.id ?? ""), "jpg");
           text = "[รูปภาพ]";
         } else if (msg.type === "sticker") {
+          messageType = "sticker";
+          packageId = String(msg.packageId ?? "");
+          stickerId = String(msg.stickerId ?? "");
           text = "[สติกเกอร์]";
+        } else if (msg.type === "file") {
+          messageType = "file";
+          fileName = String(msg.fileName ?? "ไฟล์แนบ");
+          const ext = fileName.includes(".") ? fileName.split(".").pop() ?? "bin" : "bin";
+          fileUrl = await downloadLineContent(settings.token, String(msg.id ?? ""), ext);
+          text = `[ไฟล์] ${fileName}`;
         } else if (msg.type === "video") {
           text = "[วิดีโอ]";
         } else if (msg.type === "location") {
@@ -95,6 +108,10 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
           messageType,
           text,
           imageUrl,
+          fileUrl,
+          fileName,
+          packageId,
+          stickerId,
           senderName,
           createdAt: new Date().toISOString(),
         });
