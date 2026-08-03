@@ -11,7 +11,7 @@ import liff from "@line/liff";
 import { liffApi } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import { monthYearLabel } from "../utils/billCalc";
-import { ChatBillMessage } from "../components/ChatBillCard";
+import { BillLinePreview, type BillLinePreviewConfig } from "../components/BillLinePreviewCard";
 
 type Status = "loading" | "linked" | "unlinked" | "error";
 
@@ -39,12 +39,18 @@ export default function LiffPaymentPage() {
     autoTrackingAvailable: false, qrGenerationAvailable: false,
   });
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
+  const [previewConfig, setPreviewConfig] = useState<BillLinePreviewConfig>({
+    appIdentity: { logoUrl: "", logoBg: { enabled: false, color: "#ffffff" }, nameText: "" },
+    features: { splitRentByResidents: false },
+    overdue: { enabled: false, day: 5, type: "fixed", amount: 0 },
+  });
   const [accessToken, setAccessToken] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // ป็อปอัพ "ดูรายละเอียดบิล"
+  // ป็อปอัพ "ดูรายละเอียดบิล" — เรนเดอร์ด้วย BillLinePreview หน้าตาแบบเดียวกับ "บิลอิเล็กทรอนิกส์ (LINE)"
+  // ที่พนักงานเห็นในหน้า Bills
   const [detailItem, setDetailItem] = useState<OutstandingItem | null>(null);
-  const [detailSnapshot, setDetailSnapshot] = useState<any>(null);
+  const [detailBill, setDetailBill] = useState<{ item: any; monthYear: string } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // ป็อปอัพ "จ่ายงวดนี้" — เลือกจำนวนเงิน + สร้าง/แสดง QR + โพลสถานะ
@@ -72,6 +78,7 @@ export default function LiffPaymentPage() {
         const cfg = await liffApi.getConfig();
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
+        setPreviewConfig({ appIdentity: cfg.appIdentity, features: cfg.features, overdue: cfg.overdue });
 
         const liffId = extractLiffId(cfg.liffPaymentUrl);
         if (!liffId) { setErrorMsg("ระบบยังไม่ได้ตั้งค่า LIFF Payment URL กรุณาติดต่อผู้ดูแลระบบ"); setStatus("error"); return; }
@@ -115,13 +122,13 @@ export default function LiffPaymentPage() {
 
   async function openDetail(item: OutstandingItem) {
     setDetailItem(item);
-    setDetailSnapshot(null);
+    setDetailBill(null);
     setLoadingDetail(true);
     try {
-      const { snapshot } = await liffApi.billDetail(accessToken, item.billId, item.roomId);
-      setDetailSnapshot(snapshot);
-    } catch (e: any) {
-      setDetailSnapshot(null);
+      const result = await liffApi.billDetail(accessToken, item.billId, item.roomId);
+      setDetailBill(result);
+    } catch {
+      setDetailBill(null);
     } finally {
       setLoadingDetail(false);
     }
@@ -244,6 +251,12 @@ export default function LiffPaymentPage() {
                     <span className="small">{monthYearLabel(it.monthYear)}</span>
                     <span className="fw-bold">{fmtMoney(it.amount)} ฿</span>
                   </div>
+                  {it.paidAmount > 0 && (
+                    <div className="d-flex justify-content-between align-items-center small text-success">
+                      <span><i className="fas fa-check-circle me-1" />ชำระไปแล้ว</span>
+                      <span>{fmtMoney(it.paidAmount)} ฿ / {fmtMoney(it.total)} ฿</span>
+                    </div>
+                  )}
                   <div className="d-flex gap-2 mt-2">
                     <button className="btn btn-sm btn-outline-secondary flex-grow-1" onClick={() => openDetail(it)}>
                       <i className="fas fa-list-ul me-1" />ดูรายละเอียด
@@ -260,9 +273,17 @@ export default function LiffPaymentPage() {
           <>
             <div className="p-3 rounded mb-3" style={{ background: "var(--color-background)", border: "1px solid var(--color-light)" }}>
               {items.map((it) => (
-                <div key={`${it.billId}-${it.roomId}`} className="d-flex justify-content-between small mb-1">
-                  <span className="text-muted">{monthYearLabel(it.monthYear)}</span>
-                  <span>{fmtMoney(it.amount)} ฿</span>
+                <div key={`${it.billId}-${it.roomId}`} className="mb-1">
+                  <div className="d-flex justify-content-between small">
+                    <span className="text-muted">{monthYearLabel(it.monthYear)}</span>
+                    <span>{fmtMoney(it.amount)} ฿</span>
+                  </div>
+                  {it.paidAmount > 0 && (
+                    <div className="d-flex justify-content-between text-success" style={{ fontSize: 11 }}>
+                      <span>ชำระไปแล้ว</span>
+                      <span>{fmtMoney(it.paidAmount)} ฿ / {fmtMoney(it.total)} ฿</span>
+                    </div>
+                  )}
                 </div>
               ))}
               <hr className="my-2" />
@@ -301,13 +322,13 @@ export default function LiffPaymentPage() {
 
       {detailItem && (
         <div className="confirm-overlay" onClick={() => setDetailItem(null)}>
-          <div className="confirm-dialog" style={{ maxWidth: 340, width: "92%", textAlign: "left", padding: 0, background: "transparent", boxShadow: "none" }} onClick={(e) => e.stopPropagation()}>
+          <div className="confirm-dialog" style={{ maxWidth: 400, width: "92%", textAlign: "left", padding: 0, background: "transparent", boxShadow: "none" }} onClick={(e) => e.stopPropagation()}>
             {loadingDetail ? (
               <div className="text-center p-5" style={{ background: "#fff", borderRadius: 14 }}>
                 <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
               </div>
-            ) : detailSnapshot ? (
-              <ChatBillMessage messageType="bill" raw={JSON.stringify(detailSnapshot)} />
+            ) : detailBill ? (
+              <BillLinePreview item={detailBill.item} monthYear={detailBill.monthYear} config={previewConfig} />
             ) : (
               <div className="room-modal-error p-3" style={{ background: "#fff", borderRadius: 14 }}>โหลดรายละเอียดบิลไม่สำเร็จ</div>
             )}

@@ -8,7 +8,7 @@ import { db } from "../db";
 import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents } from "../db/schema";
 import {
   getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
-  getOutstandingBillsForTenant, getBillItemForTenant, buildChatBillSnapshot,
+  getOutstandingBillsForTenant, getBillItemForTenant,
   getAllBillsForTenant, getPaymentHistoryForTenant, uploadChatAttachment,
 } from "../services/line";
 import { linkRichMenuToUser } from "../services/richMenu";
@@ -56,6 +56,16 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         logoUrl: row?.logoUrl || "",
         nameText: row?.appName || "",
         logoBg: { enabled: row?.logoBgEnabled === "true", color: row?.logoBgColor || "#ffffff" },
+      },
+      // ไม่ใช่ข้อมูลลับ — ให้หน้า LIFF Payment/Profile เรนเดอร์การ์ดบิลด้วย BillLinePreview แบบเดียวกับ
+      // ที่พนักงานเห็นในหน้า Bills (ดู components/BillLinePreviewCard.tsx) ได้ครบ ไม่ต้องพึ่ง useAppConfig()
+      // ที่ต้องล็อกอินพนักงานก่อนถึงจะดึงได้
+      features: { splitRentByResidents: row?.splitRentByResidents === "true" },
+      overdue: {
+        enabled: row?.overdueEnabled === "true",
+        day: Number(row?.overdueDay) || 0,
+        type: row?.overdueFineType || "fixed",
+        amount: Number(row?.overdueFineAmount) || 0,
       },
     };
   })
@@ -149,8 +159,9 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       },
     };
   })
-  // กดปุ่ม "ดูรายละเอียด" ที่บิลเดือนใดเดือนหนึ่งในหน้า LIFF Payment — คืนข้อมูลชุดเดียวกับที่การ์ดบิลใน
-  // หน้าแชท (ChatBillMessage) ใช้ ให้หน้าตาตรงกันเป๊ะๆ (ดู buildChatBillSnapshot ใน services/line.ts)
+  // กดปุ่ม "ดูรายละเอียด" ที่บิลเดือนใดเดือนหนึ่งในหน้า LIFF Payment/Profile — คืน item ดิบ (ตรงกับ
+  // BillItem ใน frontend/src/utils/billCalc.ts) ให้ฝั่ง frontend เรนเดอร์ด้วย BillLinePreview เดียวกับที่
+  // พนักงานเห็นในหน้า Bills (หน้าตาแบบ "บิลอิเล็กทรอนิกส์ LINE") ไม่ใช่การ์ดแบบย่อในหน้าแชท
   .post("/bill-detail", async ({ body, set }) => {
     const { accessToken, billId, roomId } = body as { accessToken?: string; billId?: string; roomId?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
@@ -165,8 +176,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const found = await getBillItemForTenant(billId, roomId, tenant.id);
     if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
 
-    const settings = await getLineSettings();
-    return { snapshot: buildChatBillSnapshot(found.item, found.monthYear, settings) };
+    return { item: found.item, monthYear: found.monthYear };
   })
   // เลือกจำนวนเงินที่จะจ่ายรอบนี้ (ไม่ต้องเต็มยอดบิล จ่ายเป็นงวดได้) แล้วบันทึก "รายการรอชำระ" ไว้จับคู่กับ
   // สลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts) — สร้าง QR PromptPay ระบุยอดจริงให้ด้วยถ้ามี

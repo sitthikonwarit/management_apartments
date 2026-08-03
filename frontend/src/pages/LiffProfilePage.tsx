@@ -1,12 +1,15 @@
 // หน้า LIFF Profile — ปลายทางของปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member แสดงข้อมูลส่วนตัว + บิลทุกใบ (ทั้งจ่ายแล้ว
-// และค้างอยู่) + ประวัติการชำระเงินทั้งหมดของผู้เช่าคนนั้น กดดูรายละเอียดแต่ละบิลได้ (การ์ดเดียวกับหน้าแชท)
+// และค้างอยู่) + ประวัติการชำระเงินทั้งหมดของผู้เช่าคนนั้น กดดูรายละเอียดแต่ละบิลได้ (หน้าตาแบบ "บิลอิเล็กทรอนิกส์
+// (LINE)" เดียวกับที่พนักงานเห็นในหน้า Bills — ดู BillLinePreviewCard.tsx) และดูสลิปการโอนแต่ละรายการในประวัติ
+// การชำระเงินได้
 import { useEffect, useState } from "react";
 import liff from "@line/liff";
 import { liffApi } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateOnlyString } from "../utils/yearFormat";
-import { ChatBillMessage } from "../components/ChatBillCard";
+import { BillLinePreview, type BillLinePreviewConfig } from "../components/BillLinePreviewCard";
+import ImageLightbox from "../components/ImageLightbox";
 
 type Status = "loading" | "linked" | "unlinked" | "error";
 
@@ -34,6 +37,11 @@ export default function LiffProfilePage() {
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
+  const [previewConfig, setPreviewConfig] = useState<BillLinePreviewConfig>({
+    appIdentity: { logoUrl: "", logoBg: { enabled: false, color: "#ffffff" }, nameText: "" },
+    features: { splitRentByResidents: false },
+    overdue: { enabled: false, day: 5, type: "fixed", amount: 0 },
+  });
   const [accessToken, setAccessToken] = useState("");
 
   const [tenant, setTenant] = useState({ tenantName: "", roomNumber: "", tel: "", contractStartDate: "", contractEndDate: "" });
@@ -41,9 +49,10 @@ export default function LiffProfilePage() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentRow[]>([]);
   const [tab, setTab] = useState<"bills" | "payments">("bills");
 
-  const [detailBill, setDetailBill] = useState<BillRow | null>(null);
-  const [detailSnapshot, setDetailSnapshot] = useState<any>(null);
+  const [selectedBill, setSelectedBill] = useState<BillRow | null>(null);
+  const [detailData, setDetailData] = useState<{ item: any; monthYear: string } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [slipToView, setSlipToView] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +61,7 @@ export default function LiffProfilePage() {
         const cfg = await liffApi.getConfig();
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
+        setPreviewConfig({ appIdentity: cfg.appIdentity, features: cfg.features, overdue: cfg.overdue });
 
         const liffId = extractLiffId(cfg.liffProfileUrl);
         if (!liffId) { setErrorMsg("ระบบยังไม่ได้ตั้งค่า LIFF Profile URL กรุณาติดต่อผู้ดูแลระบบ"); setStatus("error"); return; }
@@ -83,14 +93,14 @@ export default function LiffProfilePage() {
   }, []);
 
   async function openDetail(bill: BillRow) {
-    setDetailBill(bill);
-    setDetailSnapshot(null);
+    setSelectedBill(bill);
+    setDetailData(null);
     setLoadingDetail(true);
     try {
-      const { snapshot } = await liffApi.billDetail(accessToken, bill.billId, bill.roomId);
-      setDetailSnapshot(snapshot);
+      const result = await liffApi.billDetail(accessToken, bill.billId, bill.roomId);
+      setDetailData(result);
     } catch {
-      setDetailSnapshot(null);
+      setDetailData(null);
     } finally {
       setLoadingDetail(false);
     }
@@ -174,8 +184,15 @@ export default function LiffProfilePage() {
                   <span className="small">{p.paymentDate ? thaiDateOnlyString(new Date(p.paymentDate)) : "-"} — {monthYearLabel(p.monthYear)}</span>
                   <span className="fw-bold">{fmtMoney(p.amount)} ฿</span>
                 </div>
-                <div className="small text-muted">
-                  {p.method === "scan" ? "สแกน/โอน" : "เงินสด"}{p.cancelled ? " · ยกเลิกแล้ว" : ""}{p.note ? ` · ${p.note}` : ""}
+                <div className="d-flex justify-content-between align-items-center">
+                  <div className="small text-muted">
+                    {p.method === "scan" ? "สแกน/โอน" : "เงินสด"}{p.cancelled ? " · ยกเลิกแล้ว" : ""}{p.note ? ` · ${p.note}` : ""}
+                  </div>
+                  {p.slipUrl && (
+                    <button className="btn btn-sm btn-outline-secondary py-0 px-2" onClick={() => setSlipToView(p.slipUrl)}>
+                      <i className="fas fa-image me-1" />ดูสลิป
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -183,21 +200,25 @@ export default function LiffProfilePage() {
         </div>
       </div>
 
-      {detailBill && (
-        <div className="confirm-overlay" onClick={() => setDetailBill(null)}>
-          <div className="confirm-dialog" style={{ maxWidth: 340, width: "92%", textAlign: "left", padding: 0, background: "transparent", boxShadow: "none" }} onClick={(e) => e.stopPropagation()}>
+      {selectedBill && (
+        <div className="confirm-overlay" onClick={() => setSelectedBill(null)}>
+          <div className="confirm-dialog" style={{ maxWidth: 400, width: "92%", textAlign: "left", padding: 0, background: "transparent", boxShadow: "none" }} onClick={(e) => e.stopPropagation()}>
             {loadingDetail ? (
               <div className="text-center p-5" style={{ background: "#fff", borderRadius: 14 }}>
                 <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
               </div>
-            ) : detailSnapshot ? (
-              <ChatBillMessage messageType="bill" raw={JSON.stringify(detailSnapshot)} />
+            ) : detailData ? (
+              <BillLinePreview item={detailData.item} monthYear={detailData.monthYear} config={previewConfig} />
             ) : (
               <div className="room-modal-error p-3" style={{ background: "#fff", borderRadius: 14 }}>โหลดรายละเอียดบิลไม่สำเร็จ</div>
             )}
-            <button className="btn btn-outline-secondary w-100 mt-2" onClick={() => setDetailBill(null)}>ปิด</button>
+            <button className="btn btn-outline-secondary w-100 mt-2" onClick={() => setSelectedBill(null)}>ปิด</button>
           </div>
         </div>
+      )}
+
+      {slipToView && (
+        <ImageLightbox images={[slipToView]} index={0} onClose={() => setSlipToView(null)} onIndexChange={() => {}} />
       )}
     </div>
   );

@@ -236,6 +236,8 @@ export const liffApi = {
     liffRepairUrl: string;
     contactPhone: string;
     appIdentity: { logoUrl: string; nameText: string; logoBg: { enabled: boolean; color: string } };
+    features: { splitRentByResidents: boolean };
+    overdue: { enabled: boolean; day: number; type: "fixed" | "daily"; amount: number };
   }),
   login: (accessToken: string) => api.post("/liff/login", { accessToken }).then((r) => r.data as
     | { linked: false; lineUserId: string; displayName: string }
@@ -256,7 +258,7 @@ export const liffApi = {
       }
   ),
   billDetail: (accessToken: string, billId: string, roomId: string) =>
-    api.post("/liff/bill-detail", { accessToken, billId, roomId }).then((r) => r.data as { snapshot: any }),
+    api.post("/liff/bill-detail", { accessToken, billId, roomId }).then((r) => r.data as { item: any; monthYear: string }),
   generateQr: (accessToken: string, billId: string, roomId: string, amount: number) =>
     api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }).then((r) => r.data as {
       intentId: string;
