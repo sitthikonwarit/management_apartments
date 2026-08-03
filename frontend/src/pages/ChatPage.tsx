@@ -5,6 +5,8 @@ import { thaiDateTimeString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastError } from "../utils/toast";
 import { LINE_STICKERS, stickerThumbUrl } from "../utils/lineStickers";
+import { AVATAR_URL } from "../components/TenantTableView";
+import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -27,8 +29,12 @@ export default function ChatPage() {
   const [attaching, setAttaching] = useState(false);
   const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [search, setSearch] = useState("");
+  const [detailTab, setDetailTab] = useState<ChatDetailTab | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   function loadConversations() {
     chatApi.getConversations().then(setConversations).catch(() => {});
@@ -38,6 +44,7 @@ export default function ChatPage() {
 
   // เปิดการสนทนาที่เลือก — โหลดข้อความ + มาร์คว่าอ่านแล้วทันที (ไม่ต้องรอตอบก่อน)
   useEffect(() => {
+    setDetailTab(null);
     if (!selected) { setMessages([]); return; }
     setLoadingMessages(true);
     chatApi.getMessages(selected).then(setMessages).finally(() => setLoadingMessages(false));
@@ -47,6 +54,29 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // แชทเก่าที่ยังไม่เคยแคชรูปโปรไฟล์ไว้ (ก่อนมีฟีเจอร์นี้) — ดึงรูปมาแคชครั้งเดียวตอนเปิดดู ไม่ต้องรอ
+  // ข้อความเข้าใหม่จาก LINE ถึงจะมีรูป
+  useEffect(() => {
+    if (!selected) return;
+    const conv = conversations.find((c) => c.lineUserId === selected);
+    if (!conv || conv.pictureUrl) return;
+    chatApi.refreshProfile(selected)
+      .then(({ pictureUrl }) => {
+        if (!pictureUrl) return;
+        setConversations((prev) => prev.map((c) => (c.lineUserId === selected ? { ...c, pictureUrl } : c)));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
+
+  function jumpToMessage(messageId: string) {
+    const node = messageRefs.current.get(messageId);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightId(messageId);
+    setTimeout(() => setHighlightId((cur) => (cur === messageId ? null : cur)), 1500);
+  }
 
   // มีข้อความแชทใหม่เข้ามา (webhook) หรือมีคนตอบจากเครื่องอื่น — รีเฟรชรายชื่อสนทนาเสมอ และรีเฟรช
   // ข้อความในเธรดที่เปิดอยู่ด้วยถ้ามี (ไม่ mark read ซ้ำ เผื่อเป็นข้อความเข้าใหม่ที่ยังไม่ได้อ่านจริง)
@@ -107,6 +137,9 @@ export default function ChatPage() {
   }
 
   const activeConversation = conversations.find((c) => c.lineUserId === selected);
+  const filteredConversations = conversations.filter((c) =>
+    `${c.displayName} ${c.roomNumber ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   return (
     <div className={`chat-page-wrap${selected ? " chat-thread-open" : ""}`}>
@@ -114,28 +147,46 @@ export default function ChatPage() {
         background: "var(--color-white)",
         borderRadius: "var(--border-radius-1)", border: "1px solid var(--color-light)",
       }}>
+        <div className="search-container p-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
+          <i className="fas fa-search" />
+          <input
+            type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ..."
+            value={search} onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
         {conversations.length === 0 && (
           <p className="text-muted small p-3 mb-0">ยังไม่มีข้อความเข้ามาจาก LINE</p>
         )}
-        {conversations.map((c) => (
+        {conversations.length > 0 && filteredConversations.length === 0 && (
+          <p className="text-muted small p-3 mb-0">ไม่พบชื่อที่ค้นหา</p>
+        )}
+        {filteredConversations.map((c) => (
           <div
             key={c.lineUserId}
             onClick={() => setSelected(c.lineUserId)}
             style={{
               cursor: "pointer", padding: "10px 12px", borderBottom: "1px solid var(--color-light)",
               background: c.lineUserId === selected ? "var(--color-background)" : "transparent",
+              display: "flex", gap: 10, alignItems: "flex-start",
             }}
           >
-            <div className="d-flex justify-content-between align-items-center">
-              <strong className="small text-truncate" style={{ maxWidth: 200 }}>
-                {c.displayName}{c.roomNumber ? ` · ห้อง ${c.roomNumber}` : ""}
-              </strong>
-              {c.unreadCount > 0 && <span className="badge rounded-pill bg-danger">{c.unreadCount}</span>}
+            <img
+              src={c.pictureUrl || AVATAR_URL} alt="" referrerPolicy="no-referrer"
+              style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+              onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
+            />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="d-flex justify-content-between align-items-center">
+                <strong className="small text-truncate" style={{ maxWidth: 160 }}>
+                  {c.displayName}{c.roomNumber ? ` · ห้อง ${c.roomNumber}` : ""}
+                </strong>
+                {c.unreadCount > 0 && <span className="badge rounded-pill bg-danger">{c.unreadCount}</span>}
+              </div>
+              <div className="text-muted small text-truncate">
+                {c.lastDirection === "out" ? "คุณ: " : ""}{c.lastMessage}
+              </div>
+              <div className="text-muted" style={{ fontSize: 11 }}>{thaiDateTimeString(new Date(c.lastMessageAt))}</div>
             </div>
-            <div className="text-muted small text-truncate">
-              {c.lastDirection === "out" ? "คุณ: " : ""}{c.lastMessage}
-            </div>
-            <div className="text-muted" style={{ fontSize: 11 }}>{thaiDateTimeString(new Date(c.lastMessageAt))}</div>
           </div>
         ))}
       </div>
@@ -158,20 +209,41 @@ export default function ChatPage() {
               >
                 <i className="fas fa-arrow-left" />
               </button>
-              <div>
+              <img
+                src={activeConversation?.pictureUrl || AVATAR_URL} alt="" referrerPolicy="no-referrer"
+                style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", marginRight: 10, flexShrink: 0 }}
+                onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
+              />
+              <div className="flex-grow-1" style={{ minWidth: 0 }}>
                 <strong>{activeConversation?.displayName ?? "ไม่ทราบชื่อ"}</strong>
                 {activeConversation?.roomNumber && (
                   <span className="text-muted small ms-2">ห้อง {activeConversation.roomNumber}</span>
                 )}
               </div>
+              <button
+                type="button" className="btn btn-sm btn-outline-secondary" title="รายละเอียดการสนทนา"
+                onClick={() => setDetailTab("bills")}
+              >
+                <i className="fas fa-ellipsis-vertical" />
+              </button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               {loadingMessages && <div className="text-muted small">กำลังโหลด...</div>}
               {messages.map((m) => (
-                <div key={m.id} style={{
-                  alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
-                  maxWidth: "70%", minWidth: 0,
-                }}>
+                <div
+                  key={m.id}
+                  ref={(node) => {
+                    if (node) messageRefs.current.set(m.id, node);
+                    else messageRefs.current.delete(m.id);
+                  }}
+                  style={{
+                    alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
+                    maxWidth: "70%", minWidth: 0,
+                    borderRadius: "var(--border-radius-1)",
+                    transition: "background-color 0.3s ease",
+                    backgroundColor: highlightId === m.id ? "rgba(255, 214, 0, 0.35)" : "transparent",
+                  }}
+                >
                   {m.messageType === "sticker" && m.stickerId ? (
                     // สติกเกอร์แสดงแบบลอยเดี่ยวๆ ไม่มีกล่องพื้นหลัง เหมือนแอปแชททั่วไป
                     <img src={stickerThumbUrl(m.stickerId)} alt="สติกเกอร์" style={{ width: 110, height: 110, objectFit: "contain" }} />
@@ -257,6 +329,16 @@ export default function ChatPage() {
           </>
         )}
       </div>
+
+      {selected && detailTab && (
+        <ChatDetailModal
+          lineUserId={selected}
+          messages={messages}
+          initialTab={detailTab}
+          onClose={() => setDetailTab(null)}
+          onJumpToMessage={jumpToMessage}
+        />
+      )}
     </div>
   );
 }

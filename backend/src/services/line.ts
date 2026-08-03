@@ -6,7 +6,25 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { resolve } from "path";
 import { db } from "../db";
-import { appConfig, bills, tenants } from "../db/schema";
+import { appConfig, bills, lineProfiles, tenants } from "../db/schema";
+
+// หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
+// ใช้ทั้งใน webhook (หาชื่อผู้ส่ง) และหน้าแชท (หาบิลค้างชำระของ tenant ที่ผูกกับ conversation นี้)
+export async function findTenantByLineUserId(lineUserId: string) {
+  const rows = await db.select().from(tenants);
+  for (const t of rows) {
+    if ((t.lineUserId ?? "").trim() === lineUserId) return t;
+    try {
+      const coResidents = t.coResidents ? JSON.parse(t.coResidents) : [];
+      if (Array.isArray(coResidents) && coResidents.some((c: any) => String(c?.lineId ?? "").trim() === lineUserId)) {
+        return t;
+      }
+    } catch {
+      // co-residents parse ไม่ได้ ข้ามไปเช็คคนถัดไป
+    }
+  }
+  return null;
+}
 
 const CONFIG_ID = "default";
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
@@ -355,17 +373,33 @@ export function verifyLineSignature(channelSecret: string, rawBody: string, sign
   return timingSafeEqual(a, b);
 }
 
-// ดึงชื่อโปรไฟล์ LINE ของผู้ส่ง — ใช้ตอนหาไม่เจอผู้เช่าที่ผูก lineUserId นี้ไว้ (best-effort เฉยๆ ไม่ throw)
-export async function getLineProfile(token: string, userId: string): Promise<string> {
+// ดึงโปรไฟล์ LINE ของผู้ใช้ (ชื่อ + รูปโปรไฟล์) — ใช้ตอนหาไม่เจอผู้เช่าที่ผูก lineUserId นี้ไว้ และตอนแคช
+// รูปโปรไฟล์ไว้แสดงในหน้าแชท (best-effort เฉยๆ ไม่ throw คืนค่าว่างถ้าดึงไม่สำเร็จ)
+export async function getLineProfile(token: string, userId: string): Promise<{ displayName: string; pictureUrl: string }> {
   try {
     const res = await fetch(`${LINE_PROFILE_URL}/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return "";
+    if (!res.ok) return { displayName: "", pictureUrl: "" };
     const data = await res.json();
-    return String(data?.displayName ?? "");
+    return { displayName: String(data?.displayName ?? ""), pictureUrl: String(data?.pictureUrl ?? "") };
   } catch {
-    return "";
+    return { displayName: "", pictureUrl: "" };
+  }
+}
+
+// แคชรูปโปรไฟล์+ชื่อ LINE ลงตาราง line_profiles (upsert แบบ select-then-insert/update ตามแพทเทิร์นเดิม
+// ในไฟล์นี้ที่ไม่ใช้ onConflict) — เรียกจาก webhook (ข้อความเข้าใหม่) และปุ่มรีเฟรชโปรไฟล์ในหน้าแชท
+export async function cacheLineProfile(lineUserId: string, profile: { displayName: string; pictureUrl: string }) {
+  if (!profile.displayName && !profile.pictureUrl) return;
+  const now = new Date().toISOString();
+  const [existing] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, lineUserId));
+  if (existing) {
+    await db.update(lineProfiles)
+      .set({ displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now })
+      .where(eq(lineProfiles.lineUserId, lineUserId));
+  } else {
+    await db.insert(lineProfiles).values({ lineUserId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now });
   }
 }
 

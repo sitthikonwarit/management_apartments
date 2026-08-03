@@ -4,25 +4,26 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, tenants } from "../db/schema";
-import { getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent } from "../services/line";
+import { chatMessages, lineProfiles } from "../db/schema";
+import {
+  getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent,
+  findTenantByLineUserId, cacheLineProfile,
+} from "../services/line";
 import { broadcastChange } from "../lib/wsHub";
 
-// หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
-async function findTenantByLineUserId(lineUserId: string) {
-  const rows = await db.select().from(tenants);
-  for (const t of rows) {
-    if ((t.lineUserId ?? "").trim() === lineUserId) return t;
-    try {
-      const coResidents = t.coResidents ? JSON.parse(t.coResidents) : [];
-      if (Array.isArray(coResidents) && coResidents.some((c: any) => String(c?.lineId ?? "").trim() === lineUserId)) {
-        return t;
-      }
-    } catch {
-      // co-residents parse ไม่ได้ ข้ามไปเช็คคนถัดไป
-    }
+const PROFILE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 วัน — ไม่ต้องยิง LINE API ทุกข้อความที่เข้ามา
+
+// แคชรูปโปรไฟล์ LINE ของผู้ส่ง ถ้ายังไม่เคยแคชไว้หรือแคชเก่าเกิน 7 วันแล้ว (best-effort ไม่ throw กัน webhook ล้ม)
+async function refreshProfileCacheIfStale(token: string, lineUserId: string, alreadyFetched: { displayName: string; pictureUrl: string } | null) {
+  try {
+    const [existing] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, lineUserId));
+    const isStale = !existing || (Date.now() - new Date(existing.updatedAt || 0).getTime() > PROFILE_CACHE_MAX_AGE_MS);
+    if (!isStale) return;
+    const profile = alreadyFetched ?? await getLineProfile(token, lineUserId);
+    await cacheLineProfile(lineUserId, profile);
+  } catch {
+    // แคชรูปโปรไฟล์ไม่สำเร็จ ไม่ใช่เรื่องคอขาดบาดตาย ปล่อยผ่านไป
   }
-  return null;
 }
 
 export const lineWebhookRoute = new Elysia({ prefix: "/line" })
@@ -62,9 +63,11 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
         if (!lineUserId) continue;
 
         const tenant = await findTenantByLineUserId(lineUserId);
+        const lineProfile = tenant ? null : await getLineProfile(settings.token, lineUserId);
         const senderName = tenant
           ? `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim()
-          : await getLineProfile(settings.token, lineUserId);
+          : lineProfile?.displayName ?? "";
+        await refreshProfileCacheIfStale(settings.token, lineUserId, lineProfile);
 
         let messageType = "unsupported";
         let text = "";

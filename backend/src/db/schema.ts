@@ -236,6 +236,15 @@ export const chatMessages = pgTable("chat_messages", {
   readAt: str("read_at"), // ว่าง = ยังไม่อ่าน (เฉพาะข้อความ direction=in)
 });
 
+// แคชโปรไฟล์ LINE (ชื่อ+รูปโปรไฟล์) ต่อ lineUserId — ใช้แสดงรูปโปรไฟล์ในหน้าแชท เติมข้อมูลจาก LINE Profile
+// API ตอนมีข้อความเข้าใหม่ (ดู lineWebhook.ts) หรือกดรีเฟรชเองจากหน้าแชท (ดู routes/chat.ts)
+export const lineProfiles = pgTable("line_profiles", {
+  lineUserId: text("line_user_id").primaryKey(),
+  displayName: str("display_name"),
+  pictureUrl: str("picture_url"),
+  updatedAt: str("updated_at"),
+});
+
 export const appConfig = pgTable("app_config", {
   id: text("id").primaryKey(),
   electricRate: str("electric_rate"),

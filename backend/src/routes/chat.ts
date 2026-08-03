@@ -1,11 +1,17 @@
 import { Elysia } from "elysia";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, rooms, tenants, users } from "../db/schema";
+import { bills, chatMessages, lineProfiles, rooms, tenants, users } from "../db/schema";
 import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
-  uploadChatAttachment, toPublicUrl,
+  uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
 } from "../services/line";
+
+// แปลง "MM/YYYY" เป็นตัวเลขเทียบลำดับได้ (พอร์ตมาจาก frontend/src/utils/billCalc.ts myScore())
+function myScore(my: string): number {
+  const [m, y] = (my || "").split("/");
+  return (parseInt(y, 10) || 0) * 100 + (parseInt(m, 10) || 0);
+}
 
 // สติกเกอร์ที่พนักงานเลือกส่งได้ — ต้องเป็นคู่ packageId/stickerId ที่ LINE เผยแพร่ทางการให้ส่งผ่าน
 // Messaging API เท่านั้น (ไม่ใช่สติกเกอร์ที่ผู้เช่าซื้อเอง อ้างอิงจาก
@@ -54,13 +60,15 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   // รายชื่อการสนทนาทั้งหมด เรียงตามข้อความล่าสุดก่อน — group ข้อความทั้งตารางด้วย JS (ข้อมูลระดับหอพักเดียว
   // ไม่ใหญ่พอที่จะต้องทำ aggregate query เอง เหมือนที่ tenants.ts/settings.ts ก็โหลดทั้งตารางมาประมวลผลเอง)
   .get("/conversations", async () => {
-    const [messages, tenantRows, roomRows] = await Promise.all([
+    const [messages, tenantRows, roomRows, profileRows] = await Promise.all([
       db.select().from(chatMessages),
       db.select().from(tenants),
       db.select().from(rooms),
+      db.select().from(lineProfiles),
     ]);
     const tenantMap = new Map(tenantRows.map((t) => [t.id, t]));
     const roomMap = new Map(roomRows.map((r) => [r.id, r]));
+    const profileMap = new Map(profileRows.map((p) => [p.lineUserId, p]));
 
     const groups = new Map<string, Array<typeof chatMessages.$inferSelect>>();
     for (const m of messages) {
@@ -84,6 +92,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
         tenantId: tenantId || null,
         displayName,
         roomNumber: room?.number || null,
+        pictureUrl: profileMap.get(lineUserId)?.pictureUrl || null,
         lastMessage: last.messageType === "text" ? last.text : last.text || "[ไฟล์แนบ]",
         lastMessageAt: last.createdAt,
         lastDirection: last.direction as "in" | "out",
@@ -235,4 +244,36 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   .patch("/conversations/:lineUserId/read", async ({ params }) => {
     await markInboundRead(params.lineUserId);
     return { ok: true };
+  })
+  // ดึงรูปโปรไฟล์/ชื่อ LINE สดๆ มาแคชใหม่ — ใช้ตอนเปิดแชทที่ยังไม่เคยแคชรูปไว้ (เช่น สนทนาเก่าก่อนมีฟีเจอร์นี้)
+  .post("/conversations/:lineUserId/refresh-profile", async ({ params, set }) => {
+    const settings = await getLineSettings();
+    if (!settings.token) { set.status = 400; return { error: "ยังไม่ได้ตั้งค่า LINE Channel Access Token" }; }
+    const profile = await getLineProfile(settings.token, params.lineUserId);
+    await cacheLineProfile(params.lineUserId, profile);
+    return { pictureUrl: profile.pictureUrl || null, displayName: profile.displayName || null };
+  })
+  // ยอดค้างชำระทั้งหมดของผู้เช่าที่ผูกกับ conversation นี้ (ทุกบิลที่ยังไม่จ่ายครบ ไม่จำกัดแค่เดือนก่อนหน้า)
+  .get("/conversations/:lineUserId/outstanding-bills", async ({ params }) => {
+    const tenant = await findTenantByLineUserId(params.lineUserId);
+    if (!tenant) return { tenantId: null, items: [], total: 0 };
+
+    const billRows = await db.select().from(bills);
+    const items: Array<{ billId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; amount: number }> = [];
+    for (const row of billRows) {
+      let data: any[] = [];
+      try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
+      for (const item of data) {
+        if (String(item?.tenantId ?? "") !== tenant.id) continue;
+        const total = Number(item?.total) || 0;
+        const paidAmount = Number(item?.paidAmount) || 0;
+        const amount = total - paidAmount;
+        if (amount > 0.005) {
+          items.push({ billId: row.id, monthYear: row.monthYear, roomNumber: String(item?.roomNumber ?? ""), total, paidAmount, amount });
+        }
+      }
+    }
+    items.sort((a, b) => myScore(b.monthYear) - myScore(a.monthYear));
+    const total = items.reduce((sum, it) => sum + it.amount, 0);
+    return { tenantId: tenant.id, items, total };
   });

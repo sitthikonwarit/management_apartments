@@ -148,10 +148,26 @@ export interface ChatConversation {
   tenantId: string | null;
   displayName: string;
   roomNumber: string | null;
+  pictureUrl: string | null;
   lastMessage: string;
   lastMessageAt: string;
   lastDirection: "in" | "out";
   unreadCount: number;
+}
+
+export interface OutstandingBillItem {
+  billId: string;
+  monthYear: string;
+  roomNumber: string;
+  total: number;
+  paidAmount: number;
+  amount: number;
+}
+
+export interface OutstandingBills {
+  tenantId: string | null;
+  items: OutstandingBillItem[];
+  total: number;
 }
 
 export interface ChatMessage {
@@ -183,6 +199,10 @@ export const chatApi = {
     api.post(`/chat/conversations/${lineUserId}/send-sticker`, { packageId, stickerId }).then((r) => r.data as ChatMessage),
   markRead: (lineUserId: string) =>
     api.patch(`/chat/conversations/${lineUserId}/read`).then((r) => r.data),
+  refreshProfile: (lineUserId: string) =>
+    api.post(`/chat/conversations/${lineUserId}/refresh-profile`).then((r) => r.data as { pictureUrl: string | null; displayName: string | null }),
+  getOutstandingBills: (lineUserId: string) =>
+    api.get(`/chat/conversations/${lineUserId}/outstanding-bills`).then((r) => r.data as OutstandingBills),
 };
 
 export const settingsApi = {
