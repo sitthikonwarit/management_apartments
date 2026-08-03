@@ -1,0 +1,28 @@
+name: Deploy to Ubuntu Server
+
+on:
+  push:
+    branches:
+      - main # ทำงานเมื่อมีการ push โค้ดเข้ากิ่ง main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # คำสั่งด้านล่างนี้จะไปรันบน Ubuntu ของคุณ
+          script: |
+            cd /root/management_apartments
+            git pull origin main
+            
+            cd frontend
+            bun install
+            bun run build
+            
+            cp -r dist/* /var/www/management_apartments_frontend/
+            systemctl restart nginx
