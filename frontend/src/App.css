@@ -2668,3 +2668,22 @@ body.dark-mode .import-format-hint code { background: rgba(255,255,255,0.07); co
   .fw-bold { color: #000 !important; }
 }
 
+/* =================================================================
+ * CHAT PAGE (แชท LINE) — จอกว้าง: รายชื่อสนทนา + เธรด อยู่คู่กัน
+ * มือถือ: สลับดูทีละหน้าจอ (รายชื่อ หรือ เธรด) แบบแอปแชททั่วไป แทนบีบสองคอลัมน์ลงจอแคบ
+ * ================================================================= */
+.chat-page-wrap { display: flex; height: calc(100vh - 160px); min-height: 400px; gap: 16px; }
+.chat-list-pane { width: 320px; flex-shrink: 0; overflow-y: auto; }
+.chat-thread-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-mobile-back { display: none; }
+
+@media screen and (max-width: 768px) {
+  .chat-page-wrap { height: calc(100vh - 130px); gap: 0; }
+  .chat-list-pane { width: 100%; border-radius: 0 !important; }
+  .chat-thread-pane { display: none; width: 100%; border-radius: 0 !important; }
+  /* .chat-thread-open ถูกใส่ที่ container เฉพาะตอนมีสนทนาที่เลือกอยู่ (ดู ChatPage.tsx) */
+  .chat-page-wrap.chat-thread-open .chat-list-pane { display: none; }
+  .chat-page-wrap.chat-thread-open .chat-thread-pane { display: flex; }
+  .chat-mobile-back { display: inline-flex; }
+}
+

@@ -109,9 +109,9 @@ export default function ChatPage() {
   const activeConversation = conversations.find((c) => c.lineUserId === selected);
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 160px)", minHeight: 400, gap: 16 }}>
-      <div style={{
-        width: 320, flexShrink: 0, overflowY: "auto", background: "var(--color-white)",
+    <div className={`chat-page-wrap${selected ? " chat-thread-open" : ""}`}>
+      <div className="chat-list-pane" style={{
+        background: "var(--color-white)",
         borderRadius: "var(--border-radius-1)", border: "1px solid var(--color-light)",
       }}>
         {conversations.length === 0 && (
@@ -140,8 +140,8 @@ export default function ChatPage() {
         ))}
       </div>
 
-      <div style={{
-        flex: 1, display: "flex", flexDirection: "column", background: "var(--color-white)",
+      <div className="chat-thread-pane" style={{
+        background: "var(--color-white)",
         borderRadius: "var(--border-radius-1)", border: "1px solid var(--color-light)", overflow: "hidden",
       }}>
         {!selected && (
@@ -151,11 +151,19 @@ export default function ChatPage() {
         )}
         {selected && (
           <>
-            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--color-light)" }}>
-              <strong>{activeConversation?.displayName ?? "ไม่ทราบชื่อ"}</strong>
-              {activeConversation?.roomNumber && (
-                <span className="text-muted small ms-2">ห้อง {activeConversation.roomNumber}</span>
-              )}
+            <div className="d-flex align-items-center" style={{ padding: "10px 16px", borderBottom: "1px solid var(--color-light)" }}>
+              <button
+                type="button" className="btn btn-sm btn-outline-secondary chat-mobile-back me-2"
+                onClick={() => setSelected(null)} title="กลับไปหน้ารายชื่อสนทนา"
+              >
+                <i className="fas fa-arrow-left" />
+              </button>
+              <div>
+                <strong>{activeConversation?.displayName ?? "ไม่ทราบชื่อ"}</strong>
+                {activeConversation?.roomNumber && (
+                  <span className="text-muted small ms-2">ห้อง {activeConversation.roomNumber}</span>
+                )}
+              </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               {loadingMessages && <div className="text-muted small">กำลังโหลด...</div>}
