@@ -37,3 +37,4 @@ jobs:
             # ========================================
             cd /root/management_apartments/backend
             bun install
+            pm2 restart management_apartments-backend-api
