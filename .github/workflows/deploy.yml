@@ -15,14 +15,33 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # คำสั่งด้านล่างนี้จะไปรันบน Ubuntu ของคุณ
           script: |
+            # 1. ดึงโค้ดล่าสุดจาก GitHub (ทำครั้งเดียวใช้ได้ทั้งโปรเจกต์)
             cd /root/management_apartments
             git pull origin main
             
-            cd frontend
+            # ========================================
+            # 2. ส่วนอัปเดต Frontend (หน้าเว็บ)
+            # ========================================
+            cd /root/management_apartments/frontend
             bun install
             bun run build
-            
             cp -r dist/* /var/www/management_apartments_frontend/
             systemctl restart nginx
+            
+            # ========================================
+            # 3. ส่วนอัปเดต Backend (API)
+            # ========================================
+            cd /root/management_apartments/backend  # (เปลี่ยนชื่อโฟลเดอร์ให้ตรงกับที่คุณเก็บโค้ด Backend)
+            bun install
+            
+            # ถ้า Backend ต้องมีการ Build ด้วย (เช่น เขียนด้วย TypeScript) ให้เอา # ด้านล่างออก
+            # bun run build
+            
+            # รีสตาร์ท Backend (เลือกใช้ 1 บรรทัดตามเครื่องมือที่คุณใช้รันเซิร์ฟเวอร์)
+            # -------------------------------------------------------------
+            # แบบที่ 1: ถ้าคุณรันด้วย PM2 (ลบ # ด้านหน้าออกแล้วแก้ชื่อ)
+            # pm2 restart backend-api
+            
+            # แบบที่ 2: ถ้าคุณสร้างเป็น Service ของระบบไว้ (ลบ # ด้านหน้าออกแล้วแก้ชื่อ)
+            # systemctl restart backend
