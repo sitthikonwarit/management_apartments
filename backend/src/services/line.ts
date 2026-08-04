@@ -32,6 +32,26 @@ function myScore(my: string): number {
   return (parseInt(y, 10) || 0) * 100 + (parseInt(m, 10) || 0);
 }
 
+// ยอดของบิลใบนี้ "เฉพาะของเดือนนี้เอง" ไม่นับยอดค้างชำระที่ยกมาจากเดือนก่อนหน้า (item.outstandingAmount ที่ถูก
+// ฝังรวมไว้ใน item.total ตอนสร้าง/รีเฟรชบิลฝั่งแอดมิน — ดู getOutstandingBalance ใน
+// frontend/src/utils/billCalc.ts) เดือนก่อนที่ยังค้างอยู่จริงจะถูกนับซ้ำไปเรื่อยๆ ทุกเดือนถัดไปที่ยังไม่จ่าย
+// (เดือนถัดไปจะยกยอดของเดือนนี้ที่ "รวมยอดยกมา" ไปแล้วมาบวกซ้ำอีกที) ทำให้ยอดพอกพูนทวีคูณผิดความจริงยิ่งค้าง
+// จ่ายนานเท่าไหร่ — ฝั่งผู้เช่า (LIFF/บิลอิเล็กทรอนิกส์ LINE) จึงต้องใช้ยอดเฉพาะเดือนนั้นๆ เท่านั้น ส่วนเดือนก่อน
+// ที่ยังค้างอยู่จะแยกไปแสดงเป็นรายการของตัวเองต่างหาก (ดู getOutstandingBillsForTenant ด้านล่าง) จ่ายแยกอิสระ
+// ต่อบิลได้อยู่แล้วจากรายการนั้น ไม่ต้องพึ่งยอดที่ยกมารวมในบิลใหม่ล่าสุดอีกต่อไป
+function ownChargeAmount(item: any): number {
+  return (Number(item?.total) || 0) - (Number(item?.outstandingAmount) || 0);
+}
+
+// ตัดยอดค้างชำระยกมาออกจากบิลก่อนส่งให้ผู้เช่าดู (หน้า LIFF Payment/Profile + "บิลอิเล็กทรอนิกส์ (LINE)" ที่
+// ใช้ BillLinePreview เรนเดอร์) ไม่กระทบข้อมูลจริงที่บันทึกในฐานข้อมูล (แค่ปรับสำเนาก่อนส่งออกเท่านั้น ฝั่ง
+// แอดมินยังเห็นยอดเต็มตามปกติในหน้า Bills) — บิลที่ "จ่ายแล้ว" ไม่ปรับ เพราะยอดที่บันทึกไว้คือยอดจริงที่เรียก
+// เก็บ/จ่ายไปแล้วตอนนั้น (ประวัติ ไม่ใช่ยอดที่ยังต้องตัดสินใจจ่ายอีก)
+function stripCarriedOutstanding(item: any) {
+  if (item?.status === "paid") return item;
+  return { ...item, total: ownChargeAmount(item), outstandingAmount: 0, outstandingItems: [] };
+}
+
 export interface OutstandingBillItem {
   billId: string;
   roomId: string;
@@ -52,7 +72,7 @@ export async function getOutstandingBillsForTenant(tenantId: string): Promise<{ 
     try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
     for (const item of data) {
       if (String(item?.tenantId ?? "") !== tenantId) continue;
-      const total = Number(item?.total) || 0;
+      const total = ownChargeAmount(item);
       const paidAmount = Number(item?.paidAmount) || 0;
       const amount = total - paidAmount;
       if (amount > 0.005) {
@@ -85,12 +105,16 @@ export async function getAllBillsForTenant(tenantId: string): Promise<TenantBill
     try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
     for (const item of data) {
       if (String(item?.tenantId ?? "") !== tenantId) continue;
+      // บิลที่ยังไม่จ่าย: โชว์ยอดเฉพาะเดือนนั้นๆ เอง (ไม่รวมยอดยกมาจากเดือนก่อน กันนับซ้ำ — ดู
+      // stripCarriedOutstanding) ให้ตรงกับยอดที่เห็นตอนกดเข้าไปดูรายละเอียดบิลใบเดียวกัน (getBillItemForTenant)
+      // ส่วนบิลที่จ่ายแล้วคงยอดจริงตามประวัติไว้เหมือนเดิม
+      const isPaid = item?.status === "paid";
       result.push({
         billId: row.id,
         roomId: String(item?.roomId ?? ""),
         monthYear: row.monthYear,
         roomNumber: String(item?.roomNumber ?? ""),
-        total: Number(item?.total) || 0,
+        total: isPaid ? Number(item?.total) || 0 : ownChargeAmount(item),
         paidAmount: Number(item?.paidAmount) || 0,
         status: String(item?.status ?? "unpaid"),
       });
@@ -143,7 +167,7 @@ export async function getBillItemForTenant(billId: string, roomId: string, tenan
   try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
   const item = data.find((it) => String(it?.roomId) === roomId);
   if (!item || String(item?.tenantId ?? "") !== tenantId) return null;
-  return { item, monthYear: row.monthYear };
+  return { item: stripCarriedOutstanding(item), monthYear: row.monthYear };
 }
 
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
@@ -910,7 +934,7 @@ export async function getThisMonthBillItemForTenant(tenantId: string): Promise<{
   try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
   const item = data.find((it: any) => String(it?.tenantId ?? "") === tenantId);
   if (!item) return null;
-  return { billId: row.id, roomId: String(item.roomId ?? ""), item, monthYear: row.monthYear };
+  return { billId: row.id, roomId: String(item.roomId ?? ""), item: stripCarriedOutstanding(item), monthYear: row.monthYear };
 }
 
 // เรียกเป็นระยะจาก index.ts — เช็คบิลทุกใบที่ตั้ง "วันนัดส่ง" (scheduledDate) ตรงกับวันนี้ และยังไม่เคย
