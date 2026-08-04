@@ -5,7 +5,7 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents } from "../db/schema";
+import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents, vehicles, vehicleTypes } from "../db/schema";
 import {
   getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
   getOutstandingBillsForTenant, getBillItemForTenant,
@@ -30,6 +30,46 @@ async function tenantRoomNumber(idRoom: string | null): Promise<string> {
   if (!idRoom) return "";
   const [room] = await db.select().from(rooms).where(eq(rooms.id, idRoom));
   return room?.number ?? "";
+}
+
+function parseJsonArray(raw: string | null): any[] {
+  try {
+    const v = raw ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+// กันเดารหัสเลขบัตรประชาชน 4 ตัวท้ายมั่วๆ ซ้ำๆ (มีแค่ 10,000 ความเป็นไปได้) — จำกัดจำนวนครั้งที่พลาดได้ต่อ
+// ผู้เช่า 1 คนต่อช่วงเวลาหนึ่ง เก็บใน memory เฉยๆ พอ (ไม่ต้องมีตาราง DB แยก) รีเซ็ตตอนเซิร์ฟเวอร์รีสตาร์ท
+// หรือทันทีที่ยืนยันถูกต้องครั้งถัดไป
+const PROFILE_VERIFY_MAX_ATTEMPTS = 5;
+const PROFILE_VERIFY_WINDOW_MS = 15 * 60 * 1000;
+const profileVerifyAttempts = new Map<string, { count: number; windowStart: number }>();
+
+function isProfileVerifyBlocked(tenantId: string): boolean {
+  const entry = profileVerifyAttempts.get(tenantId);
+  if (!entry) return false;
+  if (Date.now() - entry.windowStart > PROFILE_VERIFY_WINDOW_MS) {
+    profileVerifyAttempts.delete(tenantId);
+    return false;
+  }
+  return entry.count >= PROFILE_VERIFY_MAX_ATTEMPTS;
+}
+
+function recordProfileVerifyFailure(tenantId: string): void {
+  const now = Date.now();
+  const entry = profileVerifyAttempts.get(tenantId);
+  if (!entry || now - entry.windowStart > PROFILE_VERIFY_WINDOW_MS) {
+    profileVerifyAttempts.set(tenantId, { count: 1, windowStart: now });
+  } else {
+    entry.count += 1;
+  }
+}
+
+function resetProfileVerifyAttempts(tenantId: string): void {
+  profileVerifyAttempts.delete(tenantId);
 }
 
 // สลับจาก Rich Menu Guest เป็น Member เฉพาะ LINE User ID นี้ — ใช้ทั้งตอน login ปกติ (เจอว่าผูกไว้แล้ว)
@@ -351,6 +391,82 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       },
       bills: tenantBills,
       paymentHistory,
+    };
+  })
+  // ปุ่ม "ดูข้อมูลส่วนตัวทั้งหมด" ในหน้า LIFF Profile — เปิดเผยข้อมูลอ่อนไหว (เลขบัตรประชาชนเต็ม, ที่อยู่,
+  // ผู้พักอาศัยร่วม, รถ, ไฟล์แนบ/รูปที่อัปโหลดไว้) ต้องกรอกเลขบัตรประชาชน 4 ตัวท้ายให้ตรงกับที่บันทึกไว้ก่อน
+  // (ชั้นป้องกันเพิ่มจาก LIFF access token เฉยๆ — กันกรณีมือถือ/เซสชันหลุดไปอยู่ในมือคนอื่น) จำกัดจำนวนครั้งที่
+  // กรอกผิดได้ต่อผู้เช่า กันเดาเลข 4 หลักมั่วๆ ซ้ำๆ (ดู isProfileVerifyBlocked ด้านบน)
+  .post("/profile/full", async ({ body, set }) => {
+    const { accessToken, idLicenseLast4 } = body as { accessToken?: string; idLicenseLast4?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!idLicenseLast4?.trim()) { set.status = 400; return { error: "กรุณากรอกเลขบัตรประชาชน 4 ตัวท้าย" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
+
+    if (isProfileVerifyBlocked(tenant.id)) {
+      set.status = 429;
+      return { error: "กรอกผิดหลายครั้งเกินไป กรุณาลองใหม่อีกครั้งภายหลัง" };
+    }
+
+    const actualLast4 = String(tenant.idLicense ?? "").trim().slice(-4);
+    if (!actualLast4) { set.status = 400; return { error: "ไม่มีเลขบัตรประชาชนบันทึกไว้ในระบบ กรุณาติดต่อผู้ดูแลหอพัก" }; }
+    if (idLicenseLast4.trim() !== actualLast4) {
+      recordProfileVerifyFailure(tenant.id);
+      set.status = 401;
+      return { error: "เลขบัตรประชาชน 4 ตัวท้ายไม่ถูกต้อง" };
+    }
+    resetProfileVerifyAttempts(tenant.id);
+
+    const extraRoomIds: string[] = parseJsonArray(tenant.extraRoomIds);
+    const roomIds = [tenant.idRoom, ...extraRoomIds].filter(Boolean) as string[];
+    const roomNumbers: string[] = [];
+    for (const rid of roomIds) {
+      const number = await tenantRoomNumber(rid);
+      if (number) roomNumbers.push(number);
+    }
+
+    const [vehicleRows, vehicleTypeRows] = await Promise.all([
+      db.select().from(vehicles).where(eq(vehicles.customerId, tenant.id)),
+      db.select().from(vehicleTypes),
+    ]);
+    const typeMap = new Map(vehicleTypeRows.map((t) => [t.id, t]));
+    const tenantVehicles = vehicleRows.map((v) => ({
+      id: v.id,
+      licensePlate: v.licensePlate,
+      brand: v.brand,
+      color: v.color,
+      typeName: typeMap.get(v.vehicleTypeId || "")?.name || "",
+      typeIcon: typeMap.get(v.vehicleTypeId || "")?.icon || "fas fa-car",
+      images: parseJsonArray(v.images),
+    }));
+
+    return {
+      personal: {
+        idLicense: tenant.idLicense || "",
+        title: tenant.title || "",
+        firstName: tenant.firstName || "",
+        lastName: tenant.lastName || "",
+        tel: tenant.tel || "",
+        idLine: tenant.idLine || "",
+        houseNo: tenant.houseNo || "",
+        soi: tenant.soi || "",
+        road: tenant.road || "",
+        tambon: tenant.tambon || "",
+        amphoe: tenant.amphoe || "",
+        province: tenant.province || "",
+        zipcode: tenant.zipcode || "",
+        address: tenant.address || "",
+        driveImageUrl: tenant.driveImageUrl || "",
+      },
+      roomNumbers,
+      coResidents: parseJsonArray(tenant.coResidents),
+      vehicles: tenantVehicles,
+      files: parseJsonArray(tenant.pdfLinks),
     };
   })
   // ปุ่ม "แจ้งซ่อม" บนเมนู Member — ผู้เช่ากรอกหัวข้อ/รายละเอียด/แนบรูป ส่งเข้ามาเป็นข้อความแชทพิเศษ

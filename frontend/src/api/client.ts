@@ -286,4 +286,16 @@ export const liffApi = {
   ),
   submitRepair: (accessToken: string, title: string, details: string, photos: string[]) =>
     api.post("/liff/repair", { accessToken, title, details, photos }).then((r) => r.data as { ok: boolean; messageId: string }),
+  profileFull: (accessToken: string, idLicenseLast4: string) =>
+    api.post("/liff/profile/full", { accessToken, idLicenseLast4 }).then((r) => r.data as {
+      personal: {
+        idLicense: string; title: string; firstName: string; lastName: string; tel: string; idLine: string;
+        houseNo: string; soi: string; road: string; tambon: string; amphoe: string; province: string;
+        zipcode: string; address: string; driveImageUrl: string;
+      };
+      roomNumbers: string[];
+      coResidents: { name: string; phone: string; lineId: string; image: string }[];
+      vehicles: { id: string; licensePlate: string; brand: string; color: string; typeName: string; typeIcon: string; images: string[] }[];
+      files: { name: string; url: string }[];
+    }),
 };

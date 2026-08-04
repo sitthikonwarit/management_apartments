@@ -11,7 +11,32 @@ import { thaiDateOnlyString } from "../utils/yearFormat";
 import { BillLinePreview, type BillLinePreviewConfig } from "../components/BillLinePreviewCard";
 import ImageLightbox from "../components/ImageLightbox";
 
+const AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+
+// Google Drive image proxy ปิดใช้งานถาวรที่ฝั่ง backend — ไม่ยิง request ไปเปล่าๆ ให้ตกกลับเป็น avatar
+// เริ่มต้นทันทีถ้า url เป็นลิงก์ Drive (แพทเทิร์นเดียวกับ frontend/src/pages/TenantsPage.tsx)
+function getDriveImgSrc(url: string): string {
+  if (!url) return AVATAR;
+  if (/\/d\/[a-zA-Z0-9_-]+/.test(url) || /[?&]id=[a-zA-Z0-9_-]+/.test(url)) return AVATAR;
+  return url;
+}
+
 type Status = "loading" | "linked" | "unlinked" | "error";
+
+interface CoResident { name: string; phone: string; lineId: string; image: string }
+interface TenantVehicle { id: string; licensePlate: string; brand: string; color: string; typeName: string; typeIcon: string; images: string[] }
+interface TenantFile { name: string; url: string }
+interface FullProfile {
+  personal: {
+    idLicense: string; title: string; firstName: string; lastName: string; tel: string; idLine: string;
+    houseNo: string; soi: string; road: string; tambon: string; amphoe: string; province: string;
+    zipcode: string; address: string; driveImageUrl: string;
+  };
+  roomNumbers: string[];
+  coResidents: CoResident[];
+  vehicles: TenantVehicle[];
+  files: TenantFile[];
+}
 
 interface BillRow {
   billId: string; roomId: string; monthYear: string; roomNumber: string;
@@ -47,12 +72,22 @@ export default function LiffProfilePage() {
   const [tenant, setTenant] = useState({ tenantName: "", roomNumber: "", tel: "", contractStartDate: "", contractEndDate: "" });
   const [bills, setBills] = useState<BillRow[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentRow[]>([]);
-  const [tab, setTab] = useState<"bills" | "payments">("bills");
+  const [tab, setTab] = useState<"bills" | "payments" | "personal">("bills");
 
   const [selectedBill, setSelectedBill] = useState<BillRow | null>(null);
   const [detailData, setDetailData] = useState<{ item: any; monthYear: string } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [slipToView, setSlipToView] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<string[] | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // ป็อปอัพ "ดูข้อมูลส่วนตัวทั้งหมด" — ต้องกรอกเลขบัตรประชาชน 4 ตัวท้ายให้ตรงก่อนถึงจะเห็นข้อมูลอ่อนไหว
+  // (ที่อยู่เต็ม/ผู้พักอาศัยร่วม/รถ/ไฟล์แนบ) ยืนยันสำเร็จแล้วเก็บไว้ใน state หน้านี้เท่านั้น ไม่ persist ข้าม
+  // การเปิดหน้าใหม่ (ต้องกรอกใหม่ทุกครั้งที่เข้าหน้านี้)
+  const [fullProfile, setFullProfile] = useState<FullProfile | null>(null);
+  const [verifyInput, setVerifyInput] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +138,20 @@ export default function LiffProfilePage() {
       setDetailData(null);
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  async function handleVerifyIdentity() {
+    const digits = verifyInput.trim();
+    if (!/^\d{4}$/.test(digits)) { setVerifyError("กรุณากรอกตัวเลข 4 หลัก"); return; }
+    setVerifying(true); setVerifyError("");
+    try {
+      const result = await liffApi.profileFull(accessToken, digits);
+      setFullProfile(result);
+    } catch (e: any) {
+      setVerifyError(e?.response?.data?.error ?? e?.message ?? "ยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -157,10 +206,123 @@ export default function LiffProfilePage() {
           <button className={`btn btn-sm flex-grow-1 ${tab === "payments" ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => setTab("payments")}>
             <i className="fas fa-receipt me-1" />ประวัติการชำระ
           </button>
+          <button className={`btn btn-sm flex-grow-1 ${tab === "personal" ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => setTab("personal")}>
+            <i className="fas fa-id-card me-1" />ข้อมูลส่วนตัว
+          </button>
         </div>
 
         <div className="d-flex flex-column gap-2" style={{ maxHeight: 360, overflowY: "auto" }}>
-          {tab === "bills" ? (
+          {tab === "personal" ? (
+            !fullProfile ? (
+              <div className="p-3 rounded" style={{ border: "1px solid var(--color-light)" }}>
+                <div className="text-center mb-3">
+                  <div className="login-icon mb-2" style={{ width: 48, height: 48, fontSize: 18 }}>
+                    <i className="fas fa-lock" />
+                  </div>
+                  <div className="small text-muted">
+                    เพื่อความปลอดภัย กรุณากรอกเลขบัตรประชาชน 4 ตัวท้ายของคุณ ก่อนดูข้อมูลส่วนตัว/ผู้พักอาศัยร่วม/รถ/ไฟล์แนบ
+                  </div>
+                </div>
+                <input
+                  type="tel" inputMode="numeric" maxLength={4} className="form-control text-center mb-2"
+                  style={{ letterSpacing: 4, fontSize: 20 }}
+                  placeholder="XXXX" value={verifyInput} disabled={verifying}
+                  onChange={(e) => setVerifyInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                />
+                {verifyError && <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{verifyError}</div>}
+                <button className="btn btn-primary w-100" onClick={handleVerifyIdentity} disabled={verifying}>
+                  {verifying ? <><span className="spinner-border spinner-border-sm me-2" />กำลังยืนยัน...</> : <><i className="fas fa-unlock me-1" />ยืนยันตัวตน</>}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="p-2 rounded" style={{ border: "1px solid var(--color-light)" }}>
+                  <div className="fw-bold small mb-2"><i className="fas fa-user me-2 text-muted" />ข้อมูลส่วนตัว</div>
+                  {fullProfile.personal.driveImageUrl && (
+                    <img
+                      src={getDriveImgSrc(fullProfile.personal.driveImageUrl)} alt=""
+                      style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", cursor: "pointer", marginBottom: 8 }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
+                      onClick={() => { setLightboxImages([getDriveImgSrc(fullProfile.personal.driveImageUrl)]); setLightboxIndex(0); }}
+                    />
+                  )}
+                  <div className="small d-flex justify-content-between mb-1"><span className="text-muted">เลขบัตรประชาชน</span><span>{fullProfile.personal.idLicense || "-"}</span></div>
+                  <div className="small d-flex justify-content-between mb-1"><span className="text-muted">LINE ID</span><span>{fullProfile.personal.idLine || "-"}</span></div>
+                  <div className="small d-flex justify-content-between mb-1"><span className="text-muted">ห้องที่เช่า</span><span>{fullProfile.roomNumbers.join(", ") || "-"}</span></div>
+                  <div className="small text-muted mt-2">ที่อยู่</div>
+                  <div className="small">
+                    {fullProfile.personal.address ||
+                      [fullProfile.personal.houseNo, fullProfile.personal.soi, fullProfile.personal.road, fullProfile.personal.tambon, fullProfile.personal.amphoe, fullProfile.personal.province, fullProfile.personal.zipcode]
+                        .filter(Boolean).join(" ") || "-"}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded" style={{ border: "1px solid var(--color-light)" }}>
+                  <div className="fw-bold small mb-2"><i className="fas fa-users me-2 text-muted" />ผู้พักอาศัยร่วม</div>
+                  {fullProfile.coResidents.length === 0 ? (
+                    <div className="text-muted small">ไม่มีผู้พักอาศัยร่วม</div>
+                  ) : (
+                    <div className="d-flex flex-column gap-2">
+                      {fullProfile.coResidents.map((cr, i) => (
+                        <div key={i} className="d-flex align-items-center gap-2">
+                          <img
+                            src={cr.image || AVATAR} alt={cr.name}
+                            style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", cursor: "pointer", flexShrink: 0 }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
+                            onClick={() => { setLightboxImages([cr.image || AVATAR]); setLightboxIndex(0); }}
+                          />
+                          <div className="small">
+                            <div className="fw-bold">คุณ{cr.name}</div>
+                            <div className="text-muted">{[cr.phone, cr.lineId].filter(Boolean).join(" · ") || "-"}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-2 rounded" style={{ border: "1px solid var(--color-light)" }}>
+                  <div className="fw-bold small mb-2"><i className="fas fa-car me-2 text-muted" />รถ</div>
+                  {fullProfile.vehicles.length === 0 ? (
+                    <div className="text-muted small">ไม่มีข้อมูลรถ</div>
+                  ) : (
+                    <div className="d-flex flex-column gap-2">
+                      {fullProfile.vehicles.map((v) => (
+                        <div key={v.id} className="small d-flex align-items-center gap-2">
+                          <i className={`${v.typeIcon} text-muted`} />
+                          <div className="flex-grow-1">
+                            <div className="fw-bold">{v.licensePlate}</div>
+                            <div className="text-muted">{[v.typeName, v.brand, v.color].filter(Boolean).join(" · ") || "-"}</div>
+                          </div>
+                          {v.images.length > 0 && (
+                            <img
+                              src={v.images[0]} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 6, cursor: "pointer" }}
+                              onClick={() => { setLightboxImages(v.images); setLightboxIndex(0); }}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-2 rounded" style={{ border: "1px solid var(--color-light)" }}>
+                  <div className="fw-bold small mb-2"><i className="fas fa-paperclip me-2 text-muted" />ไฟล์แนบ</div>
+                  {fullProfile.files.length === 0 ? (
+                    <div className="text-muted small">ไม่มีไฟล์แนบ</div>
+                  ) : (
+                    <div className="d-flex flex-column gap-1">
+                      {fullProfile.files.map((f, i) => (
+                        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className="small d-flex align-items-center gap-2">
+                          <i className="fas fa-file-pdf text-danger" />{f.name || `ไฟล์ ${i + 1}`}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )
+          ) : tab === "bills" ? (
             bills.length === 0 ? (
               <div className="text-muted small text-center py-3">ยังไม่มีข้อมูลบิล</div>
             ) : bills.map((b) => (
@@ -219,6 +381,10 @@ export default function LiffProfilePage() {
 
       {slipToView && (
         <ImageLightbox images={[slipToView]} index={0} onClose={() => setSlipToView(null)} onIndexChange={() => {}} />
+      )}
+
+      {lightboxImages && (
+        <ImageLightbox images={lightboxImages} index={lightboxIndex} onClose={() => setLightboxImages(null)} onIndexChange={setLightboxIndex} />
       )}
     </div>
   );
