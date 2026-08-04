@@ -9,11 +9,13 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { useIdleLogout } from "./utils/useIdleLogout";
 import { useLiveSyncConnection } from "./utils/useLiveSync";
+import { useVersionCheck } from "./utils/useVersionCheck";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import BreadcrumbBar from "./components/layout/BreadcrumbBar";
 import LockScreen from "./components/LockScreen";
 import ChatToastHost from "./components/ChatToastHost";
+import UpdateBanner from "./components/UpdateBanner";
 import LoginPage from "./pages/LoginPage";
 import LiffLoginPage from "./pages/LiffLoginPage";
 import LiffPaymentPage from "./pages/LiffPaymentPage";
@@ -96,6 +98,13 @@ function AuthenticatedShell() {
   );
 }
 
+// ตรวจ+แจ้งเตือนอัปเดตเว็บไซต์ใหม่ระดับบนสุดของแอป — ทำงานทุกหน้ารวมทั้งหน้า LIFF สาธารณะ (ไม่ต้องล็อกอิน
+// ก็เห็นได้) ดู useVersionCheck.ts/UpdateBanner.tsx
+function VersionCheckBanner() {
+  const updateAvailable = useVersionCheck();
+  return <UpdateBanner show={updateAvailable} />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -104,6 +113,7 @@ export default function App() {
       <NotificationProvider>
       <AppConfigProvider>
       <BreadcrumbProvider>
+        <VersionCheckBanner />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           {/* หน้า LIFF ฝั่งผู้เช่า — สาธารณะ ไม่ผ่าน AuthenticatedShell (ไม่มี Sidebar/Header, ไม่ต้อง
