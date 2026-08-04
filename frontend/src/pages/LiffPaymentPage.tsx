@@ -112,6 +112,27 @@ export default function LiffPaymentPage() {
           setTotal(result.outstanding.total);
           setPaymentInfo(result.paymentInfo);
           setStatus("linked");
+
+          // เปิดมาจากลิงก์ "ดูรายละเอียดบิล" ที่แนบมากับบิลที่ส่งเข้าแชท (ดู buildBillFlexMessage ใน
+          // backend/src/services/line.ts) — เปิดป็อปอัพรายละเอียดบิลใบนั้นให้ทันที ไม่ต้องรอผู้เช่าไล่หาเอง
+          // ในรายการยอดค้างชำระ (billDetail ดึงข้อมูลสดจาก DB เสมอ ไม่ขึ้นกับว่าบิลนี้จะอยู่ในรายการยอดค้าง
+          // ชำระหรือจ่ายไปแล้วก็ตาม) เคลียร์ query string ทิ้งกันเปิดซ้ำถ้าผู้เช่ากดรีเฟรชหน้าเอง
+          const params = new URLSearchParams(window.location.search);
+          const linkedBillId = params.get("billId");
+          const linkedRoomId = params.get("roomId");
+          if (linkedBillId && linkedRoomId) {
+            window.history.replaceState(null, "", window.location.pathname);
+            // เรียก billDetail ตรงๆ ด้วย token ในสโคปนี้ (ไม่เรียกผ่าน openDetail เพราะฟังก์ชันนั้นอ่าน
+            // accessToken จาก state ซึ่งเพิ่งสั่ง setAccessToken(token) ไปหมาดๆ ข้างบน ยังไม่อัปเดตจริงในรอบ
+            // render นี้ ใช้ตัวแปร token ที่เพิ่งได้มาสดๆ แทนกันข้อมูลว่าง)
+            setDetailItem({ billId: linkedBillId, roomId: linkedRoomId, monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
+            setDetailBill(null);
+            setLoadingDetail(true);
+            liffApi.billDetail(token, linkedBillId, linkedRoomId)
+              .then((r) => { if (!cancelled) setDetailBill(r); })
+              .catch(() => { if (!cancelled) setDetailBill(null); })
+              .finally(() => { if (!cancelled) setLoadingDetail(false); });
+          }
         } else {
           setStatus("unlinked");
         }

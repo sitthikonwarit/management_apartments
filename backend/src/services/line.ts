@@ -199,6 +199,7 @@ export async function getLineSettings() {
     yearFormat: (row?.yearFormat === "CE" ? "CE" : "BE") as "BE" | "CE",
     splitRentByResidents: row?.splitRentByResidents === "true",
     sendBillToCoResidents: row?.lineSendBillToCoResidents !== "false",
+    liffPaymentUrl: row?.liffPaymentUrl ?? "",
   };
 }
 
@@ -382,83 +383,23 @@ interface LineAppearanceSettings {
   logoUrl: string;
   yearFormat: "BE" | "CE";
   splitRentByResidents: boolean;
+  liffPaymentUrl: string;
 }
 
-// สร้าง Flex Message ใบแจ้งค่าเช่า จากข้อมูลห้องหนึ่งห้อง (BillItem ฝั่ง frontend/billCalc.ts) — ให้หน้าตา
-// ตรงกับ BillLinePreview ในหน้าเว็บ (บิลอิเล็กทรอนิกส์ LINE) มากที่สุดเท่าที่ Flex Message spec ทำได้
-function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppearanceSettings) {
+// สร้าง Flex Message ใบแจ้งค่าเช่า จากข้อมูลห้องหนึ่งห้อง (BillItem ฝั่ง frontend/billCalc.ts) — ไม่ฝังตัวเลข
+// รายละเอียด/ยอดสุทธิลงในข้อความที่ส่งไปแล้วโดยตรง (เดิมเคยฝังไว้ทั้งหมด) เพราะถ้าพนักงานแก้ไขบิล (เช่น
+// แก้เลขมิเตอร์ผิด/ปรับส่วนลด) หลังส่งไปแล้ว ตัวเลขในแชทที่ผู้เช่าเห็นจะค้างเป็นค่าเก่าที่ผิดไปตลอดกาล — เปลี่ยน
+// เป็นการ์ดแจ้งเตือนสั้นๆ + ปุ่มลิงก์ไปหน้า LIFF Payment (พร้อม billId/roomId ใน query string ให้เปิดตรงไปที่
+// รายละเอียดบิลใบนี้ทันที ดู handling ฝั่ง frontend ใน LiffPaymentPage.tsx) ซึ่งดึงข้อมูลบิลสดจาก DB ทุกครั้งที่
+// กดเข้าไปดู รับประกันว่าเห็นเลขล่าสุดเสมอ ไม่มีทางค้างเป็นค่าเก่า
+function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppearanceSettings, billId: string) {
   const monthLabel = monthYearLabel(monthYear, settings.yearFormat);
-  const showSplit = settings.splitRentByResidents && Number(item.residentCount) > 1;
-
-  const bodyContents: any[] = [];
-
-  bodyContents.push(createFlexRow("ค่าห้อง/ค่าเช่า", fmtMoney(item.priceRoom), COLOR_TEXT, ICONS.BED));
-
-  if (item.electricActive) {
-    bodyContents.push(createFlexMeterRow(
-      "ค่าไฟ", `(${item.meterElectric?.unit ?? 0} หน่วย)`,
-      `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · หน่วยละ ${fmtMoney(item.electricRate)} บาท`,
-      fmtMoney(item.priceElectric), ICONS.ELEC
-    ));
-  }
-  if (item.waterActive) {
-    bodyContents.push(createFlexMeterRow(
-      "ค่าน้ำ", `(${item.meterWater?.unit ?? 0} หน่วย)`,
-      `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · หน่วยละ ${fmtMoney(item.waterRate)} บาท`,
-      fmtMoney(item.priceWater), ICONS.WATER
-    ));
-  }
-
-  (item.billTagItems ?? []).forEach((t: any) => {
-    if (Number(t.price) > 0) bodyContents.push(createFlexRow(t.name, fmtMoney(t.price), COLOR_MUTED, ICONS.TAG));
-  });
-  (item.billTenantTagItems ?? []).forEach((t: any) => {
-    if (Number(t.price) > 0) bodyContents.push(createFlexRow(t.name, fmtMoney(t.price), COLOR_MUTED, ICONS.USER));
-  });
-  (item.customItems ?? []).forEach((c: any) => {
-    if (Number(c.price) > 0) bodyContents.push(createFlexRow(c.name, fmtMoney(c.price), COLOR_MUTED, ICONS.PLUS));
-  });
-  (item.billVehicleItems ?? []).forEach((v: any) => {
-    if (Number(v.price) > 0) bodyContents.push(createFlexRow(v.plate || v.name, fmtMoney(v.price), COLOR_MUTED, ICONS.CAR));
-  });
-
-  if (item.fineAmount > 0) {
-    bodyContents.push(createFlexHighlightRow(`ค่าปรับล่าช้า (${item.overdueDays ?? 0} วัน)`, fmtMoney(item.fineAmount)));
-  }
-
-  if (Array.isArray(item.outstandingItems) && item.outstandingItems.length > 0) {
-    item.outstandingItems.forEach((o: any) => {
-      bodyContents.push(createFlexHighlightRow(`ค้างชำระ ${monthYearLabel(o.monthYear, settings.yearFormat)}`, fmtMoney(o.amount)));
-    });
-  } else if (item.outstandingAmount > 0) {
-    bodyContents.push(createFlexHighlightRow("ยอดค้างชำระยกมา", fmtMoney(item.outstandingAmount)));
-  }
-
-  (item.discountItems ?? []).forEach((d: any) => {
-    if (Number(d.price) > 0) bodyContents.push(createFlexRow(`ส่วนลด: ${d.name}`, `-${fmtMoney(d.price)}`, COLOR_RED, ICONS.DISCOUNT));
-  });
-
-  bodyContents.push({ type: "separator", margin: "lg", color: "#E0E0E0" });
-  bodyContents.push({
-    type: "box", layout: "horizontal", margin: "lg",
-    contents: [
-      { type: "text", text: "ยอดชำระสุทธิ", weight: "bold", size: "md", color: COLOR_TEXT },
-      { type: "text", text: `${fmtMoney(item.total)} ฿`, weight: "bold", size: "xl", align: "end", color: COLOR_PRIMARY },
-    ],
-  });
-  if (showSplit) {
-    bodyContents.push({
-      type: "text", size: "md", weight: "bold", color: COLOR_PRIMARY, align: "end", margin: "sm",
-      text: `หาร ${item.residentCount} คน · คนละ ${fmtMoney(item.total / item.residentCount)} บาท`,
-    });
-  }
-  bodyContents.push({ type: "text", text: dueDateLabel(item.overdueConfig), size: "xs", color: COLOR_MUTED, align: "center", margin: "lg" });
-
   const logoUrl = isUsableImageUrl(settings.logoUrl) ? settings.logoUrl : ICONS.HOME;
+  const detailUrl = `${settings.liffPaymentUrl}${settings.liffPaymentUrl.includes("?") ? "&" : "?"}billId=${encodeURIComponent(billId)}&roomId=${encodeURIComponent(String(item.roomId ?? ""))}`;
 
   return {
     type: "flex",
-    altText: `แจ้งค่าเช่าห้อง ${item.roomNumber} เดือน ${monthLabel} ยอด ${fmtMoney(item.total)} บาท`,
+    altText: `แจ้งบิลค่าเช่าห้อง ${item.roomNumber} ประจำเดือน ${monthLabel} — กดดูรายละเอียดในแชท`,
     contents: {
       type: "bubble",
       size: "giga", // ขยายบับเบิลให้กว้างสุดที่ Flex Message รองรับ (เต็มความกว้างจอมือถือ)
@@ -477,8 +418,23 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
         ],
       },
       body: {
-        type: "box", layout: "vertical", backgroundColor: BG_BODY, paddingAll: "20px",
-        contents: bodyContents,
+        type: "box", layout: "vertical", backgroundColor: BG_BODY, paddingAll: "20px", alignItems: "center",
+        contents: [
+          { type: "image", url: ICONS.RECEIPT, size: "xl", aspectRatio: "1:1", aspectMode: "fit" },
+          { type: "text", text: "บิลค่าเช่าของคุณพร้อมแล้ว", weight: "bold", size: "md", color: COLOR_TEXT, align: "center", margin: "lg", wrap: true },
+          { type: "text", text: "กดปุ่มด้านล่างเพื่อดูรายละเอียดค่าใช้จ่ายและยอดที่ต้องชำระล่าสุด", size: "sm", color: COLOR_MUTED, align: "center", margin: "sm", wrap: true },
+          { type: "separator", margin: "lg", color: "#E0E0E0" },
+          { type: "text", text: dueDateLabel(item.overdueConfig), size: "xs", color: COLOR_MUTED, align: "center", margin: "lg" },
+        ],
+      },
+      footer: {
+        type: "box", layout: "vertical", paddingAll: "12px",
+        contents: [
+          {
+            type: "button", style: "primary", height: "md", color: COLOR_PRIMARY,
+            action: { type: "uri", label: "ดูรายละเอียดบิล & ชำระเงิน", uri: detailUrl },
+          },
+        ],
       },
     },
   };
@@ -701,6 +657,11 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
   if (!settings.enabled || !settings.token) {
     return { success: false, message: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
   }
+  // บิลที่ส่งไปตอนนี้ไม่ฝังตัวเลขในตัวข้อความแล้ว (ดู buildBillFlexMessage ด้านล่าง) ต้องมีลิงก์ LIFF Payment
+  // ให้กดดูรายละเอียดสดเสมอ ไม่งั้นผู้เช่าจะได้การ์ดที่กดอะไรไม่ได้เลย
+  if (!settings.liffPaymentUrl) {
+    return { success: false, message: "กรุณาตั้งค่า LIFF Payment URL ที่หน้า Settings ก่อน (ใช้เป็นลิงก์ดูรายละเอียดบิลที่ส่งให้ผู้เช่า)" };
+  }
 
   let lineUserId = "";
   let coLineUserIds: string[] = [];
@@ -724,7 +685,7 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
     return { success: false, message: "ผู้เช่าห้องนี้ยังไม่ได้ผูก LINE User ID (กรอกได้ที่หน้าแก้ไขผู้เช่า)" };
   }
 
-  const message = buildBillFlexMessage(item, billRow.monthYear, settings);
+  const message = buildBillFlexMessage(item, billRow.monthYear, settings, billId);
 
   const log = {
     timestamp: new Date().toISOString(),
