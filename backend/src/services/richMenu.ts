@@ -24,11 +24,13 @@ function uriOrMessage(url: string, text: string): RichMenuArea["action"] {
   return url ? { type: "uri", uri: url } : { type: "message", text };
 }
 
-function guestAreas(liffLoginUrl: string, contactUrl: string): RichMenuArea[] {
+function guestAreas(liffLoginUrl: string, contactUrl: string, liffBookingUrl: string): RichMenuArea[] {
   return [
     { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
-    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: { type: "message", text: "ดูห้องว่าง" } },
-    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: { type: "message", text: "จองห้อง" } },
+    // "ดูห้องว่าง"/"จองห้อง" ชี้ URL เดียวกัน (ดูรายการห้องว่าง + จองได้ในหน้าเดียว ดู
+    // frontend/src/pages/LiffBookingPage.tsx) ต่างกันแค่ข้อความปุ่ม
+    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: uriOrMessage(liffBookingUrl, "ดูห้องว่าง") },
+    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: uriOrMessage(liffBookingUrl, "จองห้อง") },
     { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: uriOrMessage(contactUrl, "ติดต่อ") },
   ];
 }
@@ -165,6 +167,7 @@ export interface RichMenuUrls {
   liffPaymentUrl: string;
   liffProfileUrl: string;
   liffRepairUrl: string;
+  liffBookingUrl: string;
   contactUrl: string;
 }
 
@@ -178,7 +181,7 @@ export async function createAllRichMenus(
   if (previousIds?.member) await deleteRichMenu(token, previousIds.member);
   if (previousIds?.admin) await deleteRichMenu(token, previousIds.admin);
 
-  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(urls.liffLoginUrl, urls.contactUrl), images.guest.buffer, images.guest.mimeType);
+  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(urls.liffLoginUrl, urls.contactUrl, urls.liffBookingUrl), images.guest.buffer, images.guest.mimeType);
   const memberId = await createOne(token, "Member Menu", "เมนูสมาชิก", memberAreas(urls), images.member.buffer, images.member.mimeType);
   const adminId = await createOne(token, "Admin Menu", "เมนูผู้ดูแลระบบ", adminAreas(), images.admin.buffer, images.admin.mimeType);
 

@@ -300,6 +300,9 @@ export const appConfig = pgTable("app_config", {
   // แชทแบบเดิม (ดู services/richMenu.ts)
   liffProfileUrl: str("liff_profile_url"),
   liffRepairUrl: str("liff_repair_url"),
+  // ปุ่ม "ดูห้องว่าง" / "จองห้อง" บนเมนู Guest — LIFF สาธารณะ (ไม่ต้องเป็นผู้เช่ามาก่อนก็ใช้ได้) ทั้งสองปุ่ม
+  // ชี้มาที่ URL เดียวกันนี้ (ดูรายการห้องว่าง + จองได้ในหน้าเดียว) ต่างแค่ข้อความปุ่ม (ดู services/richMenu.ts)
+  liffBookingUrl: str("liff_booking_url"),
   // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู) — ไม่ต้องใช้ LIFF เพราะไม่ต้องรู้ตัวตนผู้เช่า
   contactPhone: str("contact_phone"),
   richMenuGuestImage: str("rich_menu_guest_image"),

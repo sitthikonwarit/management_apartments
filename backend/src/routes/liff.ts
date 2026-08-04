@@ -5,7 +5,7 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents, vehicles, vehicleTypes } from "../db/schema";
+import { appConfig, rooms, towers, bookings, tenants, chatMessages, lineProfiles, paymentIntents, vehicles, vehicleTypes } from "../db/schema";
 import {
   getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
   getOutstandingBillsForTenant, getBillItemForTenant, getThisMonthBillItemForTenant,
@@ -91,6 +91,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       liffPaymentUrl: row?.liffPaymentUrl || "",
       liffProfileUrl: row?.liffProfileUrl || "",
       liffRepairUrl: row?.liffRepairUrl || "",
+      liffBookingUrl: row?.liffBookingUrl || "",
       contactPhone: row?.contactPhone || "",
       appIdentity: {
         logoUrl: row?.logoUrl || "",
@@ -549,6 +550,96 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       preview: `🔧 แจ้งซ่อม: ${title.trim()}`,
     });
     broadcastChange("chat", "create", "มีการแจ้งซ่อมใหม่", senderName);
+
+    return { ok: true, messageId: id };
+  })
+  // ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest — สาธารณะจริงๆ ไม่ต้องยืนยันตัวตน (ต่างจาก endpoint อื่นในไฟล์นี้
+  // ที่ต้องรู้ว่าเป็นผู้เช่าคนไหน) เพราะยังไม่ใช่ผู้เช่า ดูรายการห้องที่สถานะ "ว่าง" และเปิดใช้งานอยู่เท่านั้น
+  .get("/rooms", async () => {
+    const [roomRows, towerRows] = await Promise.all([db.select().from(rooms), db.select().from(towers)]);
+    const towerMap = new Map(towerRows.map((t) => [t.id, t]));
+    return roomRows
+      .filter((r) => r.status === "ว่าง" && r.isActive !== "false")
+      .map((r) => ({
+        id: r.id,
+        number: r.number,
+        floor: r.floor,
+        towerName: towerMap.get(r.towerId || "")?.name || "",
+        towerColor: towerMap.get(r.towerId || "")?.color || "",
+        price: Number(r.price) || 0,
+        dailyPrice: Number(r.dailyPrice) || 0,
+        detail: r.detail,
+        pictures: parseJsonArray(r.pictures),
+      }));
+  })
+  // กด "จองห้องนี้" ในหน้า LIFF Booking — ยืนยันตัวตนด้วย LIFF access token เอาไว้ให้พนักงานติดต่อกลับ/แชท
+  // ต่อได้ (ไม่ใช่การเช็คว่าเป็นผู้เช่าอยู่แล้วแบบ /repair เพราะคนจองห้องยังไม่เคยเป็นผู้เช่ามาก่อน) บันทึกลง
+  // ตาราง bookings (เดิมมีอยู่แล้วในระบบแต่ไม่มีใครใช้ ตกค้างจากยุค Google Sheets) + ขึ้นเป็นการ์ดในหน้าแชท
+  // พนักงานทันที (messageType "booking") ไม่ล็อกห้องไว้ให้ใครทันที พนักงานโทรกลับไปยืนยันเอง
+  .post("/rooms/book", async ({ body, set }) => {
+    const { accessToken, roomId, name, tel } = body as {
+      accessToken?: string; roomId?: string; name?: string; tel?: string;
+    };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!roomId) { set.status = 400; return { error: "กรุณาเลือกห้องที่ต้องการจอง" }; }
+    if (!name?.trim()) { set.status = 400; return { error: "กรุณากรอกชื่อ" }; }
+    if (!tel?.trim()) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรศัพท์" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+    if (!room) { set.status = 404; return { error: "ไม่พบห้องที่ต้องการจอง" }; }
+
+    const ts = new Date().toISOString();
+    await db.insert(bookings).values({
+      id: `BK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: ts,
+      source: "LIFF",
+      roomNumber: room.number,
+      roomCode: room.code,
+      roomPrice: String(room.price),
+      roomDetail: room.detail,
+      firstName: name.trim(),
+      lastName: "",
+      tel: tel.trim(),
+      idLine: profile.userId,
+      status: "pending",
+      customerId: "",
+      startDate: "",
+      endDate: "",
+    });
+
+    const snapshot = {
+      kind: "booking",
+      roomNumber: room.number,
+      roomDetail: room.detail,
+      roomPrice: Number(room.price) || 0,
+      name: name.trim(),
+      tel: tel.trim(),
+      bookedAt: ts,
+    };
+    const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await db.insert(chatMessages).values({
+      id,
+      lineUserId: profile.userId,
+      tenantId: "",
+      direction: "in",
+      messageType: "booking",
+      text: JSON.stringify(snapshot),
+      senderName: name.trim(),
+      createdAt: ts,
+    });
+
+    const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
+    broadcastChatMessage({
+      lineUserId: profile.userId,
+      displayName: name.trim() || profile.displayName || "ไม่ทราบชื่อ",
+      roomNumber: room.number || null,
+      pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
+      preview: `🏠 จองห้อง ${room.number}`,
+    });
+    broadcastChange("chat", "create", "มีการจองห้องใหม่", name.trim());
 
     return { ok: true, messageId: id };
   });

@@ -251,6 +251,7 @@ export default function SettingsPage() {
   const [liffPaymentUrl, setLiffPaymentUrl] = useState("");
   const [liffProfileUrl, setLiffProfileUrl] = useState("");
   const [liffRepairUrl, setLiffRepairUrl] = useState("");
+  const [liffBookingUrl, setLiffBookingUrl] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [richMenuImages, setRichMenuImages] = useState({ guest: "", member: "", admin: "" });
   const [richMenuIds, setRichMenuIds] = useState({ guest: "", member: "", admin: "" });
@@ -352,6 +353,7 @@ export default function SettingsPage() {
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
     setLiffProfileUrl(config.richMenu.liffProfileUrl);
     setLiffRepairUrl(config.richMenu.liffRepairUrl);
+    setLiffBookingUrl(config.richMenu.liffBookingUrl);
     setContactPhone(config.richMenu.contactPhone);
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
@@ -536,6 +538,7 @@ export default function SettingsPage() {
           ...DEFAULT_APP_CONFIG.richMenu,
           liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim(),
           liffProfileUrl: liffProfileUrl.trim(), liffRepairUrl: liffRepairUrl.trim(),
+          liffBookingUrl: liffBookingUrl.trim(),
           contactPhone: contactPhone.trim(),
         },
         payment: {
@@ -1157,6 +1160,11 @@ export default function SettingsPage() {
                     <label className="form-label small fw-bold">LIFF Repair URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "แจ้งซ่อม" บนเมนู Member)</span></label>
                     <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
                       value={liffRepairUrl} onChange={(e) => setLiffRepairUrl(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Booking URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffBookingUrl} onChange={(e) => setLiffBookingUrl(e.target.value)} />
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ" บนเมนู Guest/Member)</span></label>

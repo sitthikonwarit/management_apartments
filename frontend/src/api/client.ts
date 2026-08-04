@@ -237,6 +237,7 @@ export const liffApi = {
     liffPaymentUrl: string;
     liffProfileUrl: string;
     liffRepairUrl: string;
+    liffBookingUrl: string;
     contactPhone: string;
     appIdentity: { logoUrl: string; nameText: string; logoBg: { enabled: boolean; color: string } };
     features: { splitRentByResidents: boolean };
@@ -301,4 +302,10 @@ export const liffApi = {
       vehicles: { id: string; licensePlate: string; brand: string; color: string; typeName: string; typeIcon: string; images: string[] }[];
       files: { name: string; url: string }[];
     }),
+  availableRooms: () => api.get("/liff/rooms").then((r) => r.data as {
+    id: string; number: string; floor: string; towerName: string; towerColor: string;
+    price: number; dailyPrice: number; detail: string; pictures: { url: string; name?: string }[];
+  }[]),
+  bookRoom: (accessToken: string, roomId: string, name: string, tel: string) =>
+    api.post("/liff/rooms/book", { accessToken, roomId, name, tel }).then((r) => r.data as { ok: boolean; messageId: string }),
 };

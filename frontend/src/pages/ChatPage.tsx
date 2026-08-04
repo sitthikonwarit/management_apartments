@@ -12,6 +12,7 @@ import ImageLightbox from "../components/ImageLightbox";
 import { ChatBillMessage } from "../components/ChatBillCard";
 import { ChatRepairMessage } from "../components/ChatRepairCard";
 import { ChatPaymentConfirmMessage } from "../components/ChatPaymentConfirmCard";
+import { ChatBookingMessage } from "../components/ChatBookingCard";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -319,6 +320,9 @@ export default function ChatPage() {
                         messageId={m.id} lineUserId={m.lineUserId} raw={m.text}
                         onUpdated={(updated) => setMessages((prev) => prev.map((msg) => (msg.id === updated.id ? updated : msg)))}
                       />
+                    ) : m.messageType === "booking" ? (
+                      // การ์ดคำขอจองห้อง (ผู้สนใจส่งเข้ามาจากหน้า LIFF Booking) — แสดงผลอย่างเดียว ไม่มี action
+                      <ChatBookingMessage raw={m.text} />
                     ) : m.messageType === "image" && m.imageUrl ? (
                       // รูปภาพแสดงแบบลอยเดี่ยวๆ ไม่มีฟองข้อความ/พื้นหลังห่อ (เหมือนสติกเกอร์) — ของเดิมห่อด้วย
                       // ฟองสีทำให้ดูเหมือนมีกรอบ/ขอบรอบรูปเกินจำเป็น

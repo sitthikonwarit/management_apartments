@@ -31,6 +31,14 @@ function previewText(m: { messageType: string; text: string }): string {
       return "💰 แจ้งชำระเงิน";
     }
   }
+  if (m.messageType === "booking") {
+    try {
+      const data = JSON.parse(m.text);
+      return `🏠 จองห้อง ${data?.roomNumber ?? ""}`;
+    } catch {
+      return "🏠 จองห้อง";
+    }
+  }
   return m.text || "[ไฟล์แนบ]";
 }
 
