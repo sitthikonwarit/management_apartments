@@ -35,7 +35,9 @@ export interface AppConfig {
     // ตัวตนผู้เช่าเหมือน login/payment — ว่าง = ปุ่มยังเป็นข้อความส่งเข้าแชทแบบเดิม
     liffProfileUrl: string;
     liffRepairUrl: string;
-    // ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest — ชี้ URL เดียวกัน ไม่ต้องเป็นผู้เช่ามาก่อนก็เข้าได้
+    // ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest — คนละ LIFF app กัน (คนละหน้า) ไม่ต้องเป็นผู้เช่ามาก่อนก็เข้าได้
+    // liffRoomsUrl = ดูรายการห้องว่าง+รายละเอียด, liffBookingUrl = จัดการห้องที่ตัวเองจอง/ยกเลิกเอง
+    liffRoomsUrl: string;
     liffBookingUrl: string;
     // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู)
     contactPhone: string;
@@ -77,7 +79,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   sessionTimeoutMinutes: 30,
   lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false, sendBillToCoResidents: true },
   richMenu: {
-    liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", liffBookingUrl: "", contactPhone: "",
+    liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", liffRoomsUrl: "", liffBookingUrl: "", contactPhone: "",
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },

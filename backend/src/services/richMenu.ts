@@ -24,17 +24,14 @@ function uriOrMessage(url: string, text: string): RichMenuArea["action"] {
   return url ? { type: "uri", uri: url } : { type: "message", text };
 }
 
-function guestAreas(liffLoginUrl: string, contactUrl: string, liffBookingUrl: string): RichMenuArea[] {
-  // "ดูห้องว่าง" กับ "จองห้อง" ใช้หน้าเดียวกัน (frontend/src/pages/LiffBookingPage.tsx) แต่พฤติกรรมต่างกันผ่าน
-  // query "?mode=book" — "ดูห้องว่าง" เปิดโหมดเรียกดูรายการห้อง (รูป/ราคา/รายละเอียดเต็ม) ส่วน "จองห้อง" เปิด
-  // ฟอร์มจองด่วน (เลือกห้อง+กรอกชื่อ/เบอร์) ขึ้นก่อนทันที ไม่ต้องไล่scrollหาห้องเอง
-  const quickBookUrl = liffBookingUrl
-    ? `${liffBookingUrl}${liffBookingUrl.includes("?") ? "&" : "?"}mode=book`
-    : "";
+function guestAreas(liffLoginUrl: string, contactUrl: string, liffRoomsUrl: string, liffBookingUrl: string): RichMenuArea[] {
+  // "ดูห้องว่าง" กับ "จองห้อง" เป็นคนละ LIFF App กันจริงๆ (คนละหน้า): liffRoomsUrl = ดูรายการห้องว่าง+
+  // รายละเอียด (frontend/src/pages/LiffRoomsPage.tsx, มีปุ่มลัดไปหน้าจองในรายละเอียดห้อง) ส่วน
+  // liffBookingUrl = จัดการห้องที่ตัวเองจองอยู่/ยกเลิกเอง (frontend/src/pages/LiffBookingPage.tsx)
   return [
     { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
-    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: uriOrMessage(liffBookingUrl, "ดูห้องว่าง") },
-    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: uriOrMessage(quickBookUrl, "จองห้อง") },
+    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: uriOrMessage(liffRoomsUrl, "ดูห้องว่าง") },
+    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: uriOrMessage(liffBookingUrl, "จองห้อง") },
     { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: uriOrMessage(contactUrl, "ติดต่อ") },
   ];
 }
@@ -171,6 +168,7 @@ export interface RichMenuUrls {
   liffPaymentUrl: string;
   liffProfileUrl: string;
   liffRepairUrl: string;
+  liffRoomsUrl: string;
   liffBookingUrl: string;
   contactUrl: string;
 }
@@ -185,7 +183,7 @@ export async function createAllRichMenus(
   if (previousIds?.member) await deleteRichMenu(token, previousIds.member);
   if (previousIds?.admin) await deleteRichMenu(token, previousIds.admin);
 
-  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(urls.liffLoginUrl, urls.contactUrl, urls.liffBookingUrl), images.guest.buffer, images.guest.mimeType);
+  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestAreas(urls.liffLoginUrl, urls.contactUrl, urls.liffRoomsUrl, urls.liffBookingUrl), images.guest.buffer, images.guest.mimeType);
   const memberId = await createOne(token, "Member Menu", "เมนูสมาชิก", memberAreas(urls), images.member.buffer, images.member.mimeType);
   const adminId = await createOne(token, "Admin Menu", "เมนูผู้ดูแลระบบ", adminAreas(), images.admin.buffer, images.admin.mimeType);
 

@@ -1,19 +1,25 @@
-// หน้า LIFF Booking — ปลายทางของปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest (ชี้มาที่ URL เดียวกัน ต่างกันแค่
-// ข้อความปุ่ม ดู services/richMenu.ts) แสดงรายการห้องว่างสาธารณะ (ไม่ต้องเป็นผู้เช่ามาก่อน) กด "จองห้องนี้"
-// กรอกชื่อ+เบอร์โทรแล้วส่งเข้าเป็นข้อความแชทพิเศษ (messageType "booking") เด้งแจ้งเตือนในหน้าแชทของเว็บทันที
-// พนักงานโทรกลับไปยืนยันเอง ไม่มีการล็อกห้อง/ยืนยันอัตโนมัติใดๆ (ดู components/ChatBookingCard.tsx)
-import { useEffect, useState } from "react";
+// หน้า LIFF จองห้อง — ปลายทางของปุ่ม "จองห้อง" บนเมนู Guest (คนละ LIFF App กับหน้า "ดูห้องว่าง" จริงๆ ดู
+// liffBookingUrl ใน backend/src/services/richMenu.ts) หน้าที่หลักคือแสดง "ห้องที่คุณจองอยู่" (ยกเลิกเองได้
+// ที่นี่ — ห้องจะกลับเป็น "ว่าง" อัตโนมัติ) มีช่องค้นหา ถ้ามาจากทางลัด "จองห้องนี้" ในหน้า LiffRoomsPage
+// (ต่อ query "?roomId=") จะมีฟอร์มยืนยันจองห้องนั้นขึ้นก่อนด้วย — จองสำเร็จแล้วห้องจะ "ล็อก" (rooms.status
+// = "จอง") ให้ทันที ไม่ต้องรอพนักงานโทรกลับยืนยันเหมือนเดิมอีกต่อไป (ดู POST /liff/rooms/book และ
+// /liff/rooms/cancel ใน backend/src/routes/liff.ts)
+import { useEffect, useMemo, useState } from "react";
 import liff from "@line/liff";
 import { liffApi } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
 
 type Status = "loading" | "ready" | "error";
-type Mode = "view" | "book";
 
 interface AvailableRoom {
   id: string; number: string; floor: string; towerName: string; towerColor: string;
   price: number; dailyPrice: number; detail: string; pictures: { url: string; name?: string }[];
+}
+
+interface MyBooking {
+  bookingId: string; roomId: string; roomNumber: string; towerName: string; towerColor: string;
+  floor: string; price: number; detail: string; pictures: { url: string; name?: string }[]; bookedAt: string;
 }
 
 function fmtMoney(n: number) {
@@ -25,22 +31,30 @@ export default function LiffBookingPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
   const [accessToken, setAccessToken] = useState("");
-  const [rooms, setRooms] = useState<AvailableRoom[]>([]);
 
-  // ปุ่ม "ดูห้องว่าง" เปิดโหมด "view" (เรียกดูรายการห้อง) ส่วนปุ่ม "จองห้อง" เปิดด้วย "?mode=book" (ดู
-  // guestAreas ใน backend/src/services/richMenu.ts) ให้ขึ้นฟอร์มจองด่วนก่อนเลย ไม่ต้องไล่ scroll หาห้องเอง
-  const [mode, setMode] = useState<Mode>(() => (new URLSearchParams(window.location.search).get("mode") === "book" ? "book" : "view"));
-  const [quickRoomId, setQuickRoomId] = useState("");
+  const [myBookings, setMyBookings] = useState<MyBooking[]>([]);
+  const [search, setSearch] = useState("");
 
-  const [galleryImages, setGalleryImages] = useState<string[] | null>(null);
-  const [galleryIndex, setGalleryIndex] = useState(0);
-
-  const [bookRoom, setBookRoom] = useState<AvailableRoom | null>(null);
+  // ห้องที่มาจากทางลัด "?roomId=" (ยังไม่เคยจอง) — โชว์ฟอร์มยืนยันจองห้องนี้ก่อน
+  const [pendingRoom, setPendingRoom] = useState<AvailableRoom | null>(null);
+  const [pendingNotFound, setPendingNotFound] = useState(false);
   const [name, setName] = useState("");
   const [tel, setTel] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [justBooked, setJustBooked] = useState(false);
+
+  const [cancelTarget, setCancelTarget] = useState<MyBooking | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const [galleryImages, setGalleryImages] = useState<string[] | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+
+  async function loadMyBookings(token: string) {
+    const res = await liffApi.myBookings(token);
+    setMyBookings(res.bookings);
+    return res.bookings;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -60,10 +74,18 @@ export default function LiffBookingPage() {
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
 
-        const availableRooms = await liffApi.availableRooms();
+        const bookings = await loadMyBookings(token);
         if (cancelled) return;
-        setRooms(availableRooms);
-        if (availableRooms[0]) setQuickRoomId(availableRooms[0].id);
+
+        const roomId = new URLSearchParams(window.location.search).get("roomId");
+        if (roomId && !bookings.some((b) => b.roomId === roomId)) {
+          const availableRooms = await liffApi.availableRooms();
+          if (cancelled) return;
+          const found = availableRooms.find((r) => r.id === roomId);
+          if (found) setPendingRoom(found);
+          else setPendingNotFound(true);
+        }
+
         setStatus("ready");
       } catch (e: any) {
         if (cancelled) return;
@@ -74,24 +96,31 @@ export default function LiffBookingPage() {
     return () => { cancelled = true; };
   }, []);
 
-  function openBook(room: AvailableRoom) {
-    setBookRoom(room);
-    setName(""); setTel(""); setFormError(""); setSubmitted(false);
+  const filteredBookings = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return myBookings;
+    return myBookings.filter((b) =>
+      b.roomNumber.toLowerCase().includes(q) || b.towerName.toLowerCase().includes(q)
+    );
+  }, [myBookings, search]);
+
+  function clearRoomIdFromUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("roomId");
+    window.history.replaceState({}, "", url.toString());
   }
 
-  function closeBook() {
-    setBookRoom(null);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmitBooking(e: React.FormEvent) {
     e.preventDefault();
-    if (!bookRoom) return;
+    if (!pendingRoom) return;
     if (!name.trim()) { setFormError("กรุณากรอกชื่อ"); return; }
     if (!tel.trim()) { setFormError("กรุณากรอกเบอร์โทรศัพท์"); return; }
     setSubmitting(true); setFormError("");
     try {
-      await liffApi.bookRoom(accessToken, bookRoom.id, name.trim(), tel.trim());
-      setSubmitted(true);
+      await liffApi.bookRoom(accessToken, pendingRoom.id, name.trim(), tel.trim());
+      setJustBooked(true);
+      await loadMyBookings(accessToken);
+      clearRoomIdFromUrl();
     } catch (e: any) {
       setFormError(e?.response?.data?.error ?? e?.message ?? "จองห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -99,22 +128,23 @@ export default function LiffBookingPage() {
     }
   }
 
-  // ฟอร์มจองด่วนตอนเปิดมาจากปุ่ม "จองห้อง" (mode === "book") — เลือกห้องจาก dropdown แทนการกดเข้าไปในการ์ด
-  // แต่ละใบเหมือนโหมด "view" ใช้ endpoint เดียวกัน (liffApi.bookRoom) แค่ต่างวิธีเลือกห้อง
-  async function handleQuickSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const room = rooms.find((r) => r.id === quickRoomId);
-    if (!room) { setFormError("กรุณาเลือกห้องที่ต้องการจอง"); return; }
-    if (!name.trim()) { setFormError("กรุณากรอกชื่อ"); return; }
-    if (!tel.trim()) { setFormError("กรุณากรอกเบอร์โทรศัพท์"); return; }
-    setSubmitting(true); setFormError("");
+  function dismissPendingRoom() {
+    setPendingRoom(null);
+    setJustBooked(false);
+    clearRoomIdFromUrl();
+  }
+
+  async function handleCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
     try {
-      await liffApi.bookRoom(accessToken, room.id, name.trim(), tel.trim());
-      setSubmitted(true);
+      await liffApi.cancelBooking(accessToken, cancelTarget.bookingId);
+      setMyBookings((prev) => prev.filter((b) => b.bookingId !== cancelTarget.bookingId));
+      setCancelTarget(null);
     } catch (e: any) {
-      setFormError(e?.response?.data?.error ?? e?.message ?? "จองห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setFormError(e?.response?.data?.error ?? e?.message ?? "ยกเลิกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
-      setSubmitting(false);
+      setCancelling(false);
     }
   }
 
@@ -124,8 +154,8 @@ export default function LiffBookingPage() {
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
-            : <div className="login-icon"><i className="fas fa-door-open" /></div>}
-          <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>{branding.nameText || "ห้องว่าง"}</h5>
+            : <div className="login-icon"><i className="fas fa-calendar-check" /></div>}
+          <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>{branding.nameText || "จองห้อง"}</h5>
           {status === "loading" && (
             <div className="py-4">
               <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
@@ -140,142 +170,30 @@ export default function LiffBookingPage() {
     );
   }
 
-  if (mode === "book") {
-    return (
-      <div className="login-page-wrap">
-        <div className="login-card custom-card" style={{ maxWidth: 420, textAlign: "left" }}>
-          <div className="text-center mb-3">
-            {branding.logoUrl
-              ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
-              : <div className="login-icon"><i className="fas fa-calendar-check" /></div>}
-            <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>จองห้อง</h5>
-            <p className="text-muted small mb-0">เลือกห้อง กรอกชื่อ+เบอร์โทร แล้วส่งคำขอได้เลย พนักงานจะโทรกลับไปยืนยัน</p>
-          </div>
-
-          {rooms.length === 0 ? (
-            <div className="alert alert-light border text-center small mb-0">
-              <i className="fas fa-circle-info me-2" />ขณะนี้ยังไม่มีห้องว่าง
-            </div>
-          ) : submitted ? (
-            <div className="text-center py-3">
-              <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
-                <i className="fas fa-check-circle" />
-              </div>
-              <div className="alert alert-success py-2 px-3 small mb-0">ส่งคำขอจองห้องเรียบร้อยแล้ว พนักงานจะติดต่อกลับทางแชทนี้หรือโทรกลับไปยืนยันเร็วๆ นี้</div>
-            </div>
-          ) : (
-            <form onSubmit={handleQuickSubmit}>
-              <div className="mb-2">
-                <label className="form-label small fw-bold">เลือกห้อง</label>
-                <select className="form-select" value={quickRoomId} onChange={(e) => setQuickRoomId(e.target.value)} disabled={submitting}>
-                  {rooms.map((r) => (
-                    <option key={r.id} value={r.id}>ห้อง {r.number}{r.towerName ? ` (${r.towerName})` : ""} — {fmtMoney(r.price)} ฿/เดือน</option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-2">
-                <label className="form-label small fw-bold">ชื่อ</label>
-                <input className="form-control" value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
-              </div>
-              <div className="mb-2">
-                <label className="form-label small fw-bold">เบอร์โทรศัพท์</label>
-                <input type="tel" className="form-control" value={tel} onChange={(e) => setTel(e.target.value)} disabled={submitting} />
-              </div>
-              {formError && <div className="room-modal-error my-2"><i className="fas fa-exclamation-circle me-2" />{formError}</div>}
-              <button type="submit" className="btn btn-primary w-100 mt-2" disabled={submitting}>
-                {submitting
-                  ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
-                  : <><i className="fas fa-paper-plane me-2" />ส่งคำขอจอง</>}
-              </button>
-            </form>
-          )}
-
-          <button type="button" className="btn btn-link btn-sm w-100 mt-2" onClick={() => setMode("view")}>
-            <i className="fas fa-images me-1" />ดูรูป/รายละเอียดห้องทั้งหมดก่อนจอง
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="login-page-wrap">
-      <div className="login-card custom-card" style={{ maxWidth: 440 }}>
-        <div className="text-center mb-3">
-          {branding.logoUrl
-            ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
-            : <div className="login-icon"><i className="fas fa-door-open" /></div>}
-          <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>ห้องว่าง</h5>
-          <p className="text-muted small mb-0">เลือกห้องที่สนใจแล้วกดจองได้เลย พนักงานจะโทรกลับไปยืนยัน</p>
-        </div>
+      <div className="login-card custom-card" style={{ maxWidth: 440, textAlign: "left" }}>
 
-        {rooms.length === 0 ? (
-          <div className="alert alert-light border text-center small mb-0">
-            <i className="fas fa-circle-info me-2" />ขณะนี้ยังไม่มีห้องว่าง
-          </div>
-        ) : (
-          <div className="d-flex flex-column gap-3">
-            {rooms.map((room) => (
-              <div key={room.id} className="rounded overflow-hidden" style={{ border: "1px solid var(--color-light)", textAlign: "left" }}>
-                {room.pictures.length > 0 ? (
-                  <div
-                    style={{ position: "relative", cursor: room.pictures.length > 1 ? "pointer" : "default" }}
-                    onClick={() => { setGalleryImages(room.pictures.map((p) => p.url)); setGalleryIndex(0); }}
-                  >
-                    <img src={room.pictures[0].url} alt="" style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
-                    {room.pictures.length > 1 && (
-                      <span style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, padding: "2px 8px", borderRadius: 12 }}>
-                        <i className="fas fa-images me-1" />{room.pictures.length} รูป
-                      </span>
-                    )}
-                    {room.towerColor && (
-                      <span style={{ position: "absolute", top: 8, left: 8, background: room.towerColor, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 12 }}>
-                        {room.towerName}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ width: "100%", height: 140, background: "var(--color-background)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className="fas fa-door-open text-muted" style={{ fontSize: 28 }} />
-                  </div>
-                )}
-
-                <div className="p-3">
-                  <div className="d-flex justify-content-between align-items-start mb-1">
-                    <span className="fw-bold fs-6">ห้อง {room.number}</span>
-                    <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{fmtMoney(room.price)} ฿/เดือน</span>
-                  </div>
-                  <div className="text-muted small mb-2">
-                    {room.towerName && <span className="me-2"><i className="fas fa-building me-1" />{room.towerName}</span>}
-                    {room.floor && <span><i className="fas fa-layer-group me-1" />ชั้น {room.floor}</span>}
-                    {room.dailyPrice > 0 && <span className="ms-2"><i className="fas fa-calendar-day me-1" />{fmtMoney(room.dailyPrice)} ฿/วัน</span>}
-                  </div>
-                  {room.detail && <div className="small mb-3" style={{ whiteSpace: "pre-wrap" }}>{room.detail}</div>}
-                  <button className="btn btn-sm btn-primary w-100" onClick={() => openBook(room)}>
-                    <i className="fas fa-calendar-check me-1" />จองห้องนี้
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {bookRoom && (
-        <div className="confirm-overlay" onClick={() => !submitting && closeBook()}>
-          <div className="confirm-dialog" style={{ maxWidth: 380, width: "92%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
-            {submitted ? (
-              <div className="text-center py-3">
+        {/* ─── ฟอร์มยืนยันจอง (มาจากทางลัดในหน้า "ดูห้องว่าง") ─── */}
+        {pendingRoom && (
+          <div className="mb-4 pb-4" style={{ borderBottom: "1px solid var(--color-light)" }}>
+            {justBooked ? (
+              <div className="text-center py-2">
                 <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
                   <i className="fas fa-check-circle" />
                 </div>
-                <div className="alert alert-success py-2 px-3 small mb-3">ส่งคำขอจองห้อง {bookRoom.number} เรียบร้อยแล้ว พนักงานจะติดต่อกลับทางแชทนี้หรือโทรกลับไปยืนยันเร็วๆ นี้</div>
-                <button className="btn btn-primary w-100" onClick={closeBook}>ปิด</button>
+                <div className="alert alert-success py-2 px-3 small mb-3">
+                  จองห้อง {pendingRoom.number} สำเร็จ ระบบล็อกห้องให้เรียบร้อยแล้ว ยกเลิกได้เองด้านล่างหากเปลี่ยนใจ
+                </div>
+                <button className="btn btn-outline-secondary btn-sm" onClick={dismissPendingRoom}>ปิด</button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit}>
-                <h6 className="confirm-title" style={{ textAlign: "left" }}>จองห้อง {bookRoom.number}</h6>
-                <p className="text-muted small mb-3">{fmtMoney(bookRoom.price)} ฿/เดือน — กรอกชื่อและเบอร์โทรเพื่อให้พนักงานติดต่อกลับ</p>
+              <form onSubmit={handleSubmitBooking}>
+                <h6 className="fw-bold mb-1">ยืนยันจองห้อง {pendingRoom.number}</h6>
+                <p className="text-muted small mb-3">
+                  {pendingRoom.towerName ? `${pendingRoom.towerName} — ` : ""}{fmtMoney(pendingRoom.price)} ฿/เดือน
+                  — กรอกชื่อและเบอร์โทรเพื่อยืนยัน ห้องจะถูกล็อกให้ทันที
+                </p>
                 <div className="mb-2">
                   <label className="form-label small fw-bold">ชื่อ</label>
                   <input className="form-control" autoFocus value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
@@ -285,16 +203,104 @@ export default function LiffBookingPage() {
                   <input type="tel" className="form-control" value={tel} onChange={(e) => setTel(e.target.value)} disabled={submitting} />
                 </div>
                 {formError && <div className="room-modal-error my-2"><i className="fas fa-exclamation-circle me-2" />{formError}</div>}
-                <div className="confirm-actions mt-3">
-                  <button type="button" className="btn btn-outline-secondary" onClick={closeBook} disabled={submitting}>ยกเลิก</button>
-                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                <div className="d-flex gap-2 mt-3">
+                  <button type="button" className="btn btn-outline-secondary flex-grow-1" onClick={dismissPendingRoom} disabled={submitting}>ยกเลิก</button>
+                  <button type="submit" className="btn btn-primary flex-grow-1" disabled={submitting}>
                     {submitting
                       ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
-                      : <><i className="fas fa-paper-plane me-1" />ยืนยันการจอง</>}
+                      : <><i className="fas fa-paper-plane me-1" />ยืนยันจอง</>}
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        )}
+        {pendingNotFound && (
+          <div className="alert alert-warning small mb-4"><i className="fas fa-exclamation-triangle me-2" />ห้องนี้ไม่ว่างแล้ว กรุณาเลือกห้องอื่นจากหน้า "ดูห้องว่าง"</div>
+        )}
+
+        {/* ─── รายการห้องที่จองอยู่ ─── */}
+        <div className="text-center mb-3">
+          {!pendingRoom && (branding.logoUrl
+            ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
+            : <div className="login-icon"><i className="fas fa-calendar-check" /></div>)}
+          <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>ห้องที่คุณจองอยู่</h5>
+          <p className="text-muted small mb-0">ยกเลิกได้เองที่นี่ — ห้องจะกลับเป็นว่างทันที</p>
+        </div>
+
+        {myBookings.length > 0 && (
+          <div className="mb-3">
+            <div className="position-relative">
+              <i className="fas fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-dark-variant)" }} />
+              <input
+                type="text"
+                className="form-control"
+                style={{ paddingLeft: 34 }}
+                placeholder="ค้นหาเลขห้อง, ตึก..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {myBookings.length === 0 ? (
+          <div className="alert alert-light border text-center small mb-0">
+            <i className="fas fa-circle-info me-2" />คุณยังไม่มีห้องที่จองอยู่
+          </div>
+        ) : filteredBookings.length === 0 ? (
+          <div className="alert alert-light border text-center small mb-0">
+            <i className="fas fa-circle-info me-2" />ไม่พบห้องที่ตรงกับคำค้นหา
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-3">
+            {filteredBookings.map((b) => (
+              <div key={b.bookingId} className="rounded overflow-hidden" style={{ border: "1px solid var(--color-light)" }}>
+                {b.pictures.length > 0 ? (
+                  <div
+                    style={{ position: "relative", cursor: b.pictures.length > 1 ? "pointer" : "default" }}
+                    onClick={() => { if (b.pictures.length > 1) { setGalleryImages(b.pictures.map((p) => p.url)); setGalleryIndex(0); } }}
+                  >
+                    <img src={b.pictures[0].url} alt="" style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
+                    {b.towerColor && (
+                      <span style={{ position: "absolute", top: 8, left: 8, background: b.towerColor, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 12 }}>
+                        {b.towerName}
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+                <div className="p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-1">
+                    <span className="fw-bold fs-6">ห้อง {b.roomNumber}</span>
+                    <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{fmtMoney(b.price)} ฿/เดือน</span>
+                  </div>
+                  <div className="text-muted small mb-2">
+                    <i className="fas fa-clock me-1" />จองเมื่อ {new Date(b.bookedAt).toLocaleString("th-TH")}
+                  </div>
+                  <button className="btn btn-sm btn-outline-danger w-100" onClick={() => setCancelTarget(b)}>
+                    <i className="fas fa-times-circle me-1" />ยกเลิกการจอง
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {cancelTarget && (
+        <div className="confirm-overlay" onClick={() => !cancelling && setCancelTarget(null)}>
+          <div className="confirm-dialog" style={{ maxWidth: 360, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+            <h6 className="confirm-title">ยกเลิกการจองห้อง {cancelTarget.roomNumber}?</h6>
+            <p className="text-muted small mb-3">ห้องจะเปลี่ยนกลับเป็น "ว่าง" ทันทีหลังยกเลิก</p>
+            {formError && <div className="room-modal-error my-2"><i className="fas fa-exclamation-circle me-2" />{formError}</div>}
+            <div className="confirm-actions mt-3">
+              <button type="button" className="btn btn-outline-secondary" onClick={() => setCancelTarget(null)} disabled={cancelling}>ไม่ยกเลิก</button>
+              <button type="button" className="btn btn-danger" onClick={handleCancel} disabled={cancelling}>
+                {cancelling
+                  ? <><span className="spinner-border spinner-border-sm me-2" />กำลังยกเลิก...</>
+                  : <><i className="fas fa-times-circle me-1" />ยืนยันยกเลิก</>}
+              </button>
+            </div>
           </div>
         </div>
       )}

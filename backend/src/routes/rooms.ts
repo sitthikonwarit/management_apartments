@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { rooms, towers, roomTags, tenants } from "../db/schema";
+import { rooms, towers, roomTags, tenants, bookings } from "../db/schema";
 
 function j<T>(val: string, def: T): T {
   try { return val ? JSON.parse(val) : def; } catch { return def; }
@@ -195,6 +195,21 @@ export const roomsRoute = new Elysia({ prefix: "/rooms" })
     await db.update(rooms).set({ isActive: isActive ? "true" : "false" }).where(eq(rooms.id, id));
     const [row] = await db.select().from(rooms).where(eq(rooms.id, id));
     return parseRoom(row);
+  })
+
+  // ห้องที่มีคนจองเองผ่าน LIFF อยู่ (ดู POST /liff/rooms/book) แต่ยังไม่ได้ผูกเป็นผู้เช่าจริง — ใช้ในหน้า
+  // "จัดการห้องพัก" แสดง "ผู้จอง" แทนช่องผู้เช่าปกติ พร้อมปุ่มนำทางไปแชทกับคนนั้น (ดู RoomsPage.tsx)
+  .get("/bookings/active", async () => {
+    const rows = await db.select().from(bookings).where(eq(bookings.status, "active"));
+    return rows.map((b) => ({
+      id: b.id,
+      roomId: b.roomId,
+      roomNumber: b.roomNumber,
+      name: `${b.firstName} ${b.lastName}`.trim(),
+      tel: b.tel,
+      idLine: b.idLine,
+      bookedAt: b.timestamp,
+    }));
   })
 
   // ─── Towers ───────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import RoomTableView from "../components/RoomTableView";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { toDisplayYear } from "../utils/yearFormat";
 import { tenantDisplayName } from "../utils/tenantName";
-import { tenantOccupiesRoom, findTenantForRoom, roomsOfTenant } from "../utils/tenantRoom";
+import { tenantOccupiesRoom, findTenantForRoom, roomsOfTenant, findBookingForRoom } from "../utils/tenantRoom";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 
@@ -649,16 +649,17 @@ function RoomEditView({
 
 // ─── Room Detail View ─────────────────────────────────────────────────────────
 function RoomDetailView({
-  room, tower, tenant, allRooms, tenants, tags, meterRecords,
+  room, tower, tenant, booking, allRooms, tenants, tags, meterRecords,
   onBack, onPrev, onNext, hasPrev, hasNext, onSelectRoom, onRoomUpdate, onEdit, onTenantsUpdate,
 }: {
-  room: any; tower: any; tenant: any; allRooms: any[]; tenants: any[]; tags: any[]; meterRecords: any[];
+  room: any; tower: any; tenant: any; booking?: any; allRooms: any[]; tenants: any[]; tags: any[]; meterRecords: any[];
   onBack: () => void; onPrev: () => void; onNext: () => void;
   hasPrev: boolean; hasNext: boolean; onSelectRoom: (r: any) => void;
   onRoomUpdate: (updated: any) => void; onEdit: () => void;
   onTenantsUpdate: (updater: (prev: any[]) => any[]) => void;
 }) {
   const { config } = useAppConfig();
+  const navigate = useNavigate();
   const pictures = parsePictures(room.pictures);
   const [imgIdx, setImgIdx] = useState(0);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -667,8 +668,6 @@ function RoomDetailView({
     : [];
   const sClass = statusClass(room.status);
   const towerColor = tower?.color || "var(--color-primary)";
-
-  const navigate = useNavigate();
 
   const [showTagModal, setShowTagModal] = useState(false);
   const [pendingTagIds, setPendingTagIds] = useState<string[]>([]);
@@ -981,8 +980,8 @@ function RoomDetailView({
         <div className="detail-section">
           <div className="detail-section-header">
             <h6 className="mb-0">
-              <i className={`fas ${tenant ? "fa-user-check text-danger" : "fa-door-open text-success"} me-2`} />
-              {tenant ? "ผู้เช่าปัจจุบัน" : "สถานะห้อง"}
+              <i className={`fas ${tenant ? "fa-user-check text-danger" : booking ? "fa-user-clock text-warning" : "fa-door-open text-success"} me-2`} />
+              {tenant ? "ผู้เช่าปัจจุบัน" : booking ? "มีผู้จองห้องนี้" : "สถานะห้อง"}
             </h6>
             <button className="btn btn-sm btn-outline-primary" onClick={openTenantModal}>
               <i className={`fas ${tenant ? "fa-exchange-alt" : "fa-user-plus"} me-1`} />
@@ -1013,6 +1012,33 @@ function RoomDetailView({
                 <div className="file-view-item">
                   <i className="fas fa-calendar-times file-icon text-danger" />
                   <span className="file-name">วันสิ้นสุดสัญญา: <strong>{formatThaiDate(tenant.contractEndDate)}</strong></span>
+                </div>
+              )}
+            </div>
+          ) : booking ? (
+            <div className="file-view-container mt-2">
+              <div className="file-view-item">
+                <i className="fas fa-user-clock file-icon text-warning" />
+                <span className="file-name">ผู้จอง: <strong>{booking.name}</strong></span>
+              </div>
+              {booking.tel && (
+                <div className="file-view-item">
+                  <i className="fas fa-phone-alt file-icon text-secondary" />
+                  <span className="file-name">เบอร์โทร: <strong>{booking.tel}</strong></span>
+                </div>
+              )}
+              {booking.bookedAt && (
+                <div className="file-view-item">
+                  <i className="fas fa-clock file-icon text-muted" />
+                  <span className="file-name">จองเมื่อ: <strong>{new Date(booking.bookedAt).toLocaleString("th-TH")}</strong></span>
+                </div>
+              )}
+              {booking.idLine && (
+                <div className="file-view-item" style={{ cursor: "pointer" }}
+                  onClick={() => navigate("/chat", { state: { openLineUserId: booking.idLine } })}>
+                  <i className="fas fa-comment-dots file-icon text-primary" />
+                  <span className="file-name">ไปหน้าแชทกับผู้จอง</span>
+                  <i className="fas fa-external-link-alt ms-auto text-muted" style={{ fontSize: "0.75rem" }} />
                 </div>
               )}
             </div>
@@ -1414,6 +1440,7 @@ export default function RoomsPage() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [towers, setTowers] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [tags, setTags] = useState<any[]>([]);
   const [meterRecords, setMeterRecords] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -1503,19 +1530,19 @@ export default function RoomsPage() {
   }, [subView, detailRoom?.id, towerSubtitle]);
 
   useEffect(() => {
-    Promise.all([roomsApi.getAll(), roomsApi.getTowers(), tenantsApi.getAll(), roomsApi.getTags(), metersApi.getAll()])
-      .then(([r, t, ten, tg, mr]) => { setRooms(r); setTowers(t); setTenants(ten); setTags(tg); setMeterRecords(mr); })
+    Promise.all([roomsApi.getAll(), roomsApi.getTowers(), tenantsApi.getAll(), roomsApi.getTags(), metersApi.getAll(), roomsApi.activeBookings()])
+      .then(([r, t, ten, tg, mr, bk]) => { setRooms(r); setTowers(t); setTenants(ten); setTags(tg); setMeterRecords(mr); setBookings(bk); })
       .finally(() => setLoading(false));
     return () => setBreadcrumb([]);
   }, []);
 
-  // มีคนอื่นแก้ไขห้อง/ตึก/แท็กห้อง/ผู้เช่า/มิเตอร์ที่เครื่องอื่น (WebSocket แจ้งมา) — โหลดข้อมูลใหม่เงียบๆ
+  // มีคนอื่นแก้ไขห้อง/ตึก/แท็กห้อง/ผู้เช่า/มิเตอร์/การจองที่เครื่องอื่น (WebSocket แจ้งมา) — โหลดข้อมูลใหม่เงียบๆ
   // ไม่ต้องเปิด loading spinner ทับหน้าเดิม (ข้าม tick แรกที่ 0 เพราะ effect ด้านบนโหลดตอน mount ไปแล้ว)
   const roomsLiveTick = useLiveRefreshTick(["room", "tower", "room-tag", "tenant", "meter"]);
   useEffect(() => {
     if (roomsLiveTick === 0) return;
-    Promise.all([roomsApi.getAll(), roomsApi.getTowers(), tenantsApi.getAll(), roomsApi.getTags(), metersApi.getAll()])
-      .then(([r, t, ten, tg, mr]) => { setRooms(r); setTowers(t); setTenants(ten); setTags(tg); setMeterRecords(mr); });
+    Promise.all([roomsApi.getAll(), roomsApi.getTowers(), tenantsApi.getAll(), roomsApi.getTags(), metersApi.getAll(), roomsApi.activeBookings()])
+      .then(([r, t, ten, tg, mr, bk]) => { setRooms(r); setTowers(t); setTenants(ten); setTags(tg); setMeterRecords(mr); setBookings(bk); });
   }, [roomsLiveTick]);
 
   const filtered = useMemo(() => {
@@ -1664,12 +1691,14 @@ export default function RoomsPage() {
   if (subView === "detail" && detailRoom) {
     const tower = towers.find((t) => t.id === detailRoom.towerId);
     const tenant = findTenantForRoom(tenants, detailRoom);
+    const booking = findBookingForRoom(bookings, detailRoom);
     const detailIndex = filtered.findIndex((r) => r.id === detailRoom.id);
     return (
       <RoomDetailView
         room={detailRoom}
         tower={tower}
         tenant={tenant}
+        booking={booking}
         allRooms={filtered}
         tenants={tenants}
         tags={tags}
@@ -1791,6 +1820,7 @@ export default function RoomsPage() {
           {filtered.map((room) => {
             const tower = towers.find((t) => t.id === room.towerId);
             const tenant = findTenantForRoom(tenants, room);
+            const booking = !tenant ? findBookingForRoom(bookings, room) : null;
             const sClass = statusClass(room.status);
             return (
               <div key={room.id} className={`room-card${!room.isActive ? " is-inactive" : ""}`}
@@ -1834,6 +1864,20 @@ export default function RoomsPage() {
                       <p><i className="fas fa-user" />{tenantDisplayName(tenant)}</p>
                       {tenant.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" />{tenant.tel}</p>}
                     </div>
+                  ) : booking ? (
+                    <div className="room-card-tenant-info d-flex align-items-center justify-content-between">
+                      <div>
+                        <p><i className="fas fa-user-clock" />ผู้จอง: {booking.name}</p>
+                        {booking.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" />{booking.tel}</p>}
+                      </div>
+                      {booking.idLine && (
+                        <button type="button" className="btn btn-sm btn-outline-primary flex-shrink-0"
+                          title="ไปหน้าแชท"
+                          onClick={(e) => { e.stopPropagation(); navigate("/chat", { state: { openLineUserId: booking.idLine } }); }}>
+                          <i className="fas fa-comment-dots" />
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="room-card-tenant-info">
                       <p><i className="fas fa-door-open" />ว่าง - พร้อมให้เช่า</p>
@@ -1853,6 +1897,7 @@ export default function RoomsPage() {
           allRooms={rooms}
           towers={towers}
           tenants={tenants}
+          bookings={bookings}
           onViewDetail={goToDetail}
           onEdit={goToEdit}
           onDelete={async (room) => {
@@ -1872,6 +1917,7 @@ export default function RoomsPage() {
           {filtered.map((room) => {
             const tower = towers.find((t) => t.id === room.towerId);
             const tenant = findTenantForRoom(tenants, room);
+            const booking = !tenant ? findBookingForRoom(bookings, room) : null;
             return (
               <div key={room.id}
                 className="d-flex align-items-center gap-3 p-3"
@@ -1892,8 +1938,15 @@ export default function RoomsPage() {
                     {room.price > 0 ? `${room.price.toLocaleString()} ฿/เดือน` : ""}
                     {room.dailyPrice > 0 && <span style={{ fontWeight: 400, fontSize: "0.82rem", color: "var(--color-dark-variant)", display: "block" }}>{room.dailyPrice.toLocaleString()} ฿/วัน</span>}
                   </div>
-                  <small className="text-muted">{tenant ? tenantDisplayName(tenant) : "ว่าง"}</small>
+                  <small className="text-muted">{tenant ? tenantDisplayName(tenant) : booking ? `ผู้จอง: ${booking.name}` : "ว่าง"}</small>
                 </div>
+                {booking?.idLine && (
+                  <button type="button" className="btn btn-sm btn-outline-primary flex-shrink-0"
+                    title="ไปหน้าแชท"
+                    onClick={(e) => { e.stopPropagation(); navigate("/chat", { state: { openLineUserId: booking.idLine } }); }}>
+                    <i className="fas fa-comment-dots" />
+                  </button>
+                )}
                 <i className="fas fa-chevron-right text-muted" />
               </div>
             );

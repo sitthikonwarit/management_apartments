@@ -58,6 +58,7 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
       liffPaymentUrl: r.liffPaymentUrl || "",
       liffProfileUrl: r.liffProfileUrl || "",
       liffRepairUrl: r.liffRepairUrl || "",
+      liffRoomsUrl: r.liffRoomsUrl || "",
       liffBookingUrl: r.liffBookingUrl || "",
       contactPhone: r.contactPhone || "",
       images: {
@@ -179,6 +180,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       liffPaymentUrl: String(b.richMenu?.liffPaymentUrl ?? ""),
       liffProfileUrl: String(b.richMenu?.liffProfileUrl ?? ""),
       liffRepairUrl: String(b.richMenu?.liffRepairUrl ?? ""),
+      liffRoomsUrl: String(b.richMenu?.liffRoomsUrl ?? ""),
       liffBookingUrl: String(b.richMenu?.liffBookingUrl ?? ""),
       contactPhone: String(b.richMenu?.contactPhone ?? ""),
       paymentBankName: String(b.payment?.bankName ?? ""),
@@ -263,6 +265,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
         liffLoginUrl, liffPaymentUrl,
         liffProfileUrl: row.liffProfileUrl || "",
         liffRepairUrl: row.liffRepairUrl || "",
+        liffRoomsUrl: row.liffRoomsUrl || "",
         liffBookingUrl: row.liffBookingUrl || "",
         contactUrl: toPublicUrl("/contact"),
       }, images, {

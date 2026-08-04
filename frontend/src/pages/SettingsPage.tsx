@@ -251,6 +251,7 @@ export default function SettingsPage() {
   const [liffPaymentUrl, setLiffPaymentUrl] = useState("");
   const [liffProfileUrl, setLiffProfileUrl] = useState("");
   const [liffRepairUrl, setLiffRepairUrl] = useState("");
+  const [liffRoomsUrl, setLiffRoomsUrl] = useState("");
   const [liffBookingUrl, setLiffBookingUrl] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [richMenuImages, setRichMenuImages] = useState({ guest: "", member: "", admin: "" });
@@ -353,6 +354,7 @@ export default function SettingsPage() {
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
     setLiffProfileUrl(config.richMenu.liffProfileUrl);
     setLiffRepairUrl(config.richMenu.liffRepairUrl);
+    setLiffRoomsUrl(config.richMenu.liffRoomsUrl);
     setLiffBookingUrl(config.richMenu.liffBookingUrl);
     setContactPhone(config.richMenu.contactPhone);
     setRichMenuImages(config.richMenu.images);
@@ -538,6 +540,7 @@ export default function SettingsPage() {
           ...DEFAULT_APP_CONFIG.richMenu,
           liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim(),
           liffProfileUrl: liffProfileUrl.trim(), liffRepairUrl: liffRepairUrl.trim(),
+          liffRoomsUrl: liffRoomsUrl.trim(),
           liffBookingUrl: liffBookingUrl.trim(),
           contactPhone: contactPhone.trim(),
         },
@@ -1162,7 +1165,12 @@ export default function SettingsPage() {
                       value={liffRepairUrl} onChange={(e) => setLiffRepairUrl(e.target.value)} />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label small fw-bold">LIFF Booking URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest)</span></label>
+                    <label className="form-label small fw-bold">LIFF Rooms URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ดูห้องว่าง" บนเมนู Guest, คนละ LIFF App กับ Booking)</span></label>
+                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                      value={liffRoomsUrl} onChange={(e) => setLiffRoomsUrl(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF Booking URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "จองห้อง" บนเมนู Guest — หน้าจัดการห้องที่จองเอง/ยกเลิกเอง)</span></label>
                     <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
                       value={liffBookingUrl} onChange={(e) => setLiffBookingUrl(e.target.value)} />
                   </div>

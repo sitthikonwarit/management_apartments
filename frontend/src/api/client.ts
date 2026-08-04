@@ -63,6 +63,10 @@ export const roomsApi = {
     api.post("/rooms/generate", { towerId, roomsToCreate }).then((r) => r.data),
   toggleActive: (id: string, isActive: boolean) =>
     api.patch(`/rooms/${id}/active`, { isActive }).then((r) => r.data),
+  // ห้องที่มีคนจองเองผ่าน LIFF อยู่ (ยังไม่ได้ผูกเป็นผู้เช่าจริง) — ใช้แสดง "ผู้จอง" ในหน้าจัดการห้องพัก
+  activeBookings: () => api.get("/rooms/bookings/active").then((r) => r.data as
+    { id: string; roomId: string; roomNumber: string; name: string; tel: string; idLine: string; bookedAt: string }[]
+  ),
   updatePictures: (id: string, keepUrls: string[], newImages: { base64: string; name: string }[]) =>
     api.patch(`/rooms/${id}/pictures`, { keepUrls, newImages }).then((r) => r.data),
   getTowers: () => api.get("/rooms/towers").then((r) => r.data),
@@ -237,6 +241,7 @@ export const liffApi = {
     liffPaymentUrl: string;
     liffProfileUrl: string;
     liffRepairUrl: string;
+    liffRoomsUrl: string;
     liffBookingUrl: string;
     contactPhone: string;
     appIdentity: { logoUrl: string; nameText: string; logoBg: { enabled: boolean; color: string } };
@@ -307,5 +312,13 @@ export const liffApi = {
     price: number; dailyPrice: number; detail: string; pictures: { url: string; name?: string }[];
   }[]),
   bookRoom: (accessToken: string, roomId: string, name: string, tel: string) =>
-    api.post("/liff/rooms/book", { accessToken, roomId, name, tel }).then((r) => r.data as { ok: boolean; messageId: string }),
+    api.post("/liff/rooms/book", { accessToken, roomId, name, tel }).then((r) => r.data as { ok: boolean; messageId: string; bookingId: string }),
+  myBookings: (accessToken: string) => api.post("/liff/rooms/mine", { accessToken }).then((r) => r.data as {
+    bookings: {
+      bookingId: string; roomId: string; roomNumber: string; towerName: string; towerColor: string;
+      floor: string; price: number; detail: string; pictures: { url: string; name?: string }[]; bookedAt: string;
+    }[];
+  }),
+  cancelBooking: (accessToken: string, bookingId: string) =>
+    api.post("/liff/rooms/cancel", { accessToken, bookingId }).then((r) => r.data as { ok: boolean }),
 };

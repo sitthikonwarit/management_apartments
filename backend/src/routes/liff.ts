@@ -3,7 +3,7 @@
 // กับ LINE ตรงๆ แทน (ดู verifyLiffAccessToken ใน services/line.ts) เมานต์คู่กับ authPublicRoute ใน
 // index.ts ก่อนการ์ด authDerive เสมอ ─────────────────────────────────────────────────────────────
 import { Elysia } from "elysia";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { appConfig, rooms, towers, bookings, tenants, chatMessages, lineProfiles, paymentIntents, vehicles, vehicleTypes } from "../db/schema";
 import {
@@ -91,6 +91,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       liffPaymentUrl: row?.liffPaymentUrl || "",
       liffProfileUrl: row?.liffProfileUrl || "",
       liffRepairUrl: row?.liffRepairUrl || "",
+      liffRoomsUrl: row?.liffRoomsUrl || "",
       liffBookingUrl: row?.liffBookingUrl || "",
       contactPhone: row?.contactPhone || "",
       appIdentity: {
@@ -572,10 +573,12 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         pictures: parseJsonArray(r.pictures),
       }));
   })
-  // กด "จองห้องนี้" ในหน้า LIFF Booking — ยืนยันตัวตนด้วย LIFF access token เอาไว้ให้พนักงานติดต่อกลับ/แชท
-  // ต่อได้ (ไม่ใช่การเช็คว่าเป็นผู้เช่าอยู่แล้วแบบ /repair เพราะคนจองห้องยังไม่เคยเป็นผู้เช่ามาก่อน) บันทึกลง
-  // ตาราง bookings (เดิมมีอยู่แล้วในระบบแต่ไม่มีใครใช้ ตกค้างจากยุค Google Sheets) + ขึ้นเป็นการ์ดในหน้าแชท
-  // พนักงานทันที (messageType "booking") ไม่ล็อกห้องไว้ให้ใครทันที พนักงานโทรกลับไปยืนยันเอง
+  // กด "จองห้องนี้" ในหน้า LIFF Booking (มาจากทางลัดในหน้า LiffRoomsPage หรือกรอกเองในหน้า LiffBookingPage) —
+  // ยืนยันตัวตนด้วย LIFF access token เอาไว้ให้พนักงานติดต่อกลับ/แชทต่อได้ (ไม่ใช่การเช็คว่าเป็นผู้เช่าอยู่แล้ว
+  // แบบ /repair เพราะคนจองห้องยังไม่เคยเป็นผู้เช่ามาก่อน) บันทึกลงตาราง bookings (เดิมมีอยู่แล้วในระบบแต่ไม่มี
+  // ใครใช้ ตกค้างจากยุค Google Sheets) + **ล็อกห้องทันที** (rooms.status = "จอง") ผู้จองยกเลิกเองได้ที่หน้า
+  // LiffBookingPage (ดู /rooms/cancel ด้านล่าง) ไม่ต้องรอพนักงานยืนยันอีกต่อไป — ยังคงขึ้นเป็นการ์ดในหน้าแชท
+  // พนักงานเหมือนเดิม (messageType "booking") ไว้ให้เห็นเป็นแจ้งเตือนเฉยๆ
   .post("/rooms/book", async ({ body, set }) => {
     const { accessToken, roomId, name, tel } = body as {
       accessToken?: string; roomId?: string; name?: string; tel?: string;
@@ -590,12 +593,16 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
 
     const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
     if (!room) { set.status = 404; return { error: "ไม่พบห้องที่ต้องการจอง" }; }
+    // กันจองซ้อน — ห้องอาจถูกคนอื่นจองไปแล้วระหว่างที่ผู้ใช้คนนี้ดูรายละเอียดอยู่ (สถานะเปลี่ยนจาก "ว่าง" ไปแล้ว)
+    if (room.status !== "ว่าง") { set.status = 409; return { error: "ห้องนี้เพิ่งถูกจองไปแล้ว กรุณาเลือกห้องอื่น" }; }
 
     const ts = new Date().toISOString();
+    const bookingId = `BK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(bookings).values({
-      id: `BK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: bookingId,
       timestamp: ts,
       source: "LIFF",
+      roomId: room.id,
       roomNumber: room.number,
       roomCode: room.code,
       roomPrice: String(room.price),
@@ -604,11 +611,12 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       lastName: "",
       tel: tel.trim(),
       idLine: profile.userId,
-      status: "pending",
+      status: "active",
       customerId: "",
       startDate: "",
       endDate: "",
     });
+    await db.update(rooms).set({ status: "จอง" }).where(eq(rooms.id, room.id));
 
     const snapshot = {
       kind: "booking",
@@ -639,7 +647,73 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
       preview: `🏠 จองห้อง ${room.number}`,
     });
-    broadcastChange("chat", "create", "มีการจองห้องใหม่", name.trim());
+    broadcastChange("room", "update", "มีการจองห้องใหม่ (ล็อกห้องอัตโนมัติ)", name.trim());
 
-    return { ok: true, messageId: id };
+    return { ok: true, messageId: id, bookingId };
+  })
+  // หน้า LIFF Booking (LiffBookingPage.tsx) — รายการห้องที่ผู้ใช้ LINE คนนี้จองไว้อยู่ (status "active" เท่านั้น
+  // อดีต/ที่ยกเลิกแล้วไม่ต้องโชว์) ใช้แสดงการ์ด "ห้องที่คุณจองอยู่" พร้อมปุ่มยกเลิกเอง
+  .post("/rooms/mine", async ({ body, set }) => {
+    const { accessToken } = body as { accessToken?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const myBookings = await db.select().from(bookings)
+      .where(and(eq(bookings.idLine, profile.userId), eq(bookings.status, "active")));
+    if (myBookings.length === 0) return { bookings: [] };
+
+    const roomIds = myBookings.map((b) => b.roomId).filter(Boolean);
+    const roomRows = roomIds.length > 0 ? await db.select().from(rooms).where(inArray(rooms.id, roomIds)) : [];
+    const towerRows = await db.select().from(towers);
+    const roomMap = new Map(roomRows.map((r) => [r.id, r]));
+    const towerMap = new Map(towerRows.map((t) => [t.id, t]));
+
+    return {
+      bookings: myBookings.map((b) => {
+        const room = roomMap.get(b.roomId);
+        return {
+          bookingId: b.id,
+          roomId: b.roomId,
+          roomNumber: b.roomNumber,
+          towerName: room ? towerMap.get(room.towerId || "")?.name || "" : "",
+          towerColor: room ? towerMap.get(room.towerId || "")?.color || "" : "",
+          floor: room?.floor || "",
+          price: Number(b.roomPrice) || 0,
+          detail: b.roomDetail,
+          pictures: room ? parseJsonArray(room.pictures) : [],
+          bookedAt: b.timestamp,
+        };
+      }),
+    };
+  })
+  // ปุ่ม "ยกเลิกการจอง" ในหน้า LiffBookingPage — ยกเลิกได้เฉพาะรายการของตัวเอง (เช็ค idLine ตรงกับ token) และ
+  // ต้องยัง "active" อยู่เท่านั้น ปลดล็อกห้องกลับเป็น "ว่าง" ให้อัตโนมัติ (เช็คก่อนว่าห้องยังเป็น "จอง" อยู่จริง
+  // เผื่อพนักงานไปเปลี่ยนสถานะ/ผูกผู้เช่าจริงเข้าห้องนี้ไปแล้วระหว่างนั้น จะได้ไม่ไปเขี่ยสถานะที่ตั้งใจไว้ทิ้ง)
+  .post("/rooms/cancel", async ({ body, set }) => {
+    const { accessToken, bookingId } = body as { accessToken?: string; bookingId?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!bookingId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+    if (!booking || booking.idLine !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการจอง" }; }
+    if (booking.status !== "active") { set.status = 400; return { error: "รายการนี้ถูกยกเลิกไปแล้ว" }; }
+
+    const ts = new Date().toISOString();
+    await db.update(bookings).set({ status: "cancelled", cancelledAt: ts }).where(eq(bookings.id, bookingId));
+
+    if (booking.roomId) {
+      const [room] = await db.select().from(rooms).where(eq(rooms.id, booking.roomId));
+      if (room && room.status === "จอง") {
+        await db.update(rooms).set({ status: "ว่าง" }).where(eq(rooms.id, booking.roomId));
+      }
+    }
+
+    broadcastChange("room", "update", "ยกเลิกการจองห้องเอง", booking.firstName || "");
+
+    return { ok: true };
   });

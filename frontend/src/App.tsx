@@ -22,6 +22,7 @@ import LiffPaymentPage from "./pages/LiffPaymentPage";
 import LiffProfilePage from "./pages/LiffProfilePage";
 import LiffRepairPage from "./pages/LiffRepairPage";
 import LiffBookingPage from "./pages/LiffBookingPage";
+import LiffRoomsPage from "./pages/LiffRoomsPage";
 import ContactPage from "./pages/ContactPage";
 import TenantsPage from "./pages/TenantsPage";
 import RoomsPage from "./pages/RoomsPage";
@@ -124,6 +125,7 @@ export default function App() {
           <Route path="/liff/profile" element={<LiffProfilePage />} />
           <Route path="/liff/repair" element={<LiffRepairPage />} />
           <Route path="/liff/booking" element={<LiffBookingPage />} />
+          <Route path="/liff/rooms" element={<LiffRoomsPage />} />
           {/* /contact ไม่ต้องรู้ตัวตนผู้เช่า เลยไม่ผ่าน LIFF SDK เหมือนหน้าอื่นด้านบน (ดู ContactPage.tsx) */}
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/*" element={<AuthenticatedShell />} />

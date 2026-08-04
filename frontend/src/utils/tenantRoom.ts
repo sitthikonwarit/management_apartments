@@ -15,6 +15,12 @@ export function roomHasTenant(tenants: any[], room: any): boolean {
   return tenants.some((t) => tenantOccupiesRoom(t, room));
 }
 
+// ห้องที่มีคนจองเองผ่าน LIFF อยู่ (status "จอง" แต่ยังไม่มีผู้เช่าจริง) — ใช้โชว์ "ผู้จอง" แทนช่องผู้เช่าปกติ
+// ในหน้าจัดการห้องพัก (ดู roomsApi.activeBookings ใน api/client.ts)
+export function findBookingForRoom(bookings: any[], room: any): any | null {
+  return bookings.find((b) => b.roomId === room.id) ?? null;
+}
+
 // รายชื่อห้องทั้งหมดของผู้เช่า (หลัก + เพิ่มเติม) เป็น room object จาก allRooms ที่ให้มา
 export function roomsOfTenant(tenant: any, allRooms: any[]): any[] {
   if (!tenant) return [];

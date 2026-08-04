@@ -1,9 +1,10 @@
 import { useState, useRef, useLayoutEffect, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Select, { components, StylesConfig } from "react-select";
 import ColResizeHandle from "./ColResizeHandle";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
-import { findTenantForRoom, roomHasTenant } from "../utils/tenantRoom";
+import { findTenantForRoom, roomHasTenant, findBookingForRoom } from "../utils/tenantRoom";
 
 type PinDir = "left" | "right" | false;
 
@@ -137,12 +138,13 @@ function statusClass(s: string) {
 
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function RoomTableView({
-  data, allRooms, towers, tenants, onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
+  data, allRooms, towers, tenants, bookings = [], onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
 }: {
   data: any[];
   allRooms: any[];
   towers: any[];
   tenants: any[];
+  bookings?: any[];
   onViewDetail: (r: any) => void;
   onEdit?: (r: any) => void;
   onDelete?: (r: any) => Promise<void>;
@@ -150,6 +152,7 @@ export default function RoomTableView({
   onRoomUpdate?: (updated: any) => void;
   onTenantsUpdate?: (updater: (prev: any[]) => any[]) => void;
 }) {
+  const navigate = useNavigate();
   const [cols, setCols] = useState<ColDef[]>(INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
@@ -375,10 +378,24 @@ export default function RoomTableView({
           </button>
         );
       }
-      case "tenant":
-        return tenant
-          ? <span className="namec-cell">{tenantDisplayName(tenant)}</span>
-          : <span className="text-muted fst-italic">ว่าง</span>;
+      case "tenant": {
+        if (tenant) return <span className="namec-cell">{tenantDisplayName(tenant)}</span>;
+        const booking = findBookingForRoom(bookings, room);
+        if (booking) {
+          return (
+            <div className="d-flex align-items-center gap-2">
+              <span className="namec-cell text-warning">ผู้จอง: {booking.name}</span>
+              {booking.idLine && (
+                <button type="button" className="btn btn-sm btn-outline-primary" title="ไปหน้าแชท"
+                  onClick={(e) => { e.stopPropagation(); navigate("/chat", { state: { openLineUserId: booking.idLine } }); }}>
+                  <i className="fas fa-comment-dots" />
+                </button>
+              )}
+            </div>
+          );
+        }
+        return <span className="text-muted fst-italic">ว่าง</span>;
+      }
       case "detail":
         return room.detail || <span className="text-muted">-</span>;
       case "tags":

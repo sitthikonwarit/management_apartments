@@ -61,6 +61,9 @@ export const bookings = pgTable("bookings", {
   id: text("id").primaryKey(),
   timestamp: str("timestamp"),
   source: str("source"),
+  // ห้องที่จองจริง (ผูกไว้เพื่อ auto-revert สถานะห้องตอนยกเลิกจอง) — แถวเก่าจากยุค Google Sheets ไม่มีค่านี้
+  // (ว่างเปล่า) แต่ไม่กระทบเพราะ flow ใหม่ query เฉพาะ status === "active" เท่านั้น
+  roomId: str("room_id"),
   roomNumber: str("room_number"),
   roomCode: str("room_code"),
   roomPrice: str("room_price"),
@@ -69,7 +72,9 @@ export const bookings = pgTable("bookings", {
   lastName: str("last_name"),
   tel: str("tel"),
   idLine: str("id_line"),
+  // "active" = จองอยู่ ล็อกห้องไว้ให้แล้ว / "cancelled" = ผู้จองยกเลิกเอง (ดู POST /liff/rooms/cancel)
   status: str("status"),
+  cancelledAt: str("cancelled_at"),
   customerId: str("customer_id"),
   startDate: str("start_date"),
   endDate: str("end_date"),
@@ -300,8 +305,10 @@ export const appConfig = pgTable("app_config", {
   // แชทแบบเดิม (ดู services/richMenu.ts)
   liffProfileUrl: str("liff_profile_url"),
   liffRepairUrl: str("liff_repair_url"),
-  // ปุ่ม "ดูห้องว่าง" / "จองห้อง" บนเมนู Guest — LIFF สาธารณะ (ไม่ต้องเป็นผู้เช่ามาก่อนก็ใช้ได้) ทั้งสองปุ่ม
-  // ชี้มาที่ URL เดียวกันนี้ (ดูรายการห้องว่าง + จองได้ในหน้าเดียว) ต่างแค่ข้อความปุ่ม (ดู services/richMenu.ts)
+  // ปุ่ม "ดูห้องว่าง" / "จองห้อง" บนเมนู Guest — LIFF สาธารณะ (ไม่ต้องเป็นผู้เช่ามาก่อนก็ใช้ได้) แยกกันคนละ
+  // LIFF app: liffRoomsUrl = ดูรายการห้องว่าง+รายละเอียด (LiffRoomsPage.tsx), liffBookingUrl = จัดการห้อง
+  // ที่ตัวเองจอง/ยกเลิกเอง (LiffBookingPage.tsx) — ดู services/richMenu.ts
+  liffRoomsUrl: str("liff_rooms_url"),
   liffBookingUrl: str("liff_booking_url"),
   // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู) — ไม่ต้องใช้ LIFF เพราะไม่ต้องรู้ตัวตนผู้เช่า
   contactPhone: str("contact_phone"),
