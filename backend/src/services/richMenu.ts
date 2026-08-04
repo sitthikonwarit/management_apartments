@@ -25,12 +25,16 @@ function uriOrMessage(url: string, text: string): RichMenuArea["action"] {
 }
 
 function guestAreas(liffLoginUrl: string, contactUrl: string, liffBookingUrl: string): RichMenuArea[] {
+  // "ดูห้องว่าง" กับ "จองห้อง" ใช้หน้าเดียวกัน (frontend/src/pages/LiffBookingPage.tsx) แต่พฤติกรรมต่างกันผ่าน
+  // query "?mode=book" — "ดูห้องว่าง" เปิดโหมดเรียกดูรายการห้อง (รูป/ราคา/รายละเอียดเต็ม) ส่วน "จองห้อง" เปิด
+  // ฟอร์มจองด่วน (เลือกห้อง+กรอกชื่อ/เบอร์) ขึ้นก่อนทันที ไม่ต้องไล่scrollหาห้องเอง
+  const quickBookUrl = liffBookingUrl
+    ? `${liffBookingUrl}${liffBookingUrl.includes("?") ? "&" : "?"}mode=book`
+    : "";
   return [
     { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
-    // "ดูห้องว่าง"/"จองห้อง" ชี้ URL เดียวกัน (ดูรายการห้องว่าง + จองได้ในหน้าเดียว ดู
-    // frontend/src/pages/LiffBookingPage.tsx) ต่างกันแค่ข้อความปุ่ม
     { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: uriOrMessage(liffBookingUrl, "ดูห้องว่าง") },
-    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: uriOrMessage(liffBookingUrl, "จองห้อง") },
+    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: uriOrMessage(quickBookUrl, "จองห้อง") },
     { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: uriOrMessage(contactUrl, "ติดต่อ") },
   ];
 }

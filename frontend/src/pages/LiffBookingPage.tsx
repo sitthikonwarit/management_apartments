@@ -9,6 +9,7 @@ import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
 
 type Status = "loading" | "ready" | "error";
+type Mode = "view" | "book";
 
 interface AvailableRoom {
   id: string; number: string; floor: string; towerName: string; towerColor: string;
@@ -25,6 +26,11 @@ export default function LiffBookingPage() {
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
   const [accessToken, setAccessToken] = useState("");
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
+
+  // ปุ่ม "ดูห้องว่าง" เปิดโหมด "view" (เรียกดูรายการห้อง) ส่วนปุ่ม "จองห้อง" เปิดด้วย "?mode=book" (ดู
+  // guestAreas ใน backend/src/services/richMenu.ts) ให้ขึ้นฟอร์มจองด่วนก่อนเลย ไม่ต้องไล่ scroll หาห้องเอง
+  const [mode, setMode] = useState<Mode>(() => (new URLSearchParams(window.location.search).get("mode") === "book" ? "book" : "view"));
+  const [quickRoomId, setQuickRoomId] = useState("");
 
   const [galleryImages, setGalleryImages] = useState<string[] | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -57,6 +63,7 @@ export default function LiffBookingPage() {
         const availableRooms = await liffApi.availableRooms();
         if (cancelled) return;
         setRooms(availableRooms);
+        if (availableRooms[0]) setQuickRoomId(availableRooms[0].id);
         setStatus("ready");
       } catch (e: any) {
         if (cancelled) return;
@@ -92,6 +99,25 @@ export default function LiffBookingPage() {
     }
   }
 
+  // ฟอร์มจองด่วนตอนเปิดมาจากปุ่ม "จองห้อง" (mode === "book") — เลือกห้องจาก dropdown แทนการกดเข้าไปในการ์ด
+  // แต่ละใบเหมือนโหมด "view" ใช้ endpoint เดียวกัน (liffApi.bookRoom) แค่ต่างวิธีเลือกห้อง
+  async function handleQuickSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const room = rooms.find((r) => r.id === quickRoomId);
+    if (!room) { setFormError("กรุณาเลือกห้องที่ต้องการจอง"); return; }
+    if (!name.trim()) { setFormError("กรุณากรอกชื่อ"); return; }
+    if (!tel.trim()) { setFormError("กรุณากรอกเบอร์โทรศัพท์"); return; }
+    setSubmitting(true); setFormError("");
+    try {
+      await liffApi.bookRoom(accessToken, room.id, name.trim(), tel.trim());
+      setSubmitted(true);
+    } catch (e: any) {
+      setFormError(e?.response?.data?.error ?? e?.message ?? "จองห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (status !== "ready") {
     return (
       <div className="login-page-wrap">
@@ -109,6 +135,64 @@ export default function LiffBookingPage() {
           {status === "error" && (
             <div className="room-modal-error mt-3"><i className="fas fa-exclamation-circle me-2" />{errorMsg}</div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "book") {
+    return (
+      <div className="login-page-wrap">
+        <div className="login-card custom-card" style={{ maxWidth: 420, textAlign: "left" }}>
+          <div className="text-center mb-3">
+            {branding.logoUrl
+              ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
+              : <div className="login-icon"><i className="fas fa-calendar-check" /></div>}
+            <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>จองห้อง</h5>
+            <p className="text-muted small mb-0">เลือกห้อง กรอกชื่อ+เบอร์โทร แล้วส่งคำขอได้เลย พนักงานจะโทรกลับไปยืนยัน</p>
+          </div>
+
+          {rooms.length === 0 ? (
+            <div className="alert alert-light border text-center small mb-0">
+              <i className="fas fa-circle-info me-2" />ขณะนี้ยังไม่มีห้องว่าง
+            </div>
+          ) : submitted ? (
+            <div className="text-center py-3">
+              <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
+                <i className="fas fa-check-circle" />
+              </div>
+              <div className="alert alert-success py-2 px-3 small mb-0">ส่งคำขอจองห้องเรียบร้อยแล้ว พนักงานจะติดต่อกลับทางแชทนี้หรือโทรกลับไปยืนยันเร็วๆ นี้</div>
+            </div>
+          ) : (
+            <form onSubmit={handleQuickSubmit}>
+              <div className="mb-2">
+                <label className="form-label small fw-bold">เลือกห้อง</label>
+                <select className="form-select" value={quickRoomId} onChange={(e) => setQuickRoomId(e.target.value)} disabled={submitting}>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>ห้อง {r.number}{r.towerName ? ` (${r.towerName})` : ""} — {fmtMoney(r.price)} ฿/เดือน</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-2">
+                <label className="form-label small fw-bold">ชื่อ</label>
+                <input className="form-control" value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
+              </div>
+              <div className="mb-2">
+                <label className="form-label small fw-bold">เบอร์โทรศัพท์</label>
+                <input type="tel" className="form-control" value={tel} onChange={(e) => setTel(e.target.value)} disabled={submitting} />
+              </div>
+              {formError && <div className="room-modal-error my-2"><i className="fas fa-exclamation-circle me-2" />{formError}</div>}
+              <button type="submit" className="btn btn-primary w-100 mt-2" disabled={submitting}>
+                {submitting
+                  ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
+                  : <><i className="fas fa-paper-plane me-2" />ส่งคำขอจอง</>}
+              </button>
+            </form>
+          )}
+
+          <button type="button" className="btn btn-link btn-sm w-100 mt-2" onClick={() => setMode("view")}>
+            <i className="fas fa-images me-1" />ดูรูป/รายละเอียดห้องทั้งหมดก่อนจอง
+          </button>
         </div>
       </div>
     );
