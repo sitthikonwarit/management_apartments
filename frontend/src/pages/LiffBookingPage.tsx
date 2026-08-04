@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import liff from "@line/liff";
 import { liffApi } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
+import ImageLightbox from "../components/ImageLightbox";
 
 type Status = "loading" | "ready" | "error";
 
@@ -24,6 +25,9 @@ export default function LiffBookingPage() {
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
   const [accessToken, setAccessToken] = useState("");
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
+
+  const [galleryImages, setGalleryImages] = useState<string[] | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   const [bookRoom, setBookRoom] = useState<AvailableRoom | null>(null);
   const [name, setName] = useState("");
@@ -126,31 +130,44 @@ export default function LiffBookingPage() {
             <i className="fas fa-circle-info me-2" />ขณะนี้ยังไม่มีห้องว่าง
           </div>
         ) : (
-          <div className="d-flex flex-column gap-2">
+          <div className="d-flex flex-column gap-3">
             {rooms.map((room) => (
-              <div key={room.id} className="p-2 rounded d-flex gap-2" style={{ border: "1px solid var(--color-light)", textAlign: "left" }}>
-                {room.pictures[0] ? (
-                  <img src={room.pictures[0].url} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+              <div key={room.id} className="rounded overflow-hidden" style={{ border: "1px solid var(--color-light)", textAlign: "left" }}>
+                {room.pictures.length > 0 ? (
+                  <div
+                    style={{ position: "relative", cursor: room.pictures.length > 1 ? "pointer" : "default" }}
+                    onClick={() => { setGalleryImages(room.pictures.map((p) => p.url)); setGalleryIndex(0); }}
+                  >
+                    <img src={room.pictures[0].url} alt="" style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
+                    {room.pictures.length > 1 && (
+                      <span style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, padding: "2px 8px", borderRadius: 12 }}>
+                        <i className="fas fa-images me-1" />{room.pictures.length} รูป
+                      </span>
+                    )}
+                    {room.towerColor && (
+                      <span style={{ position: "absolute", top: 8, left: 8, background: room.towerColor, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 12 }}>
+                        {room.towerName}
+                      </span>
+                    )}
+                  </div>
                 ) : (
-                  <div style={{ width: 72, height: 72, borderRadius: 8, background: "var(--color-background)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <i className="fas fa-door-open text-muted" />
+                  <div style={{ width: "100%", height: 140, background: "var(--color-background)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <i className="fas fa-door-open text-muted" style={{ fontSize: 28 }} />
                   </div>
                 )}
-                <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                  <div className="d-flex justify-content-between align-items-start">
-                    <div>
-                      <span className="fw-bold">ห้อง {room.number}</span>
-                      {(room.towerName || room.floor) && (
-                        <span className="text-muted small ms-1">
-                          {room.towerName}{room.towerName && room.floor && " · "}{room.floor && `ชั้น ${room.floor}`}
-                        </span>
-                      )}
-                    </div>
-                    <span className="fw-bold small" style={{ color: "var(--color-primary)" }}>{fmtMoney(room.price)} ฿/ด.</span>
+
+                <div className="p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-1">
+                    <span className="fw-bold fs-6">ห้อง {room.number}</span>
+                    <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{fmtMoney(room.price)} ฿/เดือน</span>
                   </div>
-                  {room.detail && <div className="text-muted small text-truncate" style={{ maxWidth: "100%" }}>{room.detail}</div>}
-                  {room.dailyPrice > 0 && <div className="text-muted small">{fmtMoney(room.dailyPrice)} ฿/วัน</div>}
-                  <button className="btn btn-sm btn-primary w-100 mt-2" onClick={() => openBook(room)}>
+                  <div className="text-muted small mb-2">
+                    {room.towerName && <span className="me-2"><i className="fas fa-building me-1" />{room.towerName}</span>}
+                    {room.floor && <span><i className="fas fa-layer-group me-1" />ชั้น {room.floor}</span>}
+                    {room.dailyPrice > 0 && <span className="ms-2"><i className="fas fa-calendar-day me-1" />{fmtMoney(room.dailyPrice)} ฿/วัน</span>}
+                  </div>
+                  {room.detail && <div className="small mb-3" style={{ whiteSpace: "pre-wrap" }}>{room.detail}</div>}
+                  <button className="btn btn-sm btn-primary w-100" onClick={() => openBook(room)}>
                     <i className="fas fa-calendar-check me-1" />จองห้องนี้
                   </button>
                 </div>
@@ -196,6 +213,10 @@ export default function LiffBookingPage() {
             )}
           </div>
         </div>
+      )}
+
+      {galleryImages && (
+        <ImageLightbox images={galleryImages} index={galleryIndex} onClose={() => setGalleryImages(null)} onIndexChange={setGalleryIndex} />
       )}
     </div>
   );
