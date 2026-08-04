@@ -57,14 +57,12 @@ export default function LiffPaymentPage() {
   const [copied, setCopied] = useState(false);
   const [thisMonthNotice, setThisMonthNotice] = useState("");
 
-  // ป็อปอัพ "ดูรายละเอียดบิล" — เรนเดอร์ด้วย BillLinePreview หน้าตาแบบเดียวกับ "บิลอิเล็กทรอนิกส์ (LINE)"
-  // ที่พนักงานเห็นในหน้า Bills
-  const [detailItem, setDetailItem] = useState<OutstandingItem | null>(null);
-  const [detailBill, setDetailBill] = useState<{ item: any; monthYear: string } | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
-  // ป็อปอัพ "จ่ายงวดนี้" — เลือกจำนวนเงิน + สร้าง/แสดง QR + โพลสถานะ
+  // ป็อปอัพ "จ่ายงวดนี้" — รวมรายละเอียดบิล (BillLinePreview หน้าตาเดียวกับ "บิลอิเล็กทรอนิกส์ (LINE)" ที่
+  // พนักงานเห็นในหน้า Bills) ไว้ในป็อปอัพเดียวกับขั้นตอนเลือกจำนวนเงิน + สร้าง/แสดง QR + โพลสถานะ — เดิมแยก
+  // เป็นสองปุ่ม/สองป็อปอัพ ("ดูรายละเอียด" กับ "จ่ายงวดนี้") รวมเป็นปุ่มเดียวให้เห็นรายละเอียดก่อนตัดสินใจจ่ายเลย
   const [payItem, setPayItem] = useState<OutstandingItem | null>(null);
+  const [payBillDetail, setPayBillDetail] = useState<{ item: any; monthYear: string } | null>(null);
+  const [loadingPayDetail, setLoadingPayDetail] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [generatingQr, setGeneratingQr] = useState(false);
   const [qrError, setQrError] = useState("");
@@ -114,41 +112,42 @@ export default function LiffPaymentPage() {
           setPaymentInfo(result.paymentInfo);
           setStatus("linked");
 
-          // เปิดมาจากลิงก์ "ดูรายละเอียดบิล" ที่แนบมากับบิลที่ส่งเข้าแชท (ดู buildBillFlexMessage ใน
-          // backend/src/services/line.ts) — เปิดป็อปอัพรายละเอียดบิลใบนั้นให้ทันที ไม่ต้องรอผู้เช่าไล่หาเอง
-          // ในรายการยอดค้างชำระ (billDetail ดึงข้อมูลสดจาก DB เสมอ ไม่ขึ้นกับว่าบิลนี้จะอยู่ในรายการยอดค้าง
-          // ชำระหรือจ่ายไปแล้วก็ตาม) เคลียร์ query string ทิ้งกันเปิดซ้ำถ้าผู้เช่ากดรีเฟรชหน้าเอง
+          // เปิดมาจากลิงก์ "ดูรายละเอียดบิล & ชำระเงิน" ที่แนบมากับบิลที่ส่งเข้าแชท (ดู buildBillFlexMessage
+          // ใน backend/src/services/line.ts) หรือปุ่ม "บิลเดือนนี้" บนเมนู Member — เปิดป็อปอัพ "จ่ายงวดนี้"
+          // (ซึ่งตอนนี้โชว์รายละเอียดบิลอยู่ในตัวแล้ว) ให้ทันที ไม่ต้องรอผู้เช่าไล่หาเอง เคลียร์ query string
+          // ทิ้งกันเปิดซ้ำถ้าผู้เช่ากดรีเฟรชหน้าเอง
           const params = new URLSearchParams(window.location.search);
           const linkedBillId = params.get("billId");
           const linkedRoomId = params.get("roomId");
           const wantsThisMonth = params.get("view") === "thisMonth";
           if (linkedBillId && linkedRoomId) {
             window.history.replaceState(null, "", window.location.pathname);
-            // เรียก billDetail ตรงๆ ด้วย token ในสโคปนี้ (ไม่เรียกผ่าน openDetail เพราะฟังก์ชันนั้นอ่าน
+            // เรียก billDetail ตรงๆ ด้วย token ในสโคปนี้ (ไม่เรียกผ่าน openPay เพราะฟังก์ชันนั้นอ่าน
             // accessToken จาก state ซึ่งเพิ่งสั่ง setAccessToken(token) ไปหมาดๆ ข้างบน ยังไม่อัปเดตจริงในรอบ
             // render นี้ ใช้ตัวแปร token ที่เพิ่งได้มาสดๆ แทนกันข้อมูลว่าง)
-            setDetailItem({ billId: linkedBillId, roomId: linkedRoomId, monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
-            setDetailBill(null);
-            setLoadingDetail(true);
+            setPayItem({ billId: linkedBillId, roomId: linkedRoomId, monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
+            setPayBillDetail(null);
+            setLoadingPayDetail(true);
             liffApi.billDetail(token, linkedBillId, linkedRoomId)
-              .then((r) => { if (!cancelled) setDetailBill(r); })
-              .catch(() => { if (!cancelled) setDetailBill(null); })
-              .finally(() => { if (!cancelled) setLoadingDetail(false); });
+              .then((r) => { if (!cancelled) applyPayDetail(linkedBillId, linkedRoomId, r); })
+              .catch(() => { if (!cancelled) setPayBillDetail(null); })
+              .finally(() => { if (!cancelled) setLoadingPayDetail(false); });
           } else if (wantsThisMonth) {
             // ปุ่ม "บิลเดือนนี้" บนเมนู Member (ดู memberAreas ใน backend/src/services/richMenu.ts) — ไม่รู้
             // billId/roomId ล่วงหน้า (เมนูเป็น URL เดียวใช้ร่วมกันทุกคน) ต้องยิงถามฝั่ง backend เองว่า "เดือนนี้"
             // ของผู้เช่าคนนี้คือบิลใบไหน ได้ item/monthYear มาพร้อมกันในคำตอบเดียวเลย ไม่ต้องเรียก billDetail ซ้ำ
             window.history.replaceState(null, "", window.location.pathname);
+            setPayItem({ billId: "", roomId: "", monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
+            setPayBillDetail(null);
+            setLoadingPayDetail(true);
             liffApi.billDetailThisMonth(token)
-              .then((r) => {
-                if (cancelled) return;
-                setDetailItem({ billId: r.billId, roomId: r.roomId, monthYear: r.monthYear, roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
-                setDetailBill({ item: r.item, monthYear: r.monthYear });
-              })
+              .then((r) => { if (!cancelled) applyPayDetail(r.billId, r.roomId, r); })
               .catch((e: any) => {
                 if (cancelled) return;
+                setPayItem(null);
                 setThisMonthNotice(e?.response?.data?.error ?? "ยังไม่มีบิลของคุณประจำเดือนนี้ในระบบ");
-              });
+              })
+              .finally(() => { if (!cancelled) setLoadingPayDetail(false); });
           }
         } else {
           setStatus("unlinked");
@@ -171,31 +170,37 @@ export default function LiffPaymentPage() {
     }
   }
 
-  async function openDetail(item: OutstandingItem) {
-    setDetailItem(item);
-    setDetailBill(null);
-    setLoadingDetail(true);
-    try {
-      const result = await liffApi.billDetail(accessToken, item.billId, item.roomId);
-      setDetailBill(result);
-    } catch {
-      setDetailBill(null);
-    } finally {
-      setLoadingDetail(false);
-    }
+  // อัปเดต payItem ด้วยยอดจริงจากรายละเอียดบิลที่โหลดมา (total/paidAmount/ยอดคงเหลือ) — ใช้ทั้งตอนกดปุ่ม
+  // "จ่าย" จากรายการปกติ (ซึ่งรู้ยอดคร่าวๆ จากหน้ายอดค้างชำระอยู่แล้ว แต่ยังต้องรอโหลดรายละเอียดฉบับเต็ม) และ
+  // ตอนเปิดมาจากลิงก์ภายนอกที่ยังไม่รู้ยอดอะไรเลยจนกว่าจะโหลดเสร็จ (ดู useEffect ด้านบน)
+  function applyPayDetail(billId: string, roomId: string, r: { item: any; monthYear: string }) {
+    setPayBillDetail(r);
+    const total = Number(r.item?.total) || 0;
+    const paidAmount = Number(r.item?.paidAmount) || 0;
+    const remaining = Math.max(0, total - paidAmount);
+    setPayItem({ billId, roomId, monthYear: r.monthYear, roomNumber: String(r.item?.roomNumber ?? ""), total, paidAmount, amount: remaining });
+    setPayAmount(String(remaining));
   }
 
   function openPay(item: OutstandingItem) {
     setPayItem(item);
     setPayAmount(String(item.amount));
+    setPayBillDetail(null);
     setQrImage(""); setIntentAccountInfo(null); setIntentStarted(false); setQrError(""); setPayStatus("");
     setCurrentIntentId(""); setManualSubmitting(false); setManualSubmitted(false); setManualError("");
     stopPolling();
+
+    setLoadingPayDetail(true);
+    liffApi.billDetail(accessToken, item.billId, item.roomId)
+      .then((r) => setPayBillDetail(r))
+      .catch(() => setPayBillDetail(null))
+      .finally(() => setLoadingPayDetail(false));
   }
 
   function closePay() {
     stopPolling();
     setPayItem(null);
+    setPayBillDetail(null);
   }
 
   async function handleGenerateQr() {
@@ -331,14 +336,9 @@ export default function LiffPaymentPage() {
                       <span>{fmtMoney(it.paidAmount)} ฿ / {fmtMoney(it.total)} ฿</span>
                     </div>
                   )}
-                  <div className="d-flex gap-2 mt-2">
-                    <button className="btn btn-sm btn-outline-secondary flex-grow-1" onClick={() => openDetail(it)}>
-                      <i className="fas fa-list-ul me-1" />ดูรายละเอียด
-                    </button>
-                    <button className="btn btn-sm btn-primary flex-grow-1" onClick={() => openPay(it)}>
-                      <i className="fas fa-qrcode me-1" />จ่ายงวดนี้
-                    </button>
-                  </div>
+                  <button className="btn btn-sm btn-primary w-100 mt-2" onClick={() => openPay(it)}>
+                    <i className="fas fa-qrcode me-1" />จ่ายงวดนี้
+                  </button>
                 </div>
               ))}
             </div>
@@ -394,97 +394,113 @@ export default function LiffPaymentPage() {
         )}
       </div>
 
-      {detailItem && (
-        <div className="confirm-overlay" onClick={() => setDetailItem(null)}>
-          <div className="confirm-dialog" style={{ maxWidth: 400, width: "92%", textAlign: "left", padding: 0, background: "transparent", boxShadow: "none" }} onClick={(e) => e.stopPropagation()}>
-            {loadingDetail ? (
-              <div className="text-center p-5" style={{ background: "#fff", borderRadius: 14 }}>
-                <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
-              </div>
-            ) : detailBill ? (
-              <BillLinePreview item={detailBill.item} monthYear={detailBill.monthYear} config={previewConfig} />
-            ) : (
-              <div className="room-modal-error p-3" style={{ background: "#fff", borderRadius: 14 }}>โหลดรายละเอียดบิลไม่สำเร็จ</div>
-            )}
-            <button className="btn btn-outline-secondary w-100 mt-2" onClick={() => setDetailItem(null)}>ปิด</button>
-          </div>
-        </div>
-      )}
-
       {payItem && (
         <div className="confirm-overlay" onClick={() => !generatingQr && closePay()}>
-          <div className="confirm-dialog" style={{ maxWidth: 360, width: "92%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
-            <h6 className="confirm-title" style={{ textAlign: "left" }}>ชำระค่าเช่า {monthYearLabel(payItem.monthYear)}</h6>
+          <div
+            className="confirm-dialog"
+            style={{ maxWidth: 400, width: "92%", textAlign: "left", position: "relative", maxHeight: "88vh", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ปุ่มปิดแบบกากะบาทกลม ลอยมุมขวาบน เหมือนป็อปอัพอื่นๆ ในเว็บ (ดู .room-modal-close ใน App.css) —
+                แทนที่ปุ่ม "ปิด" แบบข้อความเดิม */}
+            <button
+              className="room-modal-close" onClick={closePay}
+              style={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}
+            >
+              <i className="fas fa-times" />
+            </button>
 
-            {payStatus === "confirmed" ? (
-              <div className="text-center py-3">
-                <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
-                  <i className="fas fa-check-circle" />
-                </div>
-                <div className="alert alert-success py-2 px-3 small mb-3">ตรวจสลิปสำเร็จ บันทึกยอดชำระเรียบร้อยแล้ว ใบเสร็จส่งเข้าแชทให้แล้ว</div>
-                <button className="btn btn-primary w-100" onClick={closePay}>ปิด</button>
-              </div>
-            ) : intentStarted ? (
-              <div className="text-center">
-                {qrImage ? (
-                  <img src={qrImage} alt="QR ชำระเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
-                ) : intentAccountInfo && (
-                  <div className="text-start small">
-                    {intentAccountInfo.bankName && <div className="text-muted">ธนาคาร: {intentAccountInfo.bankName}</div>}
-                    {intentAccountInfo.accountName && <div className="text-muted">ชื่อบัญชี: {intentAccountInfo.accountName}</div>}
-                    <div className="input-group mt-1">
-                      <input type="text" className="form-control font-monospace" readOnly value={intentAccountInfo.accountNumber} />
-                      <button className="btn btn-outline-secondary" type="button" onClick={copyIntentAccountNumber} title="คัดลอกเลขบัญชี">
-                        <i className={`fas ${intentCopied ? "fa-check" : "fa-copy"}`} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="fw-bold fs-5 mt-2" style={{ color: "var(--color-primary)" }}>{fmtMoney(Number(payAmount))} ฿</div>
-                <div className="alert alert-light border small mt-3 mb-2">
-                  {payStatus === "pending"
-                    ? <><span className="spinner-border spinner-border-sm me-2" />กำลังรอตรวจสลิป — {qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย ระบบจะตรวจและอัปเดตให้อัตโนมัติ</>
-                    : `${qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย`}
-                </div>
-                {payStatus === "pending" && (
-                  manualSubmitted ? (
-                    <div className="alert alert-light border small mb-2">
-                      <i className="fas fa-paper-plane me-1" />ส่งสลิปให้พนักงานตรวจสอบแล้ว รอการยืนยัน
-                    </div>
-                  ) : (
-                    <div className="mb-2">
-                      <label className="btn btn-outline-secondary btn-sm w-100 mb-0" style={{ cursor: manualSubmitting ? "default" : "pointer" }}>
-                        {manualSubmitting
-                          ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
-                          : <><i className="fas fa-paperclip me-1" />ตรวจสลิปอัตโนมัติไม่สำเร็จ? แนบสลิปยืนยันด้วยตนเอง</>}
-                        <input type="file" accept="image/*" hidden disabled={manualSubmitting}
-                          onChange={(e) => { if (e.target.files?.[0]) handleManualConfirm(e.target.files[0]); e.target.value = ""; }} />
-                      </label>
-                      {manualError && <div className="room-modal-error mt-2"><i className="fas fa-exclamation-circle me-2" />{manualError}</div>}
-                    </div>
-                  )
-                )}
-                <button className="btn btn-outline-secondary w-100" onClick={closePay}>ปิด</button>
+            <h6 className="confirm-title" style={{ textAlign: "left", paddingRight: 36 }}>
+              ชำระค่าเช่า {payItem.monthYear ? monthYearLabel(payItem.monthYear) : ""}
+            </h6>
+
+            {loadingPayDetail ? (
+              <div className="text-center py-5">
+                <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
               </div>
             ) : (
               <>
-                <p className="text-muted small mb-2">ยอดค้างชำระงวดนี้ {fmtMoney(payItem.amount)} ฿ — จะจ่ายเต็มหรือบางส่วนก็ได้</p>
-                <div className="input-group mb-2">
-                  <input type="number" className="form-control" min={1} max={payItem.amount}
-                    value={payAmount} onChange={(e) => setPayAmount(e.target.value)} disabled={generatingQr} />
-                  <span className="input-group-text">บาท</span>
+                <div className="mb-3">
+                  {payBillDetail ? (
+                    <BillLinePreview item={payBillDetail.item} monthYear={payBillDetail.monthYear} config={previewConfig} />
+                  ) : (
+                    <div className="room-modal-error p-3">โหลดรายละเอียดบิลไม่สำเร็จ</div>
+                  )}
                 </div>
-                {qrError && <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{qrError}</div>}
-                <div className="confirm-actions">
-                  <button className="btn btn-outline-secondary" onClick={closePay} disabled={generatingQr}>ยกเลิก</button>
-                  <button className="btn btn-primary" onClick={handleGenerateQr} disabled={generatingQr}>
-                    {generatingQr
-                      ? <><span className="spinner-border spinner-border-sm me-2" />กำลังดำเนินการ...</>
-                      : paymentInfo.qrGenerationAvailable
-                        ? <><i className="fas fa-qrcode me-1" />สร้าง QR</>
-                        : <><i className="fas fa-check me-1" />ยืนยันจำนวนเงิน</>}
-                  </button>
-                </div>
+
+                {payStatus === "confirmed" ? (
+                  <div className="text-center py-3">
+                    <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
+                      <i className="fas fa-check-circle" />
+                    </div>
+                    <div className="alert alert-success py-2 px-3 small mb-0">ตรวจสลิปสำเร็จ บันทึกยอดชำระเรียบร้อยแล้ว ใบเสร็จส่งเข้าแชทให้แล้ว</div>
+                  </div>
+                ) : intentStarted ? (
+                  <div className="text-center">
+                    {qrImage ? (
+                      <img src={qrImage} alt="QR ชำระเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
+                    ) : intentAccountInfo && (
+                      <div className="text-start small">
+                        {intentAccountInfo.bankName && <div className="text-muted">ธนาคาร: {intentAccountInfo.bankName}</div>}
+                        {intentAccountInfo.accountName && <div className="text-muted">ชื่อบัญชี: {intentAccountInfo.accountName}</div>}
+                        <div className="input-group mt-1">
+                          <input type="text" className="form-control font-monospace" readOnly value={intentAccountInfo.accountNumber} />
+                          <button className="btn btn-outline-secondary" type="button" onClick={copyIntentAccountNumber} title="คัดลอกเลขบัญชี">
+                            <i className={`fas ${intentCopied ? "fa-check" : "fa-copy"}`} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="fw-bold fs-5 mt-2" style={{ color: "var(--color-primary)" }}>{fmtMoney(Number(payAmount))} ฿</div>
+                    <div className="alert alert-light border small mt-3 mb-2">
+                      {payStatus === "pending"
+                        ? <><span className="spinner-border spinner-border-sm me-2" />กำลังรอตรวจสลิป — {qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย ระบบจะตรวจและอัปเดตให้อัตโนมัติ</>
+                        : `${qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย`}
+                    </div>
+                    {payStatus === "pending" && (
+                      manualSubmitted ? (
+                        <div className="alert alert-light border small mb-0">
+                          <i className="fas fa-paper-plane me-1" />ส่งสลิปให้พนักงานตรวจสอบแล้ว รอการยืนยัน
+                        </div>
+                      ) : (
+                        <div className="mb-0">
+                          <label className="btn btn-outline-secondary btn-sm w-100 mb-0" style={{ cursor: manualSubmitting ? "default" : "pointer" }}>
+                            {manualSubmitting
+                              ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
+                              : <><i className="fas fa-paperclip me-1" />ตรวจสลิปอัตโนมัติไม่สำเร็จ? แนบสลิปยืนยันด้วยตนเอง</>}
+                            <input type="file" accept="image/*" hidden disabled={manualSubmitting}
+                              onChange={(e) => { if (e.target.files?.[0]) handleManualConfirm(e.target.files[0]); e.target.value = ""; }} />
+                          </label>
+                          {manualError && <div className="room-modal-error mt-2"><i className="fas fa-exclamation-circle me-2" />{manualError}</div>}
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : payItem.amount <= 0 ? (
+                  <div className="alert alert-success text-center py-2 small mb-0">
+                    <i className="fas fa-check-circle me-2" />บิลนี้ชำระครบถ้วนแล้ว ไม่มียอดค้างชำระ
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-muted small mb-2">ยอดค้างชำระงวดนี้ {fmtMoney(payItem.amount)} ฿ — จะจ่ายเต็มหรือบางส่วนก็ได้</p>
+                    <div className="input-group mb-2">
+                      <input type="number" className="form-control" min={1} max={payItem.amount}
+                        value={payAmount} onChange={(e) => setPayAmount(e.target.value)} disabled={generatingQr} />
+                      <span className="input-group-text">บาท</span>
+                    </div>
+                    {qrError && <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{qrError}</div>}
+                    <div className="confirm-actions">
+                      <button className="btn btn-outline-secondary" onClick={closePay} disabled={generatingQr}>ยกเลิก</button>
+                      <button className="btn btn-primary" onClick={handleGenerateQr} disabled={generatingQr}>
+                        {generatingQr
+                          ? <><span className="spinner-border spinner-border-sm me-2" />กำลังดำเนินการ...</>
+                          : paymentInfo.qrGenerationAvailable
+                            ? <><i className="fas fa-qrcode me-1" />สร้าง QR</>
+                            : <><i className="fas fa-check me-1" />ยืนยันจำนวนเงิน</>}
+                      </button>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
