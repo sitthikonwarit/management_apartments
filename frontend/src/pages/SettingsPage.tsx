@@ -244,6 +244,7 @@ export default function SettingsPage() {
   const [lineSecret, setLineSecret] = useState("");
   const [lineSecretVisible, setLineSecretVisible] = useState(false);
   const [lineAutoSendEnabled, setLineAutoSendEnabled] = useState(false);
+  const [sendBillToCoResidents, setSendBillToCoResidents] = useState(true);
 
   // ── LINE Rich Menu ──
   const [liffLoginUrl, setLiffLoginUrl] = useState("");
@@ -346,6 +347,7 @@ export default function SettingsPage() {
     setLineToken(config.lineMessaging.channelAccessToken);
     setLineSecret(config.lineMessaging.channelSecret);
     setLineAutoSendEnabled(config.lineMessaging.autoSendEnabled);
+    setSendBillToCoResidents(config.lineMessaging.sendBillToCoResidents);
     setLiffLoginUrl(config.richMenu.liffLoginUrl);
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
     setLiffProfileUrl(config.richMenu.liffProfileUrl);
@@ -526,7 +528,10 @@ export default function SettingsPage() {
         meterDigits: Math.max(3, Math.min(9, Number(meterDigits) || 5)),
         yearFormat,
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
-        lineMessaging: { enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(), autoSendEnabled: lineAutoSendEnabled },
+        lineMessaging: {
+          enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(),
+          autoSendEnabled: lineAutoSendEnabled, sendBillToCoResidents,
+        },
         richMenu: {
           ...DEFAULT_APP_CONFIG.richMenu,
           liffLoginUrl: liffLoginUrl.trim(), liffPaymentUrl: liffPaymentUrl.trim(),
@@ -1074,6 +1079,14 @@ export default function SettingsPage() {
                         checked={lineAutoSendEnabled} onChange={(e) => setLineAutoSendEnabled(e.target.checked)} />
                       <label className="form-check-label small" htmlFor="lineAutoSendSwitch">
                         ส่งบิลอัตโนมัติตาม "วันนัดส่ง" ที่ตั้งไว้ในหน้าบิล (เช็คทุก 10 นาที ส่งครั้งเดียวต่อบิลต่อรอบ และข้ามห้องที่จ่ายแล้ว)
+                      </label>
+                    </div>
+
+                    <div className="form-check form-switch mb-3">
+                      <input className="form-check-input" type="checkbox" id="sendBillToCoResidentsSwitch"
+                        checked={sendBillToCoResidents} onChange={(e) => setSendBillToCoResidents(e.target.checked)} />
+                      <label className="form-check-label small" htmlFor="sendBillToCoResidentsSwitch">
+                        ส่งบิลให้ "ผู้ร่วมพักอาศัย" ที่ผูก LINE User ID ไว้ด้วย (นอกเหนือจากผู้ทำสัญญาหลัก) — ทั้งตอนกดส่งเองและส่งอัตโนมัติ
                       </label>
                     </div>
 
