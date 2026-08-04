@@ -487,10 +487,13 @@ export default function SettingsPage() {
     try {
       const result = await settingsApi.createRichMenus();
       setRichMenuIds(result.menuIds);
+      const relinkText = result.relinked.success > 0 || result.relinked.failed > 0
+        ? ` อัปเดตเมนู Member ให้ผู้ใช้เดิม ${result.relinked.success} คนแล้ว${result.relinked.failed > 0 ? ` (พลาด ${result.relinked.failed} คน — อาจบล็อก LINE OA ไว้)` : ""}`
+        : "";
       if (result.warning) {
-        setRichMenuMsg({ type: "error", text: `สร้างเมนูสำเร็จ แต่${result.warning}` });
+        setRichMenuMsg({ type: "error", text: `สร้างเมนูสำเร็จ แต่${result.warning}${relinkText}` });
       } else {
-        const successText = "สร้าง Rich Menu ทั้ง 3 แบบสำเร็จ และตั้งเมนู Guest เป็นค่าเริ่มต้นแล้ว";
+        const successText = `สร้าง Rich Menu ทั้ง 3 แบบสำเร็จ และตั้งเมนู Guest เป็นค่าเริ่มต้นแล้ว${relinkText}`;
         setRichMenuMsg({ type: "success", text: successText });
         toastSuccess(successText);
       }

@@ -224,6 +224,7 @@ export const settingsApi = {
       menuIds: { guest: string; member: string; admin: string };
       defaultSet: boolean;
       warning?: string;
+      relinked: { success: number; failed: number };
     }),
 };
 

@@ -120,6 +120,19 @@ export async function linkRichMenuToUser(token: string, userId: string, richMenu
   }
 }
 
+// ผูก Rich Menu ใหม่ให้ "ทุกคน" ที่เคยผูกเมนู Member ไว้อยู่แล้วในคราวเดียว — เรียกหลังสร้างเมนูชุดใหม่สำเร็จ
+// (routes/settings.ts) เพราะ createAllRichMenus ด้านล่างลบเมนูชุดเก่าทิ้งก่อนเสมอ ซึ่งทำให้คนที่เคยผูกกับ
+// ID เก่าไว้ "หลุด" กลับไปเห็นเมนู Guest (ค่าเริ่มต้น) ทันที จนกว่าจะ login ผ่าน LIFF ใหม่อีกครั้ง — ไม่ต้อง
+// รอให้แต่ละคน login เอง สั่ง re-link ให้ครบทุกคนตรงนี้เลย (best-effort ทีละคน ไม่ให้คนใดคนหนึ่งพลาดแล้วบล็อก
+// คนที่เหลือ เช่น บล็อก LINE OA ไปแล้ว/lineUserId ไม่ถูกต้อง)
+export async function relinkRichMenuForUsers(token: string, richMenuId: string, userIds: string[]): Promise<{ success: number; failed: number }> {
+  if (!richMenuId) return { success: 0, failed: 0 };
+  const uniqueIds = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+  const results = await Promise.all(uniqueIds.map((id) => linkRichMenuToUser(token, id, richMenuId)));
+  const success = results.filter(Boolean).length;
+  return { success, failed: results.length - success };
+}
+
 export interface RichMenuImageInput {
   buffer: Buffer;
   mimeType: string;

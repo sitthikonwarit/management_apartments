@@ -1,8 +1,8 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { appSettings, appConfig } from "../db/schema";
-import { createAllRichMenus } from "../services/richMenu";
+import { appSettings, appConfig, tenants } from "../db/schema";
+import { createAllRichMenus, relinkRichMenuForUsers } from "../services/richMenu";
 import { toPublicUrl } from "../services/line";
 
 const CONFIG_ID = "default";
@@ -271,7 +271,22 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
         richMenuAdminId: result.ids.admin,
       }).where(eq(appConfig.id, CONFIG_ID));
 
-      return { menuIds: result.ids, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError };
+      // เมนูชุดเก่าถูกลบไปแล้วข้างใน createAllRichMenus ทำให้ทุกคนที่เคยผูกเมนู Member ไว้ "หลุด" กลับไปเห็น
+      // เมนู Guest ทันที (ผู้ใช้ทั่วไปที่ยังไม่ผูกอะไรไม่กระทบ เพราะ createAllRichMenus ตั้ง Guest เป็นค่า
+      // เริ่มต้นของทุกคนให้อัตโนมัติอยู่แล้ว) — ผูกเมนู Member ชุดใหม่ให้ทุกคนที่เคยผูกไว้กลับคืนทันที ไม่ต้อง
+      // รอให้แต่ละคน login ผ่าน LIFF ใหม่เอง ครอบคลุมทั้งผู้เช่าหลัก (lineUserId) และผู้ร่วมพักอาศัยที่เคย
+      // login ด้วยบัญชี LINE ตัวเอง (coResidents[].lineId — ดู findTenantByLineUserId ใน services/line.ts)
+      const tenantRows = await db.select().from(tenants);
+      const memberUserIds: string[] = [];
+      for (const t of tenantRows) {
+        if (t.lineUserId?.trim()) memberUserIds.push(t.lineUserId.trim());
+        for (const cr of j<any[]>(t.coResidents, [])) {
+          if (cr?.lineId?.trim?.()) memberUserIds.push(String(cr.lineId).trim());
+        }
+      }
+      const relinked = await relinkRichMenuForUsers(token, result.ids.member, memberUserIds);
+
+      return { menuIds: result.ids, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError, relinked };
     } catch (e: any) {
       set.status = 500;
       return { error: e?.message ?? "สร้าง Rich Menu ไม่สำเร็จ" };
