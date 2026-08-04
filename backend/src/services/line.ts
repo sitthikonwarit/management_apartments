@@ -708,7 +708,10 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
     lineUserId = (tenant?.lineUserId ?? "").trim();
     // ผู้ร่วมพักอาศัยที่ผูก LINE User ID ไว้ (ต้องขึ้นต้นด้วย "U" เหมือนผู้ทำสัญญาหลัก) — ส่งบิลใบเดียวกัน
     // ให้ทุกคนพร้อมกัน โดยเนื้อหาบิล (ชื่อผู้เช่าบนหัวบิล) ยังคงเป็นชื่อผู้ทำสัญญาเสมอ ไม่เปลี่ยนตามผู้รับ
-    const coResidents: any[] = Array.isArray(tenant?.coResidents) ? tenant.coResidents : [];
+    // coResidents เป็นคอลัมน์ text เก็บ JSON string ดิบ (ดู schema.ts) ต้อง parse ก่อนเสมอ — เดิม (บั๊ก) เช็ค
+    // Array.isArray กับ string ตรงๆ ซึ่งเป็น false เสมอ เลยไม่เคยส่งถึงผู้ร่วมพักอาศัยเลยสักครั้ง
+    let coResidents: any[] = [];
+    try { coResidents = tenant?.coResidents ? JSON.parse(tenant.coResidents) : []; } catch { coResidents = []; }
     coLineUserIds = coResidents
       .map((c: any) => String(c?.lineId ?? "").trim())
       .filter((id: string) => id.startsWith("U"));
