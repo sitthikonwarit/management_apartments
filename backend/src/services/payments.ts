@@ -37,26 +37,40 @@ export async function tryAutoConfirmSlipPayment(lineUserId: string, imageRelPath
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
     if (!matched) return;
 
-    await recordAutomaticPayment(matched, result.transRef, imageRelPath);
+    await recordConfirmedPayment(matched, {
+      slipUrl: imageRelPath,
+      actor: "ระบบอัตโนมัติ (EasySlip)",
+      note: `ชำระผ่าน LIFF — ตรวจสลิปอัตโนมัติด้วย EasySlip (อ้างอิง ${result.transRef})`,
+    });
   } catch (e) {
     console.error("[easyslip-auto-verify]", e);
   }
 }
 
+export interface ConfirmedPaymentResult {
+  ok: boolean;
+  message?: string;
+}
+
 // พอร์ตมาจาก handleConfirmPayment ใน frontend/src/pages/BillsPage.tsx (เฉพาะส่วนคำนวณ/บันทึกยอด — ไม่รวม
-// ส่วนปรับค่าปรับ/ส่วนลด/ปิดยอดค้างเดือนก่อนหน้า ซึ่งเป็นการตัดสินใจของพนักงานเท่านั้น ไม่ทำอัตโนมัติ)
-async function recordAutomaticPayment(intent: typeof paymentIntents.$inferSelect, transRef: string, slipUrl: string): Promise<void> {
+// ส่วนปรับค่าปรับ/ส่วนลด/ปิดยอดค้างเดือนก่อนหน้า ซึ่งเป็นการตัดสินใจของพนักงานเท่านั้น ไม่ทำอัตโนมัติ) ใช้ร่วมกัน
+// ทั้งเส้นทางตรวจสลิปอัตโนมัติด้วย EasySlip (ด้านบน) และเส้นทางพนักงานกดยืนยันเองจากการ์ดในหน้าแชท (ดู
+// PATCH /chat/conversations/:lineUserId/messages/:id/payment-confirm ใน routes/chat.ts)
+export async function recordConfirmedPayment(
+  intent: typeof paymentIntents.$inferSelect,
+  opts: { slipUrl: string; actor: string; note: string }
+): Promise<ConfirmedPaymentResult> {
   const [billRow] = await db.select().from(bills).where(eq(bills.id, intent.billId));
-  if (!billRow) return;
+  if (!billRow) return { ok: false, message: "ไม่พบบิลของรายการรอชำระนี้" };
   let data: any[] = [];
   try { data = billRow.data ? JSON.parse(billRow.data) : []; } catch { data = []; }
   const idx = data.findIndex((it: any) => String(it?.roomId) === intent.roomId);
-  if (idx === -1) return;
+  if (idx === -1) return { ok: false, message: "ไม่พบข้อมูลห้องนี้ในบิล" };
   const item = data[idx];
 
   const remainingDue = Math.max(0, Number(item.total) - (Number(item.paidAmount) || 0));
   const amountApplied = Math.min(Number(intent.amount) || 0, remainingDue);
-  if (amountApplied <= 0) return; // บิลนี้จ่ายครบไปแล้วก่อนหน้า (เช่นพนักงานบันทึกเองไปแล้ว) ไม่ต้องทำซ้ำ
+  if (amountApplied <= 0) return { ok: false, message: "บิลนี้จ่ายครบไปแล้วก่อนหน้า" };
   const newPaidAmount = (Number(item.paidAmount) || 0) + amountApplied;
   const fullySettled = newPaidAmount >= Number(item.total) - 0.005;
 
@@ -76,10 +90,10 @@ async function recordAutomaticPayment(intent: typeof paymentIntents.$inferSelect
     data: JSON.stringify({
       roomId: intent.roomId, roomNumber: intent.roomNumber, tenantName: intent.tenantName,
       monthYear: intent.monthYear, method: "scan", amount: amountApplied, received: amountApplied, change: 0,
-      note: `ชำระผ่าน LIFF — ตรวจสลิปอัตโนมัติด้วย EasySlip (อ้างอิง ${transRef})`,
-      slipUrl,
+      note: opts.note,
+      slipUrl: opts.slipUrl,
     }),
-    operator: "ระบบอัตโนมัติ (EasySlip)",
+    operator: opts.actor,
     action: "pay",
   });
 
@@ -89,12 +103,14 @@ async function recordAutomaticPayment(intent: typeof paymentIntents.$inferSelect
     await sendPaymentReceiptLine({
       tenantId: intent.tenantId, roomNumber: intent.roomNumber || "", monthYear: intent.monthYear || "",
       method: "scan", amount: amountApplied, change: 0, note: "", paymentDate: ts,
-      billTotal: Number(item.total) || 0, paidTotal: newPaidAmount, slipUrl, actor: "ระบบอัตโนมัติ (EasySlip)",
+      billTotal: Number(item.total) || 0, paidTotal: newPaidAmount, slipUrl: opts.slipUrl, actor: opts.actor,
     });
   } catch (e) {
-    console.error("[easyslip-auto-verify][receipt]", e);
+    console.error("[record-confirmed-payment][receipt]", e);
   }
 
-  broadcastChange("bill", "update", "ชำระเงินอัตโนมัติผ่าน LIFF (ตรวจสลิปด้วย EasySlip)", "ระบบอัตโนมัติ");
-  broadcastChange("payment", "create", "ชำระเงินอัตโนมัติผ่าน LIFF", "ระบบอัตโนมัติ");
+  broadcastChange("bill", "update", `ชำระเงินผ่าน LIFF (${opts.actor})`, opts.actor);
+  broadcastChange("payment", "create", "ชำระเงินผ่าน LIFF", opts.actor);
+
+  return { ok: true };
 }

@@ -27,6 +27,15 @@ function fmtMoney(n: number) {
   return new Intl.NumberFormat("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(n) || 0);
 }
 
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function LiffPaymentPage() {
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
@@ -63,6 +72,10 @@ export default function LiffPaymentPage() {
   const [intentStarted, setIntentStarted] = useState(false);
   const [intentCopied, setIntentCopied] = useState(false);
   const [payStatus, setPayStatus] = useState<"" | "pending" | "confirmed">("");
+  const [currentIntentId, setCurrentIntentId] = useState("");
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualSubmitted, setManualSubmitted] = useState(false);
+  const [manualError, setManualError] = useState("");
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function stopPolling() {
@@ -138,6 +151,7 @@ export default function LiffPaymentPage() {
     setPayItem(item);
     setPayAmount(String(item.amount));
     setQrImage(""); setIntentAccountInfo(null); setIntentStarted(false); setQrError(""); setPayStatus("");
+    setCurrentIntentId(""); setManualSubmitting(false); setManualSubmitted(false); setManualError("");
     stopPolling();
   }
 
@@ -160,6 +174,7 @@ export default function LiffPaymentPage() {
       setIntentAccountInfo(result.accountInfo);
       setIntentStarted(true);
       setPayStatus("pending");
+      setCurrentIntentId(result.intentId);
       let attempts = 0;
       pollTimer.current = setInterval(async () => {
         attempts++;
@@ -179,6 +194,20 @@ export default function LiffPaymentPage() {
       setQrError(e?.response?.data?.error ?? e?.message ?? "สร้าง QR ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setGeneratingQr(false);
+    }
+  }
+
+  async function handleManualConfirm(file: File) {
+    if (!currentIntentId) return;
+    setManualSubmitting(true); setManualError("");
+    try {
+      const base64 = await readFileAsBase64(file);
+      await liffApi.confirmPayment(accessToken, currentIntentId, base64);
+      setManualSubmitted(true);
+    } catch (e: any) {
+      setManualError(e?.response?.data?.error ?? e?.message ?? "ส่งสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setManualSubmitting(false);
     }
   }
 
@@ -372,6 +401,24 @@ export default function LiffPaymentPage() {
                     ? <><span className="spinner-border spinner-border-sm me-2" />กำลังรอตรวจสลิป — {qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย ระบบจะตรวจและอัปเดตให้อัตโนมัติ</>
                     : `${qrImage ? "สแกนแล้ว" : ""}โอนเงินตามยอดนี้ จากนั้นส่งรูปสลิปกลับมาที่แชทนี้ได้เลย`}
                 </div>
+                {payStatus === "pending" && (
+                  manualSubmitted ? (
+                    <div className="alert alert-light border small mb-2">
+                      <i className="fas fa-paper-plane me-1" />ส่งสลิปให้พนักงานตรวจสอบแล้ว รอการยืนยัน
+                    </div>
+                  ) : (
+                    <div className="mb-2">
+                      <label className="btn btn-outline-secondary btn-sm w-100 mb-0" style={{ cursor: manualSubmitting ? "default" : "pointer" }}>
+                        {manualSubmitting
+                          ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
+                          : <><i className="fas fa-paperclip me-1" />ตรวจสลิปอัตโนมัติไม่สำเร็จ? แนบสลิปยืนยันด้วยตนเอง</>}
+                        <input type="file" accept="image/*" hidden disabled={manualSubmitting}
+                          onChange={(e) => { if (e.target.files?.[0]) handleManualConfirm(e.target.files[0]); e.target.value = ""; }} />
+                      </label>
+                      {manualError && <div className="room-modal-error mt-2"><i className="fas fa-exclamation-circle me-2" />{manualError}</div>}
+                    </div>
+                  )
+                )}
                 <button className="btn btn-outline-secondary w-100" onClick={closePay}>ปิด</button>
               </div>
             ) : (

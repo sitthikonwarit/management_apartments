@@ -262,6 +262,68 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
 
     return { status: intent.status };
   })
+  // ปุ่ม "แจ้งว่าชำระเงินแล้ว" ในป็อปอัพ "จ่ายงวดนี้" — ทางเลือกสำรองกรณีตรวจสลิปอัตโนมัติด้วย EasySlip ไม่
+  // สำเร็จ (ภาพไม่ชัด/ธนาคารไม่รองรับ/API ล่มชั่วคราว) ผู้เช่าแนบรูปสลิปเองแล้วส่งเป็นคำขอเข้าแชท (messageType
+  // "payment_confirm") ให้พนักงานเห็นการ์ดคำขอแล้วกดยืนยัน/ปฏิเสธได้ตรงจากหน้าแชทเลย (ดู PATCH
+  // /chat/conversations/:lineUserId/messages/:id/payment-confirm ใน routes/chat.ts) ต่างจากส่งรูปสลิปเข้า
+  // แชทเฉยๆ ตรงที่มีการ์อ้างอิง "รายการรอชำระ" (intentId) ชัดเจน ไม่ต้องให้พนักงานไปหาเองว่าเป็นของบิลไหน
+  .post("/payment/confirm", async ({ body, set }) => {
+    const { accessToken, intentId, slipImage } = body as {
+      accessToken?: string; intentId?: string; slipImage?: { base64?: string };
+    };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    if (!intentId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+    if (!slipImage?.base64) { set.status = 400; return { error: "กรุณาแนบรูปสลิปการโอนเงิน" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, intentId));
+    if (!intent || intent.lineUserId !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการรอชำระ" }; }
+    if (intent.status !== "pending") { set.status = 400; return { error: "รายการนี้ถูกยืนยันไปแล้ว" }; }
+
+    const slipUrl = await uploadChatAttachment(`payment_confirm_${Date.now()}.jpg`, slipImage.base64);
+
+    const snapshot = {
+      kind: "payment_confirm",
+      intentId: intent.id,
+      billId: intent.billId,
+      roomId: intent.roomId,
+      roomNumber: intent.roomNumber,
+      monthYear: intent.monthYear,
+      amount: Number(intent.amount) || 0,
+      tenantName: intent.tenantName,
+      slipUrl,
+      status: "pending",
+      rejectReason: "",
+      confirmedBy: "",
+      confirmedAt: "",
+    };
+
+    const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await db.insert(chatMessages).values({
+      id,
+      lineUserId: profile.userId,
+      tenantId: intent.tenantId || "",
+      direction: "in",
+      messageType: "payment_confirm",
+      text: JSON.stringify(snapshot),
+      senderName: intent.tenantName || "",
+      createdAt: new Date().toISOString(),
+    });
+
+    const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
+    broadcastChatMessage({
+      lineUserId: profile.userId,
+      displayName: intent.tenantName || profile.displayName || "ไม่ทราบชื่อ",
+      roomNumber: intent.roomNumber || null,
+      pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
+      preview: `💰 แจ้งชำระเงิน ${Number(intent.amount).toLocaleString("th-TH")} บาท`,
+    });
+    broadcastChange("chat", "create", "มีการแจ้งชำระเงินใหม่", intent.tenantName || "");
+
+    return { ok: true, messageId: id };
+  })
   // ปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member — ข้อมูลส่วนตัว + บิลทุกใบ (ทั้งจ่ายแล้ว/ค้างอยู่) + ประวัติการชำระเงินทั้งหมด
   .post("/profile", async ({ body, set }) => {
     const { accessToken } = body as { accessToken?: string };

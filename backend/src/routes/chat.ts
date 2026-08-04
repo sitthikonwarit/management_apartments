@@ -1,12 +1,13 @@
 import { Elysia } from "elysia";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, lineProfiles, rooms, tenants, users } from "../db/schema";
+import { chatMessages, lineProfiles, paymentIntents, rooms, tenants, users } from "../db/schema";
 import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
   uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
   getOutstandingBillsForTenant,
 } from "../services/line";
+import { recordConfirmedPayment } from "../services/payments";
 
 // ข้อความตัวอย่างแสดงในรายชื่อสนทนา — "bill"/"receipt" เก็บ JSON ดิบไว้ใน text (ดู services/line.ts:
 // logOutboundChatMessage) ต้องแปลงเป็นข้อความสั้นๆ อ่านง่ายแทน ไม่งั้นโชว์ JSON ดิบๆ ในหน้ารายชื่อ
@@ -20,6 +21,14 @@ function previewText(m: { messageType: string; text: string }): string {
       return `🔧 แจ้งซ่อม: ${data?.title ?? ""}`;
     } catch {
       return "🔧 แจ้งซ่อม";
+    }
+  }
+  if (m.messageType === "payment_confirm") {
+    try {
+      const data = JSON.parse(m.text);
+      return `💰 แจ้งชำระเงิน ${Number(data?.amount ?? 0).toLocaleString("th-TH")} บาท`;
+    } catch {
+      return "💰 แจ้งชำระเงิน";
     }
   }
   return m.text || "[ไฟล์แนบ]";
@@ -321,6 +330,70 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
         console.error("[repair-confirm][notify]", e);
       }
     }
+
+    const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    return parseMessage(row);
+  })
+  // พนักงานกดยืนยัน/ปฏิเสธคำขอ "แจ้งชำระเงิน" ที่ผู้เช่าส่งเข้ามาจากป็อปอัพ "จ่ายงวดนี้" ในหน้า LIFF Payment
+  // (messageType "payment_confirm") — ทางเลือกสำรองกรณีตรวจสลิปอัตโนมัติด้วย EasySlip ไม่สำเร็จ ยืนยันแล้ว
+  // เรียก recordConfirmedPayment ตัวเดียวกับที่ตรวจสลิปอัตโนมัติใช้ (services/payments.ts) เพื่อบันทึกยอด/
+  // อัปเดตบิล/ส่งใบเสร็จให้ครบเหมือนกันทุกประการ ไม่ต้องเขียนตรรกะซ้ำ
+  .patch("/conversations/:lineUserId/messages/:id/payment-confirm", async ({ params, body, set, authUser }) => {
+    const b = body as any;
+    const action = b?.action === "reject" ? "reject" : b?.action === "confirm" ? "confirm" : null;
+    if (!action) { set.status = 400; return { error: "ระบุการดำเนินการไม่ถูกต้อง" }; }
+    const reason = String(b?.reason ?? "");
+
+    const [existing] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    if (!existing || existing.messageType !== "payment_confirm" || existing.lineUserId !== params.lineUserId) {
+      set.status = 404;
+      return { error: "ไม่พบคำขอแจ้งชำระเงิน" };
+    }
+
+    let snapshot: any = {};
+    try { snapshot = existing.text ? JSON.parse(existing.text) : {}; } catch { snapshot = {}; }
+    if (snapshot.status !== "pending") { set.status = 400; return { error: "รายการนี้ถูกดำเนินการไปแล้ว" }; }
+
+    const actor = await resolveActorName(authUser);
+    const now = new Date().toISOString();
+    const settings = await getLineSettings();
+
+    if (action === "reject") {
+      snapshot = { ...snapshot, status: "rejected", rejectReason: reason, confirmedBy: actor, confirmedAt: now };
+      await db.update(chatMessages).set({ text: JSON.stringify(snapshot) }).where(eq(chatMessages.id, params.id));
+
+      if (settings.enabled && settings.token) {
+        try {
+          const summary = [
+            "❌ ตรวจสอบสลิปที่แจ้งไม่สำเร็จ",
+            reason ? `เหตุผล: ${reason}` : "",
+            "กรุณาส่งรูปสลิปใหม่ หรือติดต่อผู้ดูแลหอพัก",
+          ].filter(Boolean).join("\n");
+          await sendTextMessage(settings.token, params.lineUserId, summary);
+        } catch (e) {
+          console.error("[payment-confirm][reject-notify]", e);
+        }
+      }
+
+      const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+      return parseMessage(row);
+    }
+
+    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, snapshot.intentId));
+    if (!intent || intent.status !== "pending") {
+      set.status = 400;
+      return { error: "ไม่พบรายการรอชำระ หรือรายการนี้ถูกยืนยันไปแล้ว" };
+    }
+
+    const result = await recordConfirmedPayment(intent, {
+      slipUrl: snapshot.slipUrl || "",
+      actor,
+      note: "ยืนยันโดยพนักงานจากหน้าแชท",
+    });
+    if (!result.ok) { set.status = 400; return { error: result.message ?? "ยืนยันการชำระเงินไม่สำเร็จ" }; }
+
+    snapshot = { ...snapshot, status: "confirmed", confirmedBy: actor, confirmedAt: now };
+    await db.update(chatMessages).set({ text: JSON.stringify(snapshot) }).where(eq(chatMessages.id, params.id));
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
     return parseMessage(row);

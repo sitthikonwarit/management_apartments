@@ -11,6 +11,7 @@ import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailMod
 import ImageLightbox from "../components/ImageLightbox";
 import { ChatBillMessage } from "../components/ChatBillCard";
 import { ChatRepairMessage } from "../components/ChatRepairCard";
+import { ChatPaymentConfirmMessage } from "../components/ChatPaymentConfirmCard";
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -308,6 +309,13 @@ export default function ChatPage() {
                       // การ์ดแจ้งซ่อม (ผู้เช่าส่งเข้ามาจากหน้า LIFF Repair) — พนักงานกรอกรายละเอียดการซ่อม
                       // แล้วยืนยันปิดงานได้ตรงนี้เลย ไม่ต้องห่อด้วยฟองข้อความสีปกติเหมือนบิล/ใบเสร็จ
                       <ChatRepairMessage
+                        messageId={m.id} lineUserId={m.lineUserId} raw={m.text}
+                        onUpdated={(updated) => setMessages((prev) => prev.map((msg) => (msg.id === updated.id ? updated : msg)))}
+                      />
+                    ) : m.messageType === "payment_confirm" ? (
+                      // การ์ดแจ้งชำระเงิน (ผู้เช่าส่งเข้ามาจากป็อปอัพ "จ่ายงวดนี้" ในหน้า LIFF Payment ตอนตรวจ
+                      // สลิปอัตโนมัติด้วย EasySlip ไม่สำเร็จ) — พนักงานยืนยัน/ปฏิเสธได้ตรงนี้เลย
+                      <ChatPaymentConfirmMessage
                         messageId={m.id} lineUserId={m.lineUserId} raw={m.text}
                         onUpdated={(updated) => setMessages((prev) => prev.map((msg) => (msg.id === updated.id ? updated : msg)))}
                       />

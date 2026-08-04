@@ -206,6 +206,8 @@ export const chatApi = {
   confirmRepair: (lineUserId: string, messageId: string, data: {
     items: { name: string; price: number; qty: number }[]; note: string; photos: string[];
   }) => api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/repair`, data).then((r) => r.data as ChatMessage),
+  confirmPayment: (lineUserId: string, messageId: string, action: "confirm" | "reject", reason?: string) =>
+    api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/payment-confirm`, { action, reason }).then((r) => r.data as ChatMessage),
 };
 
 export const settingsApi = {
@@ -268,6 +270,8 @@ export const liffApi = {
     }),
   paymentStatus: (accessToken: string, intentId: string) =>
     api.post("/liff/payment/status", { accessToken, intentId }).then((r) => r.data as { status: "pending" | "confirmed" }),
+  confirmPayment: (accessToken: string, intentId: string, slipBase64: string) =>
+    api.post("/liff/payment/confirm", { accessToken, intentId, slipImage: { base64: slipBase64 } }).then((r) => r.data as { ok: boolean; messageId: string }),
   profile: (accessToken: string) => api.post("/liff/profile", { accessToken }).then((r) => r.data as
     | { linked: false }
     | {
