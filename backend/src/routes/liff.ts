@@ -413,7 +413,9 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       return { error: "กรอกผิดหลายครั้งเกินไป กรุณาลองใหม่อีกครั้งภายหลัง" };
     }
 
-    const actualLast4 = String(tenant.idLicense ?? "").trim().slice(-4);
+    // idLicense เก็บในฐานข้อมูลพร้อมขีด (รูปแบบ X-XXXX-XXXXX-XX-X ดู formatIdCard ใน TenantFormView.tsx) ต้อง
+    // ตัดเอาเฉพาะตัวเลขก่อนหยิบ 4 หลักท้าย ไม่งั้นจะได้ตัวขีดติดมาด้วย (เช่น "14-5" แทนที่จะเป็นเลข 4 หลักจริง)
+    const actualLast4 = String(tenant.idLicense ?? "").replace(/\D/g, "").slice(-4);
     if (!actualLast4) { set.status = 400; return { error: "ไม่มีเลขบัตรประชาชนบันทึกไว้ในระบบ กรุณาติดต่อผู้ดูแลหอพัก" }; }
     if (idLicenseLast4.trim() !== actualLast4) {
       recordProfileVerifyFailure(tenant.id);
