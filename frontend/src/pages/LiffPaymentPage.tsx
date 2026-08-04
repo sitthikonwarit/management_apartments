@@ -396,26 +396,23 @@ export default function LiffPaymentPage() {
 
       {payItem && (
         <div className="confirm-overlay" onClick={() => !generatingQr && closePay()}>
+          {/* ไม่ใช้ padding/background/shadow ของ .confirm-dialog เริ่มต้น (ปล่อยโปร่งใส) เพราะ BillLinePreview
+              มีกรอบ/เงา/มุมโค้งของตัวเองอยู่แล้ว — ถ้าห่อด้วย .confirm-dialog ปกติอีกชั้นจะกลายเป็นกรอบซ้อนกรอบ
+              บีบพื้นที่เนื้อหาข้างในให้แคบลงโดยไม่จำเป็น ส่วนขั้นตอนจ่ายเงิน/QR ด้านล่างมีกล่องขาวเป็นของตัวเองแยก
+              ต่างหาก ไม่ได้พึ่ง padding ของ .confirm-dialog เหมือนกัน */}
           <div
             className="confirm-dialog"
-            style={{ maxWidth: 400, width: "92%", textAlign: "left", position: "relative", maxHeight: "88vh", overflowY: "auto" }}
+            style={{ maxWidth: 400, width: "92%", textAlign: "left", position: "relative", maxHeight: "88vh", overflowY: "auto", padding: 0, background: "transparent", boxShadow: "none" }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* ปุ่มปิดแบบกากะบาทกลม ลอยมุมขวาบน เหมือนป็อปอัพอื่นๆ ในเว็บ (ดู .room-modal-close ใน App.css) —
-                แทนที่ปุ่ม "ปิด" แบบข้อความเดิม */}
-            <button
-              className="room-modal-close" onClick={closePay}
-              style={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}
-            >
+            {/* ปุ่มปิดแบบกากะบาทลอยมุมขวาบน ทับหัวการ์ดบิล (พื้นสีทึบ) เหมือนปุ่มปิดใน ImageLightbox — แทนที่
+                ปุ่ม "ปิด" แบบข้อความเดิม */}
+            <button className="lightbox-close" onClick={closePay} style={{ top: "0.6rem", right: "0.6rem", width: "2rem", height: "2rem", fontSize: "1.1rem", zIndex: 2 }}>
               <i className="fas fa-times" />
             </button>
 
-            <h6 className="confirm-title" style={{ textAlign: "left", paddingRight: 36 }}>
-              ชำระค่าเช่า {payItem.monthYear ? monthYearLabel(payItem.monthYear) : ""}
-            </h6>
-
             {loadingPayDetail ? (
-              <div className="text-center py-5">
+              <div className="text-center py-5" style={{ background: "#fff", borderRadius: "var(--border-radius-2)" }}>
                 <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
               </div>
             ) : (
@@ -424,10 +421,11 @@ export default function LiffPaymentPage() {
                   {payBillDetail ? (
                     <BillLinePreview item={payBillDetail.item} monthYear={payBillDetail.monthYear} config={previewConfig} />
                   ) : (
-                    <div className="room-modal-error p-3">โหลดรายละเอียดบิลไม่สำเร็จ</div>
+                    <div className="room-modal-error p-3" style={{ background: "#fff", borderRadius: "var(--border-radius-2)" }}>โหลดรายละเอียดบิลไม่สำเร็จ</div>
                   )}
                 </div>
 
+                <div style={{ background: "#fff", borderRadius: "var(--border-radius-2)", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", padding: "16px" }}>
                 {payStatus === "confirmed" ? (
                   <div className="text-center py-3">
                     <div className="login-icon mb-3" style={{ background: "rgba(27,156,133,0.15)", color: "var(--color-success)" }}>
@@ -501,6 +499,7 @@ export default function LiffPaymentPage() {
                     </div>
                   </>
                 )}
+                </div>
               </>
             )}
           </div>
