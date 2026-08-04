@@ -323,6 +323,7 @@ export const appConfig = pgTable("app_config", {
   paymentAccountName: str("payment_account_name"),
   paymentAccountNumber: str("payment_account_number"),
   paymentQrImage: str("payment_qr_image"), // base64 data URI เหมือน logoUrl (ดู comment ที่ logoUrl) — fallback ตอน EasySlip ยังไม่ได้ตั้งค่า
+  paymentBankLogoImage: str("payment_bank_logo_image"), // โลโก้ธนาคาร base64 data URI เดียวกัน — โชว์คู่ชื่อธนาคารในหน้า LIFF Payment
   // ── EasySlip (https://easyslip.com) — สร้าง QR PromptPay แบบระบุยอดเอง + ตรวจสลิปที่ผู้เช่าส่งเข้าแชท
   // อัตโนมัติ (ดู services/easyslip.ts, services/payments.ts) ──
   easySlipApiKey: str("easyslip_api_key"),

@@ -270,6 +270,9 @@ export default function SettingsPage() {
   const [paymentQrImage, setPaymentQrImage] = useState("");
   const [uploadingQr, setUploadingQr] = useState(false);
   const qrFileRef = useRef<HTMLInputElement>(null);
+  const [paymentBankLogoImage, setPaymentBankLogoImage] = useState("");
+  const [uploadingBankLogo, setUploadingBankLogo] = useState(false);
+  const bankLogoFileRef = useRef<HTMLInputElement>(null);
   const [easySlipApiKey, setEasySlipApiKey] = useState("");
   const [easySlipApiKeyVisible, setEasySlipApiKeyVisible] = useState(false);
   const [promptPayId, setPromptPayId] = useState("");
@@ -363,6 +366,7 @@ export default function SettingsPage() {
     setPaymentAccountName(config.payment.accountName);
     setPaymentAccountNumber(config.payment.accountNumber);
     setPaymentQrImage(config.payment.qrImage);
+    setPaymentBankLogoImage(config.payment.bankLogoImage);
     setEasySlipApiKey(config.payment.easySlipApiKey);
     setPromptPayId(config.payment.promptPayId);
     setLogoUrl(config.appIdentity.logoUrl);
@@ -488,6 +492,32 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
+  // โลโก้ธนาคาร — ย่อขนาดแบบเดียวกับ handleLogoFile (โลโก้เล็ก ไม่ใช่ QR ที่ต้องสแกนได้)
+  function handleBankLogoFile(file: File) {
+    setUploadingBankLogo(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width, height = img.height;
+        if (width > height) {
+          if (width > MAX_LOGO_SIZE) { height *= MAX_LOGO_SIZE / width; width = MAX_LOGO_SIZE; }
+        } else {
+          if (height > MAX_LOGO_SIZE) { width *= MAX_LOGO_SIZE / height; height = MAX_LOGO_SIZE; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        setPaymentBankLogoImage(canvas.toDataURL("image/png"));
+        setUploadingBankLogo(false);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleCreateRichMenus() {
     setCreatingRichMenu(true); setRichMenuMsg(null);
     try {
@@ -546,7 +576,7 @@ export default function SettingsPage() {
         },
         payment: {
           bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
-          accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage,
+          accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage, bankLogoImage: paymentBankLogoImage,
           easySlipApiKey: easySlipApiKey.trim(), promptPayId: promptPayId.trim(),
         },
       };
@@ -899,8 +929,22 @@ export default function SettingsPage() {
                         <div className="row g-3">
                           <div className="col-md-6">
                             <label className="form-label small fw-bold">ธนาคาร</label>
-                            <input type="text" className="form-control" placeholder="เช่น ธนาคารกสิกรไทย"
-                              value={paymentBankName} onChange={(e) => setPaymentBankName(e.target.value)} />
+                            <div className="d-flex align-items-center gap-2">
+                              <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                {paymentBankLogoImage
+                                  ? <img src={paymentBankLogoImage} alt="โลโก้ธนาคาร" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                  : <i className="fas fa-building-columns text-muted" />}
+                              </div>
+                              <input type="text" className="form-control" placeholder="เช่น ธนาคารกสิกรไทย"
+                                value={paymentBankName} onChange={(e) => setPaymentBankName(e.target.value)} />
+                              <button className="btn btn-sm btn-outline-secondary flex-shrink-0" type="button" disabled={uploadingBankLogo}
+                                title={paymentBankLogoImage ? "เปลี่ยนโลโก้ธนาคาร" : "อัปโหลดโลโก้ธนาคาร"}
+                                onClick={() => bankLogoFileRef.current?.click()}>
+                                {uploadingBankLogo ? <span className="spinner-border spinner-border-sm" /> : <i className="fas fa-upload" />}
+                              </button>
+                              <input ref={bankLogoFileRef} type="file" accept="image/*" style={{ display: "none" }}
+                                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBankLogoFile(f); e.target.value = ""; }} />
+                            </div>
                           </div>
                           <div className="col-md-6">
                             <label className="form-label small fw-bold">ชื่อบัญชี</label>

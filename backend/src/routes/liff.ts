@@ -192,6 +192,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         accountName: row?.paymentAccountName || "",
         accountNumber: row?.paymentAccountNumber || "",
         qrImage: row?.paymentQrImage || "",
+        bankLogoUrl: row?.paymentBankLogoImage || "",
         // มี API key ก็เลือกจำนวนเงินเอง+ตรวจสลิปอัตโนมัติได้แล้ว (endpoint /payment/qr ด้านล่าง) — ไม่
         // จำเป็นต้องมี PromptPay ID ด้วย (บางที่ผูกบัญชีธนาคารธรรมดากับ EasySlip ไว้ ไม่มี PromptPay ID
         // ให้ใช้สร้าง QR จริง) ถ้าไม่มี PromptPay ID จะโชว์เลขบัญชีให้คัดลอกแทน QR แต่ยังตรวจสลิปอัตโนมัติได้

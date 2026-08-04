@@ -44,7 +44,7 @@ export default function LiffPaymentPage() {
   const [items, setItems] = useState<OutstandingItem[]>([]);
   const [total, setTotal] = useState(0);
   const [paymentInfo, setPaymentInfo] = useState({
-    bankName: "", accountName: "", accountNumber: "", qrImage: "",
+    bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoUrl: "",
     autoTrackingAvailable: false, qrGenerationAvailable: false,
   });
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
@@ -372,9 +372,18 @@ export default function LiffPaymentPage() {
                   <img src={paymentInfo.qrImage} alt="QR รับเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
                 )}
                 {paymentInfo.accountNumber && (
-                  <div className="mt-3 text-start small">
-                    {paymentInfo.bankName && <div className="text-muted">ธนาคาร: {paymentInfo.bankName}</div>}
-                    {paymentInfo.accountName && <div className="text-muted">ชื่อบัญชี: {paymentInfo.accountName}</div>}
+                  <div className="mt-3 text-start">
+                    {(paymentInfo.bankName || paymentInfo.bankLogoUrl) && (
+                      <div className="d-flex align-items-center gap-2 mb-1">
+                        {paymentInfo.bankLogoUrl && (
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <img src={paymentInfo.bankLogoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                          </div>
+                        )}
+                        {paymentInfo.bankName && <span className="fw-semibold fs-6">{paymentInfo.bankName}</span>}
+                      </div>
+                    )}
+                    {paymentInfo.accountName && <div className="fw-semibold mb-1">{paymentInfo.accountName}</div>}
                     <div className="input-group mt-1">
                       <input type="text" className="form-control font-monospace" readOnly value={paymentInfo.accountNumber} />
                       <button className="btn btn-outline-secondary" type="button" onClick={copyAccountNumber} title="คัดลอกเลขบัญชี">
@@ -438,9 +447,18 @@ export default function LiffPaymentPage() {
                     {qrImage ? (
                       <img src={qrImage} alt="QR ชำระเงิน" style={{ width: "100%", maxWidth: 260, borderRadius: 8, border: "1px solid var(--color-light)" }} />
                     ) : intentAccountInfo && (
-                      <div className="text-start small">
-                        {intentAccountInfo.bankName && <div className="text-muted">ธนาคาร: {intentAccountInfo.bankName}</div>}
-                        {intentAccountInfo.accountName && <div className="text-muted">ชื่อบัญชี: {intentAccountInfo.accountName}</div>}
+                      <div className="text-start">
+                        {(intentAccountInfo.bankName || paymentInfo.bankLogoUrl) && (
+                          <div className="d-flex align-items-center gap-2 mb-1">
+                            {paymentInfo.bankLogoUrl && (
+                              <div style={{ width: 32, height: 32, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <img src={paymentInfo.bankLogoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                              </div>
+                            )}
+                            {intentAccountInfo.bankName && <span className="fw-semibold fs-6">{intentAccountInfo.bankName}</span>}
+                          </div>
+                        )}
+                        {intentAccountInfo.accountName && <div className="fw-semibold mb-1">{intentAccountInfo.accountName}</div>}
                         <div className="input-group mt-1">
                           <input type="text" className="form-control font-monospace" readOnly value={intentAccountInfo.accountNumber} />
                           <button className="btn btn-outline-secondary" type="button" onClick={copyIntentAccountNumber} title="คัดลอกเลขบัญชี">

@@ -261,7 +261,7 @@ export const liffApi = {
         linked: true; tenantName: string; roomNumber: string;
         outstanding: { items: { billId: string; roomId: string; monthYear: string; roomNumber: string; total: number; paidAmount: number; amount: number }[]; total: number };
         paymentInfo: {
-          bankName: string; accountName: string; accountNumber: string; qrImage: string;
+          bankName: string; accountName: string; accountNumber: string; qrImage: string; bankLogoUrl: string;
           autoTrackingAvailable: boolean; qrGenerationAvailable: boolean;
         };
       }
