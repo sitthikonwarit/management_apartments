@@ -184,7 +184,6 @@ export async function findTenantsByPhone(phone: string) {
 
 const CONFIG_ID = "default";
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
-const LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply";
 const LINE_PROFILE_URL = "https://api.line.me/v2/bot/profile";
 const LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message";
 
@@ -510,21 +509,6 @@ export async function pushLineMessage(token: string, to: string, messages: any[]
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ to, messages }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`LINE API Error (${res.status}): ${text}`);
-  }
-}
-
-// ตอบกลับด้วย reply token ของ event ที่เพิ่งเข้ามา (ไม่กิน push message quota เหมือน pushLineMessage) — ใช้ได้
-// แค่ภายใน ~1 นาทีหลังข้อความเข้ามาเท่านั้น (ข้อจำกัดของ LINE) เหมาะกับบอทตอบอัตโนมัติทันทีแบบนี้เท่านั้น
-// ต่างจาก sendTextMessage/pushLineMessage ที่ใช้ตอนพนักงานพิมพ์ตอบเองซึ่งอาจช้ากว่า 1 นาที (ดู routes/chat.ts)
-async function replyLineMessage(token: string, replyToken: string, messages: any[]) {
-  const res = await fetch(LINE_REPLY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ replyToken, messages }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -913,41 +897,20 @@ function currentMonthYearBangkok(): string {
   return `${m}/${y}`;
 }
 
-// ปุ่ม "บิลเดือนนี้" บนเมนู Member (message action ธรรมดา — ดู services/richMenu.ts) เรียกจาก
-// routes/lineWebhook.ts ทันทีที่มีข้อความเข้ามาตรงกับข้อความปุ่มเป๊ะๆ จากผู้เช่าที่ผูกบัญชีไว้แล้ว ตอบด้วย
-// reply token (ไม่ใช่ push) เพราะเป็นการตอบทันทีในเวลาเดียวกับที่ข้อความเข้ามา — การ์ดบิลที่ส่งใช้ตัวสร้าง
-// เดียวกับตอนพนักงานกดส่งบิลเอง (buildBillFlexMessage) จึงไม่ฝังตัวเลขตรงๆ เหมือนกัน แค่มีลิงก์ให้กดดูสด
-export async function replyThisMonthBillToTenant(
-  replyToken: string, lineUserId: string, tenant: typeof tenants.$inferSelect
-): Promise<void> {
-  try {
-    const settings = await getLineSettings();
-    if (!settings.enabled || !settings.token || !settings.liffPaymentUrl) return;
-
-    const monthYear = currentMonthYearBangkok();
-    const [billRow] = await db.select().from(bills).where(eq(bills.monthYear, monthYear));
-
-    let data: any[] = [];
-    if (billRow) { try { data = billRow.data ? JSON.parse(billRow.data) : []; } catch { data = []; } }
-    const items = data.filter((it: any) => String(it?.tenantId ?? "") === tenant.id);
-
-    if (!billRow || items.length === 0) {
-      const text = "ยังไม่มีบิลของคุณประจำเดือนนี้ในระบบ กรุณารอประกาศจากผู้ดูแลหอพัก";
-      await replyLineMessage(settings.token, replyToken, [{ type: "text", text }]);
-      await logOutboundChatMessage(lineUserId, tenant.id, "text", text, "บอทตอบอัตโนมัติ");
-      return;
-    }
-
-    const messages = items.slice(0, 5).map((item: any) => buildBillFlexMessage(item, monthYear, settings, billRow.id));
-    await replyLineMessage(settings.token, replyToken, messages);
-
-    for (const item of items.slice(0, 5)) {
-      const snapshot = buildChatBillSnapshot(item, monthYear, settings);
-      await logOutboundChatMessage(lineUserId, tenant.id, "bill", JSON.stringify(snapshot), "บอทตอบอัตโนมัติ");
-    }
-  } catch (e) {
-    console.error("[reply-this-month-bill]", e);
-  }
+// ปุ่ม "บิลเดือนนี้" บนเมนู Member — ลิงก์ตรงไปหน้า LIFF Payment แบบเดียวกับปุ่ม "ข้อมูลผู้เช่า"/"ชำระเงิน"
+// (ดู memberAreas ใน services/richMenu.ts) พร้อม query "?view=thisMonth" ให้หน้านั้นรู้ว่าต้องเปิดป็อปอัพ
+// รายละเอียดบิลเดือนปัจจุบันให้ทันที ไม่ต้องรู้ billId/roomId ล่วงหน้าตอนสร้างเมนู (เมนูเป็น URL เดียวใช้ร่วมกัน
+// ทุกคน ระบุ user เฉพาะเจาะจงไม่ได้) จึงต้องมาไล่หาว่า "เดือนนี้ของผู้เช่าคนนี้" คือบิลใบไหนตอนเปิดหน้าจริง
+// (ดู POST /liff/bill-detail/this-month ใน routes/liff.ts ที่เรียกฟังก์ชันนี้)
+export async function getThisMonthBillItemForTenant(tenantId: string): Promise<{ billId: string; roomId: string; item: any; monthYear: string } | null> {
+  const monthYear = currentMonthYearBangkok();
+  const [row] = await db.select().from(bills).where(eq(bills.monthYear, monthYear));
+  if (!row) return null;
+  let data: any[] = [];
+  try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
+  const item = data.find((it: any) => String(it?.tenantId ?? "") === tenantId);
+  if (!item) return null;
+  return { billId: row.id, roomId: String(item.roomId ?? ""), item, monthYear: row.monthYear };
 }
 
 // เรียกเป็นระยะจาก index.ts — เช็คบิลทุกใบที่ตั้ง "วันนัดส่ง" (scheduledDate) ตรงกับวันนี้ และยังไม่เคย

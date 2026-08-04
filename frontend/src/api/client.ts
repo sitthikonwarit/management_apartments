@@ -262,6 +262,8 @@ export const liffApi = {
   ),
   billDetail: (accessToken: string, billId: string, roomId: string) =>
     api.post("/liff/bill-detail", { accessToken, billId, roomId }).then((r) => r.data as { item: any; monthYear: string }),
+  billDetailThisMonth: (accessToken: string) =>
+    api.post("/liff/bill-detail/this-month", { accessToken }).then((r) => r.data as { billId: string; roomId: string; item: any; monthYear: string }),
   generateQr: (accessToken: string, billId: string, roomId: string, amount: number) =>
     api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }).then((r) => r.data as {
       intentId: string;

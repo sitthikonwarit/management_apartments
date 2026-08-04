@@ -7,7 +7,7 @@ import { db } from "../db";
 import { chatMessages, lineProfiles, rooms } from "../db/schema";
 import {
   getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent,
-  findTenantByLineUserId, cacheLineProfile, replyThisMonthBillToTenant,
+  findTenantByLineUserId, cacheLineProfile,
 } from "../services/line";
 import { tryAutoConfirmSlipPayment } from "../services/payments";
 import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
@@ -139,13 +139,6 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
         // จะได้ createdAt เร็วกว่ารูปสลิปเอง ทำให้เรียงลำดับผิด (ใบเสร็จโผล่ขึ้นก่อนสลิปที่มันอ้างอิงถึง)
         if (msg.type === "image" && imageUrl) {
           await tryAutoConfirmSlipPayment(lineUserId, imageUrl);
-        }
-
-        // ปุ่ม "บิลเดือนนี้" บนเมนู Member เป็น message action ธรรมดา (ส่งข้อความนี้เข้ามาเป๊ะๆ ไม่ใช่ postback
-        // ดู services/richMenu.ts) เช็คเฉพาะผู้เช่า/ผู้ร่วมพักที่ผูกบัญชีไว้แล้วเท่านั้น (tenant ไม่ null) ตอบด้วย
-        // reply token ของ event นี้ทันที (ใช้ได้แค่ตอนนี้ ~1 นาที ต้องเรียกจากตรงนี้เดี๋ยวนั้นเท่านั้น)
-        if (msg.type === "text" && tenant && text.trim() === "บิลเดือนนี้" && event.replyToken) {
-          await replyThisMonthBillToTenant(String(event.replyToken), lineUserId, tenant);
         }
       }
 

@@ -55,6 +55,7 @@ export default function LiffPaymentPage() {
   });
   const [accessToken, setAccessToken] = useState("");
   const [copied, setCopied] = useState(false);
+  const [thisMonthNotice, setThisMonthNotice] = useState("");
 
   // ป็อปอัพ "ดูรายละเอียดบิล" — เรนเดอร์ด้วย BillLinePreview หน้าตาแบบเดียวกับ "บิลอิเล็กทรอนิกส์ (LINE)"
   // ที่พนักงานเห็นในหน้า Bills
@@ -120,6 +121,7 @@ export default function LiffPaymentPage() {
           const params = new URLSearchParams(window.location.search);
           const linkedBillId = params.get("billId");
           const linkedRoomId = params.get("roomId");
+          const wantsThisMonth = params.get("view") === "thisMonth";
           if (linkedBillId && linkedRoomId) {
             window.history.replaceState(null, "", window.location.pathname);
             // เรียก billDetail ตรงๆ ด้วย token ในสโคปนี้ (ไม่เรียกผ่าน openDetail เพราะฟังก์ชันนั้นอ่าน
@@ -132,6 +134,21 @@ export default function LiffPaymentPage() {
               .then((r) => { if (!cancelled) setDetailBill(r); })
               .catch(() => { if (!cancelled) setDetailBill(null); })
               .finally(() => { if (!cancelled) setLoadingDetail(false); });
+          } else if (wantsThisMonth) {
+            // ปุ่ม "บิลเดือนนี้" บนเมนู Member (ดู memberAreas ใน backend/src/services/richMenu.ts) — ไม่รู้
+            // billId/roomId ล่วงหน้า (เมนูเป็น URL เดียวใช้ร่วมกันทุกคน) ต้องยิงถามฝั่ง backend เองว่า "เดือนนี้"
+            // ของผู้เช่าคนนี้คือบิลใบไหน ได้ item/monthYear มาพร้อมกันในคำตอบเดียวเลย ไม่ต้องเรียก billDetail ซ้ำ
+            window.history.replaceState(null, "", window.location.pathname);
+            liffApi.billDetailThisMonth(token)
+              .then((r) => {
+                if (cancelled) return;
+                setDetailItem({ billId: r.billId, roomId: r.roomId, monthYear: r.monthYear, roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
+                setDetailBill({ item: r.item, monthYear: r.monthYear });
+              })
+              .catch((e: any) => {
+                if (cancelled) return;
+                setThisMonthNotice(e?.response?.data?.error ?? "ยังไม่มีบิลของคุณประจำเดือนนี้ในระบบ");
+              });
           }
         } else {
           setStatus("unlinked");
@@ -283,6 +300,13 @@ export default function LiffPaymentPage() {
             : <div className="login-icon"><i className="fas fa-wallet" /></div>}
           <h5 className="mt-3 mb-1" style={{ fontWeight: 700 }}>{tenantName}{roomNumber && ` · ห้อง ${roomNumber}`}</h5>
         </div>
+
+        {thisMonthNotice && (
+          <div className="alert alert-light border small d-flex justify-content-between align-items-center mb-3">
+            <span><i className="fas fa-circle-info me-1" />{thisMonthNotice}</span>
+            <button type="button" className="btn-close" style={{ fontSize: 11 }} onClick={() => setThisMonthNotice("")} />
+          </div>
+        )}
 
         {fullySettled ? (
           <div className="alert alert-success text-center py-3 mb-0">

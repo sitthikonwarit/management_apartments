@@ -8,7 +8,7 @@ import { db } from "../db";
 import { appConfig, rooms, tenants, chatMessages, lineProfiles, paymentIntents, vehicles, vehicleTypes } from "../db/schema";
 import {
   getLineSettings, verifyLiffAccessToken, findTenantByLineUserId, findTenantsByPhone,
-  getOutstandingBillsForTenant, getBillItemForTenant,
+  getOutstandingBillsForTenant, getBillItemForTenant, getThisMonthBillItemForTenant,
   getAllBillsForTenant, getPaymentHistoryForTenant, uploadChatAttachment,
 } from "../services/line";
 import { linkRichMenuToUser } from "../services/richMenu";
@@ -217,6 +217,24 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
 
     return { item: found.item, monthYear: found.monthYear };
+  })
+  // ปุ่ม "บิลเดือนนี้" บนเมนู Member (ลิงก์ "?view=thisMonth" ต่อท้าย LIFF Payment URL — ดู memberAreas ใน
+  // services/richMenu.ts) ต่างจาก /bill-detail ตรงที่ไม่รู้ billId/roomId ล่วงหน้า (เมนูเป็น URL เดียวใช้ร่วมกัน
+  // ทุกคน) ต้องไล่หาเองว่า "เดือนปัจจุบันตามเวลาไทย" ของผู้เช่าคนนี้คือบิลใบไหน (ดู getThisMonthBillItemForTenant)
+  .post("/bill-detail/this-month", async ({ body, set }) => {
+    const { accessToken } = body as { accessToken?: string };
+    if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
+
+    const tenant = await findTenantByLineUserId(profile.userId);
+    if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
+
+    const found = await getThisMonthBillItemForTenant(tenant.id);
+    if (!found) { set.status = 404; return { error: "ยังไม่มีบิลของคุณประจำเดือนนี้ในระบบ กรุณารอประกาศจากผู้ดูแลหอพัก" }; }
+
+    return { billId: found.billId, roomId: found.roomId, item: found.item, monthYear: found.monthYear };
   })
   // เลือกจำนวนเงินที่จะจ่ายรอบนี้ (ไม่ต้องเต็มยอดบิล จ่ายเป็นงวดได้) แล้วบันทึก "รายการรอชำระ" ไว้จับคู่กับ
   // สลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts) — สร้าง QR PromptPay ระบุยอดจริงให้ด้วยถ้ามี

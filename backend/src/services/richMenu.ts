@@ -44,9 +44,15 @@ export interface MemberMenuUrls {
 }
 
 function memberAreas(urls: MemberMenuUrls): RichMenuArea[] {
+  // "?view=thisMonth" บอกหน้า LIFF Payment ให้เปิดป็อปอัพรายละเอียดบิลเดือนปัจจุบันให้ทันทีตอนโหลดเสร็จ (ดู
+  // useEffect ใน LiffPaymentPage.tsx + POST /liff/bill-detail/this-month ใน routes/liff.ts) — ต้องต่อท้าย
+  // แบบนี้เพราะเมนูเป็น URL เดียวใช้ร่วมกันทุกคน ฝัง billId/roomId ของแต่ละคนไว้ล่วงหน้าตอนสร้างเมนูไม่ได้
+  const thisMonthUrl = urls.liffPaymentUrl
+    ? `${urls.liffPaymentUrl}${urls.liffPaymentUrl.includes("?") ? "&" : "?"}view=thisMonth`
+    : "";
   return [
     { bounds: { x: 0, y: 0, width: W, height: H }, action: uriOrMessage(urls.liffProfileUrl, "ข้อมูลผู้เช่า") },
-    { bounds: { x: W, y: 0, width: W, height: H }, action: { type: "message", text: "บิลเดือนนี้" } },
+    { bounds: { x: W, y: 0, width: W, height: H }, action: uriOrMessage(thisMonthUrl, "บิลเดือนนี้") },
     { bounds: { x: W * 2, y: 0, width: W, height: H }, action: { type: "uri", uri: urls.liffPaymentUrl } },
     { bounds: { x: 0, y: H, width: W, height: H }, action: uriOrMessage(urls.liffRepairUrl, "แจ้งซ่อม") },
     { bounds: { x: W, y: H, width: W, height: H }, action: uriOrMessage(urls.contactUrl, "ติดต่อ") },
