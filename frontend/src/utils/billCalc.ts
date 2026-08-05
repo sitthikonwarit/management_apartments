@@ -530,7 +530,12 @@ export function normalizeBillItem(raw: any): BillItem {
     waterDefaultFormula: raw?.waterDefaultFormula !== undefined ? String(raw.waterDefaultFormula) : undefined,
     electricDefaultFormula: raw?.electricDefaultFormula !== undefined ? String(raw.electricDefaultFormula) : undefined,
     overdueConfig: raw?.overdueConfig ? { ...raw.overdueConfig } : undefined,
-    serviceFeeConfig: raw?.serviceFeeConfig ? { ...raw.serviceFeeConfig } : undefined,
+    // บิลเก่าก่อนมีระบบ "ค่าบริการต่อหน่วย" (ไม่เคยมีฟิลด์นี้เก็บไว้เลย) ต้องล็อกเป็น "ปิดใช้งาน" ถาวรตรงนี้
+    // ห้ามปล่อยเป็น undefined เหมือนสูตร/ค่าปรับด้านบน เพราะ recalcItem จะ backfill ด้วยค่าปัจจุบันจาก Settings
+    // ทันทีที่เปิดบิลเก่ามาแก้/รีเฟรช ทำให้บิลเก่าโดนบวกค่าบริการย้อนหลังทั้งที่ตอนออกบิลจริงยังไม่มีระบบนี้
+    serviceFeeConfig: raw?.serviceFeeConfig
+      ? { ...raw.serviceFeeConfig }
+      : { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },
     sendLogs: Array.isArray(raw?.sendLogs) ? raw.sendLogs : [],
   };
 }
