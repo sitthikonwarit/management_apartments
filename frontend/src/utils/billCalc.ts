@@ -258,28 +258,51 @@ export function calcItemTotal(item: BillItem): number {
 // ── บรรทัดค่าน้ำ/ค่าไฟสำหรับแสดงในรายละเอียดบิล ───────────────────────────────
 // priceWater/priceElectric รวมค่าบริการต่อหน่วยไว้แล้วเสมอ (ไม่กระทบยอดรวม) ฟังก์ชันนี้แค่จัดรูปแบบว่าจะโชว์
 // เป็นบรรทัดเดียว (รวมยอด) หรือแยกเป็นบรรทัดค่าบริการต่างหาก ตาม serviceFeeConfig.displayMode ที่ล็อกไว้กับบิล
+// กรณี "รวม" บรรทัดเดียว: rate ที่คืนเป็นอัตรารวม (ค่าน้ำ/ไฟฐาน + ค่าบริการ) ให้ตรงกับราคาที่แสดงจริง พร้อม note
+// อธิบายว่ารวมมาจากอะไรบ้าง (เช่น "ค่าไฟ 4.00 + ค่าบริการ 3.00 บาท/หน่วย") ให้ผู้เช่าเห็นที่มาของยอดชัดเจน
 export interface WaterElectricRow {
   kind: "electric" | "electricFee" | "water" | "waterFee";
   label: string;
   unit: number;
   rate: number;
   price: number;
+  note?: string;
 }
 
 export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
   const svc = item.serviceFeeConfig;
-  const separate = !!svc?.enabled && svc.displayMode === "separate";
+  const feeEnabled = !!svc?.enabled;
+  const separate = feeEnabled && svc!.displayMode === "separate";
+
+  function money2(n: number) { return (Number(n) || 0).toFixed(2); }
+
   const rows: WaterElectricRow[] = [];
 
   if (item.electricActive) {
-    const fee = separate ? (Number(item.electricServiceFee) || 0) : 0;
-    rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee });
-    if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee });
+    const fee = feeEnabled ? (Number(item.electricServiceFee) || 0) : 0;
+    if (separate) {
+      rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee });
+      if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee });
+    } else {
+      rows.push({
+        kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit,
+        rate: item.electricRate + (fee > 0 ? svc!.electricRate : 0), price: item.priceElectric,
+        note: fee > 0 ? `ค่าไฟ ${money2(item.electricRate)} + ค่าบริการ ${money2(svc!.electricRate)} บาท/หน่วย` : undefined,
+      });
+    }
   }
   if (item.waterActive) {
-    const fee = separate ? (Number(item.waterServiceFee) || 0) : 0;
-    rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee });
-    if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee });
+    const fee = feeEnabled ? (Number(item.waterServiceFee) || 0) : 0;
+    if (separate) {
+      rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee });
+      if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee });
+    } else {
+      rows.push({
+        kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit,
+        rate: item.waterRate + (fee > 0 ? svc!.waterRate : 0), price: item.priceWater,
+        note: fee > 0 ? `ค่าน้ำ ${money2(item.waterRate)} + ค่าบริการ ${money2(svc!.waterRate)} บาท/หน่วย` : undefined,
+      });
+    }
   }
   return rows;
 }

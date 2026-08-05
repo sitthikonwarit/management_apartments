@@ -35,9 +35,10 @@ export function BillLinePreview({ item, monthYear, config }: { item: BillItem; m
       icon: isFee ? "fa-file-invoice-dollar" : isElectric ? "fa-bolt" : "fa-tint",
       iconBg: isFee ? "#6c757d" : isElectric ? "#fd7e14" : "#0dcaf0",
       name: `${r.label} (${r.unit} หน่วย)`,
-      sub: isFee
+      sub: (isFee
         ? `หน่วยละ ${money(r.rate)} บาท`
-        : `เดือนก่อน ${isElectric ? item.meterElectric.prev : item.meterWater.prev} → เดือนนี้ ${isElectric ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`,
+        : `เดือนก่อน ${isElectric ? item.meterElectric.prev : item.meterWater.prev} → เดือนนี้ ${isElectric ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`)
+        + (r.note ? ` (${r.note})` : ""),
       price: r.price,
     });
   });

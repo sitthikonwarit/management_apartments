@@ -995,9 +995,10 @@ function BillSlip({ item, monthYear, config, payerName, payerIndex, payerCount, 
     .filter((r) => (r.kind === "water" || r.kind === "waterFee" ? showWater : showElectric))
     .map((r) => ({
       name: `${r.label} (${r.unit} หน่วย)`, price: r.price,
-      sub: r.kind === "electricFee" || r.kind === "waterFee"
+      sub: (r.kind === "electricFee" || r.kind === "waterFee"
         ? `หน่วยละ ${money(r.rate)} บาท`
-        : `${r.kind === "electric" ? item.meterElectric.prev : item.meterWater.prev} → ${r.kind === "electric" ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`,
+        : `${r.kind === "electric" ? item.meterElectric.prev : item.meterWater.prev} → ${r.kind === "electric" ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`)
+        + (r.note ? ` (${r.note})` : ""),
     }));
   const rows: { name: string; price: number; sub?: string }[] = [
     ...(showRoom ? [{ name: "ค่าห้อง", price: item.priceRoom }] : []),
