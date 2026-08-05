@@ -1,5 +1,5 @@
 import type { BillItem } from "../utils/billCalc";
-import { monthYearLabel } from "../utils/billCalc";
+import { monthYearLabel, buildWaterElectricRows } from "../utils/billCalc";
 
 // รับแค่ส่วนของ AppConfig ที่ใช้จริง (ไม่ใช่ทั้งก้อน) เพื่อให้เรียกใช้จากหน้าที่ไม่มี useAppConfig() ได้ด้วย
 // (เช่นหน้า LIFF ฝั่งผู้เช่า ที่ดึงค่าจาก endpoint สาธารณะ /liff/config แทน ไม่ใช่ context ของพนักงาน)
@@ -26,20 +26,21 @@ export function BillLinePreview({ item, monthYear, config }: { item: BillItem; m
   const rows: { icon: string; iconBg: string; name: string; sub?: string; price: number }[] = [];
   rows.push({ icon: "fa-door-open", iconBg: "var(--color-primary)", name: "ค่าห้อง/ค่าเช่า", price: item.priceRoom });
   // โชว์บรรทัดค่าไฟ/น้ำเมื่อห้องเปิดใช้มิเตอร์นั้นอยู่เสมอ แม้ยังไม่ได้จดมิเตอร์เดือนนี้หรือหน่วยเท่าเดิม (0 บาท)
-  if (item.electricActive) {
+  // ค่าบริการต่อหน่วย (ถ้าเปิดใช้งาน) จะรวมเป็นบรรทัดเดียวกันหรือแยกบรรทัดต่างหาก ตามที่ตั้งค่าไว้ในหน้า Settings
+  // (ดู buildWaterElectricRows ใน utils/billCalc.ts)
+  buildWaterElectricRows(item).forEach((r) => {
+    const isFee = r.kind === "electricFee" || r.kind === "waterFee";
+    const isElectric = r.kind === "electric" || r.kind === "electricFee";
     rows.push({
-      icon: "fa-bolt", iconBg: "#fd7e14", name: `ค่าไฟ (${item.meterElectric.unit} หน่วย)`,
-      sub: `เดือนก่อน ${item.meterElectric.prev} → เดือนนี้ ${item.meterElectric.curr} · หน่วยละ ${money(item.electricRate)} บาท`,
-      price: item.priceElectric,
+      icon: isFee ? "fa-file-invoice-dollar" : isElectric ? "fa-bolt" : "fa-tint",
+      iconBg: isFee ? "#6c757d" : isElectric ? "#fd7e14" : "#0dcaf0",
+      name: `${r.label} (${r.unit} หน่วย)`,
+      sub: isFee
+        ? `หน่วยละ ${money(r.rate)} บาท`
+        : `เดือนก่อน ${isElectric ? item.meterElectric.prev : item.meterWater.prev} → เดือนนี้ ${isElectric ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`,
+      price: r.price,
     });
-  }
-  if (item.waterActive) {
-    rows.push({
-      icon: "fa-tint", iconBg: "#0dcaf0", name: `ค่าน้ำ (${item.meterWater.unit} หน่วย)`,
-      sub: `เดือนก่อน ${item.meterWater.prev} → เดือนนี้ ${item.meterWater.curr} · หน่วยละ ${money(item.waterRate)} บาท`,
-      price: item.priceWater,
-    });
-  }
+  });
   item.billTagItems.forEach((t) => t.price > 0 && rows.push({ icon: "fa-tag", iconBg: t.color || "#6c757d", name: t.name, price: t.price }));
   item.billTenantTagItems.forEach((t) => t.price > 0 && rows.push({ icon: "fa-tag", iconBg: t.color || "var(--color-primary)", name: t.name, price: t.price }));
   item.customItems.forEach((c) => c.price > 0 && rows.push({ icon: "fa-plus", iconBg: "var(--color-success)", name: c.name, price: c.price }));

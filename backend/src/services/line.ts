@@ -472,19 +472,32 @@ function buildBillFlexMessage(item: any, monthYear: string, settings: LineAppear
 export function buildChatBillSnapshot(item: any, monthYear: string, settings: LineAppearanceSettings) {
   const rows: { icon: string; name: string; sub?: string; price: number }[] = [];
   rows.push({ icon: ICONS.BED, name: "ค่าห้อง/ค่าเช่า", price: Number(item.priceRoom) || 0 });
+  // ค่าบริการต่อหน่วย (ถ้าเปิดใช้งาน) รวมอยู่ใน priceElectric/priceWater แล้วเสมอ (ไม่กระทบยอดรวม) — ตัด
+  // ออกมาแสดงเป็นบรรทัดแยกต่างหากก็ต่อเมื่อตอนสร้าง/แก้บิลตั้ง serviceFeeConfig.displayMode ไว้เป็น "separate"
+  // (ล็อกค่าไว้กับตัวบิลตั้งแต่ตอนคำนวณฝั่ง frontend แล้ว ดู recalcItem ใน frontend/src/utils/billCalc.ts)
+  const svc = item.serviceFeeConfig;
+  const separateFee = !!svc?.enabled && svc?.displayMode === "separate";
   if (item.electricActive) {
+    const fee = separateFee ? (Number(item.electricServiceFee) || 0) : 0;
     rows.push({
       icon: ICONS.ELEC, name: `ค่าไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`,
       sub: `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · หน่วยละ ${fmtMoney(item.electricRate)} บาท`,
-      price: Number(item.priceElectric) || 0,
+      price: (Number(item.priceElectric) || 0) - fee,
     });
+    if (fee > 0) {
+      rows.push({ icon: ICONS.ELEC, name: `ค่าบริการไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`, sub: `หน่วยละ ${fmtMoney(svc!.electricRate)} บาท`, price: fee });
+    }
   }
   if (item.waterActive) {
+    const fee = separateFee ? (Number(item.waterServiceFee) || 0) : 0;
     rows.push({
       icon: ICONS.WATER, name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
       sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · หน่วยละ ${fmtMoney(item.waterRate)} บาท`,
-      price: Number(item.priceWater) || 0,
+      price: (Number(item.priceWater) || 0) - fee,
     });
+    if (fee > 0) {
+      rows.push({ icon: ICONS.WATER, name: `ค่าบริการน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`, sub: `หน่วยละ ${fmtMoney(svc!.waterRate)} บาท`, price: fee });
+    }
   }
   (item.billTagItems ?? []).forEach((t: any) => {
     if (Number(t.price) > 0) rows.push({ icon: ICONS.TAG, name: t.name, price: Number(t.price) });

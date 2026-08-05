@@ -14,6 +14,7 @@ import {
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
+  buildWaterElectricRows,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -988,18 +989,21 @@ function BillSlip({ item, monthYear, config, payerName, payerIndex, payerCount, 
   const showWater = !lineKeys || lineKeys.has("water");
   const showElectric = !lineKeys || lineKeys.has("electric");
   const showOutstanding = !lineKeys || lineKeys.has("outstanding");
+  // ค่าบริการต่อหน่วย (ถ้าเปิดใช้งาน) รวมเป็นบรรทัดเดียวกันหรือแยกบรรทัดต่างหาก ตามที่ตั้งค่าไว้ในหน้า Settings
+  // (ดู buildWaterElectricRows ใน utils/billCalc.ts) — ยังคงกรองด้วย lineKeys (แสดง/ซ่อนน้ำ-ไฟทั้งกลุ่ม) เหมือนเดิม
+  const waterElectricRows = buildWaterElectricRows(item)
+    .filter((r) => (r.kind === "water" || r.kind === "waterFee" ? showWater : showElectric))
+    .map((r) => ({
+      name: `${r.label} (${r.unit} หน่วย)`, price: r.price,
+      sub: r.kind === "electricFee" || r.kind === "waterFee"
+        ? `หน่วยละ ${money(r.rate)} บาท`
+        : `${r.kind === "electric" ? item.meterElectric.prev : item.meterWater.prev} → ${r.kind === "electric" ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`,
+    }));
   const rows: { name: string; price: number; sub?: string }[] = [
     ...(showRoom ? [{ name: "ค่าห้อง", price: item.priceRoom }] : []),
     // โชว์บรรทัดค่าน้ำ/ไฟเมื่อห้องเปิดใช้มิเตอร์นั้นอยู่ (waterActive/electricActive) เสมอ แม้ยังไม่ได้จด
     // มิเตอร์เดือนนี้หรือหน่วยเท่าเดิม (ราคาเป็น 0) — ไม่ใช่ซ่อนแค่เพราะยอดคำนวณได้ 0 บาท
-    ...(showWater && item.waterActive ? [{
-      name: `ค่าน้ำ (${item.meterWater.unit} หน่วย)`, price: item.priceWater,
-      sub: `${item.meterWater.prev} → ${item.meterWater.curr} · หน่วยละ ${money(item.waterRate)} บาท`,
-    }] : []),
-    ...(showElectric && item.electricActive ? [{
-      name: `ค่าไฟ (${item.meterElectric.unit} หน่วย)`, price: item.priceElectric,
-      sub: `${item.meterElectric.prev} → ${item.meterElectric.curr} · หน่วยละ ${money(item.electricRate)} บาท`,
-    }] : []),
+    ...waterElectricRows,
     ...item.billTagItems.map((t) => ({ name: t.name, price: t.price })),
     ...item.billTenantTagItems.map((t) => ({ name: t.name, price: t.price })),
     ...item.billVehicleItems.map((v) => ({ name: v.name, price: v.price })),

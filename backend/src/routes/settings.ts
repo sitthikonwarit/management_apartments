@@ -26,6 +26,12 @@ function parseConfig(r: typeof appConfig.$inferSelect) {
   return {
     electricRate: Number(r.electricRate) || 0,
     waterRate: Number(r.waterRate) || 0,
+    serviceFee: {
+      enabled: r.serviceFeeEnabled === "true",
+      waterRate: Number(r.serviceFeeWaterRate) || 0,
+      electricRate: Number(r.serviceFeeElectricRate) || 0,
+      displayMode: r.serviceFeeDisplayMode === "separate" ? "separate" : "combined",
+    },
     overdue: {
       enabled: r.overdueEnabled === "true",
       day: Number(r.overdueDay) || 0,
@@ -156,6 +162,10 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
     await db.update(appConfig).set({
       electricRate: String(Number(b.electricRate) || 0),
       waterRate: String(Number(b.waterRate) || 0),
+      serviceFeeEnabled: b.serviceFee?.enabled ? "true" : "false",
+      serviceFeeWaterRate: String(Number(b.serviceFee?.waterRate) || 0),
+      serviceFeeElectricRate: String(Number(b.serviceFee?.electricRate) || 0),
+      serviceFeeDisplayMode: b.serviceFee?.displayMode === "separate" ? "separate" : "combined",
       overdueEnabled: b.overdue?.enabled ? "true" : "false",
       overdueDay: String(Number(b.overdue?.day) || 0),
       overdueFineType: String(b.overdue?.type ?? "fixed"),

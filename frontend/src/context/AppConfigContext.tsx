@@ -14,6 +14,9 @@ export interface AppIdentity {
 export interface AppConfig {
   electricRate: number;
   waterRate: number;
+  // ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เช่น ค่าไฟหน่วยละ 4 บาท + ค่าบริการหน่วยละ 3 บาท
+  // displayMode เลือกได้ว่าจะรวมยอดค่าบริการเข้าบรรทัดค่าน้ำ/ค่าไฟเดียวกัน หรือแยกเป็นบรรทัดต่างหากในรายละเอียดบิล
+  serviceFee: { enabled: boolean; waterRate: number; electricRate: number; displayMode: "combined" | "separate" };
   overdue: { enabled: boolean; day: number; type: "fixed" | "daily"; amount: number };
   appIdentity: AppIdentity;
   features: { liveMeterEnabled: boolean; splitRentByResidents: boolean };
@@ -66,6 +69,7 @@ export function resolveNameCharColor(color: string | undefined): string | undefi
 export const DEFAULT_APP_CONFIG: AppConfig = {
   electricRate: 0,
   waterRate: 0,
+  serviceFee: { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },
   overdue: { enabled: false, day: 5, type: "fixed", amount: 0 },
   appIdentity: {
     logoUrl: "https://placehold.co/40x40/6C9BCF/FFFFFF?text=L",
@@ -117,6 +121,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
         ...DEFAULT_APP_CONFIG,
         ...data,
         appIdentity: { ...DEFAULT_APP_CONFIG.appIdentity, ...data.appIdentity },
+        serviceFee: { ...DEFAULT_APP_CONFIG.serviceFee, ...data.serviceFee },
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...data.overdue },
         features: { ...DEFAULT_APP_CONFIG.features, ...data.features },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...data.lineMessaging },

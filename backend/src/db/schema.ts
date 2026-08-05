@@ -273,6 +273,13 @@ export const appConfig = pgTable("app_config", {
   id: text("id").primaryKey(),
   electricRate: str("electric_rate"),
   waterRate: str("water_rate"),
+  // ── ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เปิด/ปิดได้ที่หน้า Settings เช่น ค่าไฟหน่วยละ 4 บาท
+  // + ค่าบริการหน่วยละ 3 บาท เลือกได้ว่าจะรวมยอดเป็นบรรทัดเดียวกับค่าน้ำ/ค่าไฟ หรือแยกบรรทัดต่างหากในรายละเอียดบิล
+  // (ดู resolveDefaultFormulas/recalcItem ใน frontend/src/utils/billCalc.ts)
+  serviceFeeEnabled: text("service_fee_enabled").notNull().default("false"),
+  serviceFeeWaterRate: str("service_fee_water_rate"),
+  serviceFeeElectricRate: str("service_fee_electric_rate"),
+  serviceFeeDisplayMode: text("service_fee_display_mode").notNull().default("combined"),
   overdueEnabled: text("overdue_enabled").notNull().default("false"),
   overdueDay: str("overdue_day"),
   overdueFineType: str("overdue_fine_type"),

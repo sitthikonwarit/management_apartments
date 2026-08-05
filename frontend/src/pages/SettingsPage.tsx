@@ -228,6 +228,10 @@ export default function SettingsPage() {
   // ── ร่างฟอร์ม (sync จาก context ตอนโหลดเสร็จ) ──
   const [electricRate, setElectricRate] = useState(0);
   const [waterRate, setWaterRate] = useState(0);
+  const [serviceFeeEnabled, setServiceFeeEnabled] = useState(false);
+  const [serviceFeeWaterRate, setServiceFeeWaterRate] = useState(0);
+  const [serviceFeeElectricRate, setServiceFeeElectricRate] = useState(0);
+  const [serviceFeeDisplayMode, setServiceFeeDisplayMode] = useState<"combined" | "separate">("combined");
   const [overdueEnabled, setOverdueEnabled] = useState(false);
   const [dueEom, setDueEom] = useState(false);
   const [dueDay, setDueDay] = useState(5);
@@ -338,6 +342,10 @@ export default function SettingsPage() {
   useEffect(() => {
     setElectricRate(config.electricRate);
     setWaterRate(config.waterRate);
+    setServiceFeeEnabled(config.serviceFee.enabled);
+    setServiceFeeWaterRate(config.serviceFee.waterRate);
+    setServiceFeeElectricRate(config.serviceFee.electricRate);
+    setServiceFeeDisplayMode(config.serviceFee.displayMode);
     setOverdueEnabled(config.overdue.enabled);
     setDueEom(config.overdue.day === 0);
     setDueDay(config.overdue.day || 5);
@@ -548,6 +556,12 @@ export default function SettingsPage() {
       const payload: AppConfig = {
         electricRate: Number(electricRate) || 0,
         waterRate: Number(waterRate) || 0,
+        serviceFee: {
+          enabled: serviceFeeEnabled,
+          waterRate: Number(serviceFeeWaterRate) || 0,
+          electricRate: Number(serviceFeeElectricRate) || 0,
+          displayMode: serviceFeeDisplayMode,
+        },
         overdue: {
           enabled: overdueEnabled,
           day: dueEom ? 0 : Math.min(31, Math.max(1, Number(dueDay) || 1)),
@@ -584,6 +598,7 @@ export default function SettingsPage() {
       setConfig({
         ...DEFAULT_APP_CONFIG, ...updated,
         appIdentity: { ...DEFAULT_APP_CONFIG.appIdentity, ...updated.appIdentity },
+        serviceFee: { ...DEFAULT_APP_CONFIG.serviceFee, ...updated.serviceFee },
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...updated.overdue },
         features: { ...DEFAULT_APP_CONFIG.features, ...updated.features },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...updated.lineMessaging },
@@ -779,6 +794,58 @@ export default function SettingsPage() {
                     </Searchable>
                   </div>
                 </div>
+
+                <Searchable query={q} keywords="ค่าบริการต่อหน่วย service fee ค่าบริการน้ำ ค่าบริการไฟ">
+                  <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                    <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid #b8860b", paddingBottom: 8 }}>
+                      <h6 className="mb-0" style={{ fontWeight: 700, color: "#b8860b", border: "none", padding: 0, margin: 0 }}><i className="fas fa-file-invoice-dollar me-2" />ค่าบริการต่อหน่วย</h6>
+                      <div className="form-check form-switch mb-0">
+                        <input className="form-check-input" type="checkbox" id="serviceFeeEnable"
+                          checked={serviceFeeEnabled} onChange={(e) => setServiceFeeEnabled(e.target.checked)} />
+                        <label className="form-check-label fw-bold" htmlFor="serviceFeeEnable">เปิดใช้งาน</label>
+                      </div>
+                    </div>
+                    <div className="row g-4" style={{ opacity: serviceFeeEnabled ? 1 : 0.5, pointerEvents: serviceFeeEnabled ? "auto" : "none" }}>
+                      <div className="col-md-4">
+                        <label className="form-label fw-bold"><i className="fas fa-bolt text-warning me-1" />ค่าบริการไฟ (บาท/หน่วย)</label>
+                        <div className="input-group">
+                          <input type="number" className="form-control text-end fs-5 fw-bold" placeholder="0.00"
+                            value={serviceFeeElectricRate} onChange={(e) => setServiceFeeElectricRate(Number(e.target.value))} />
+                          <span className="input-group-text">บาท</span>
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label fw-bold"><i className="fas fa-tint text-info me-1" />ค่าบริการน้ำ (บาท/หน่วย)</label>
+                        <div className="input-group">
+                          <input type="number" className="form-control text-end fs-5 fw-bold" placeholder="0.00"
+                            value={serviceFeeWaterRate} onChange={(e) => setServiceFeeWaterRate(Number(e.target.value))} />
+                          <span className="input-group-text">บาท</span>
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label fw-bold">การแสดงผลในรายละเอียดบิล</label>
+                        <CustomSelect2
+                          value={{ value: serviceFeeDisplayMode, label: serviceFeeDisplayMode === "separate" ? "แยกบรรทัดค่าบริการ" : "รวมกับค่าน้ำ/ค่าไฟ" }}
+                          options={[
+                            { value: "combined", label: "รวมกับค่าน้ำ/ค่าไฟ (บรรทัดเดียว)" },
+                            { value: "separate", label: "แยกบรรทัดค่าบริการต่างหาก" },
+                          ]}
+                          onChange={(o: any) => setServiceFeeDisplayMode(o?.value === "separate" ? "separate" : "combined")}
+                          isSearchable={false}
+                        />
+                      </div>
+                      <div className="col-12">
+                        <small className="text-muted">
+                          ตัวอย่าง: ค่าไฟหน่วยละ {(Number(electricRate) || 0).toLocaleString()} บาท + ค่าบริการหน่วยละ {(Number(serviceFeeElectricRate) || 0).toLocaleString()} บาท —{" "}
+                          {serviceFeeDisplayMode === "separate"
+                            ? "ในรายละเอียดบิลจะแยกเป็น 2 บรรทัด (ค่าไฟ และ ค่าบริการไฟ)"
+                            : "ในรายละเอียดบิลจะรวมแสดงเป็นบรรทัดเดียว (ค่าไฟ)"}
+                          {" "}ยอดรวมที่เรียกเก็บเท่ากันทั้งสองแบบ ต่างกันแค่การแสดงผล
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </Searchable>
 
                 <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                   <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid var(--color-danger)", paddingBottom: 8 }}>

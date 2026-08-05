@@ -30,6 +30,11 @@ export interface BillItem {
   meterElectric: { prev: number; curr: number; unit: number };
   priceWater: number;
   priceElectric: number;
+  // ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) ที่ถูกรวมไว้ใน priceWater/priceElectric ด้านบนแล้วเสมอ
+  // (ไม่กระทบยอดรวม) แยกเก็บไว้ต่างหากแค่ให้หน้ารายละเอียดบิลรู้ว่าต้องหักออกมาแสดงเป็นบรรทัดแยกหรือไม่ ตาม
+  // serviceFeeConfig.displayMode ด้านล่าง — ดู recalcItem
+  waterServiceFee: number;
+  electricServiceFee: number;
   priceVehicle: number;
   billVehicleItems: BillVehicleItem[];
   billTagItems: BillTagItem[];
@@ -55,6 +60,7 @@ export interface BillItem {
   waterDefaultFormula?: string;
   electricDefaultFormula?: string;
   overdueConfig?: AppConfig["overdue"];
+  serviceFeeConfig?: AppConfig["serviceFee"];
   // ประวัติการส่งบิลทาง LINE ของห้องนี้ (ใหม่สุดอยู่หน้าสุด) — backend เป็นคนเขียนให้ตอนส่งสำเร็จ/ไม่สำเร็จ
   sendLogs?: BillSendLog[];
 }
@@ -249,6 +255,35 @@ export function calcItemTotal(item: BillItem): number {
     + tagsTotal + customTotal + (item.fineAmount || 0) + (item.outstandingAmount || 0) - discountTotal;
 }
 
+// ── บรรทัดค่าน้ำ/ค่าไฟสำหรับแสดงในรายละเอียดบิล ───────────────────────────────
+// priceWater/priceElectric รวมค่าบริการต่อหน่วยไว้แล้วเสมอ (ไม่กระทบยอดรวม) ฟังก์ชันนี้แค่จัดรูปแบบว่าจะโชว์
+// เป็นบรรทัดเดียว (รวมยอด) หรือแยกเป็นบรรทัดค่าบริการต่างหาก ตาม serviceFeeConfig.displayMode ที่ล็อกไว้กับบิล
+export interface WaterElectricRow {
+  kind: "electric" | "electricFee" | "water" | "waterFee";
+  label: string;
+  unit: number;
+  rate: number;
+  price: number;
+}
+
+export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
+  const svc = item.serviceFeeConfig;
+  const separate = !!svc?.enabled && svc.displayMode === "separate";
+  const rows: WaterElectricRow[] = [];
+
+  if (item.electricActive) {
+    const fee = separate ? (Number(item.electricServiceFee) || 0) : 0;
+    rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee });
+    if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee });
+  }
+  if (item.waterActive) {
+    const fee = separate ? (Number(item.waterServiceFee) || 0) : 0;
+    rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee });
+    if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee });
+  }
+  return rows;
+}
+
 // ── Recalc หนึ่งแถว (หลังแก้มิเตอร์/สูตร/รายการ) ─────────────────────────────
 export function recalcItem(
   item: BillItem,
@@ -270,10 +305,22 @@ export function recalcItem(
   const overdueCfg = item.overdueConfig ?? resolveOverdueConfig(tenant, config);
   item.overdueConfig = overdueCfg;
 
+  // ล็อกค่าบริการต่อหน่วย (เปิด/ปิด, อัตรา, รูปแบบการแสดงผล) ไว้กับตัวบิลเหมือนสูตร/ค่าปรับด้านบน เพื่อไม่ให้
+  // การแก้ไขค่าเริ่มต้นในหน้าตั้งค่าภายหลัง ย้อนไปเปลี่ยนยอดบิลเก่าที่ปิดไปแล้ว
+  const svcCfg = item.serviceFeeConfig ?? {
+    enabled: !!config.serviceFee?.enabled,
+    waterRate: Number(config.serviceFee?.waterRate) || 0,
+    electricRate: Number(config.serviceFee?.electricRate) || 0,
+    displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined",
+  };
+  item.serviceFeeConfig = svcCfg;
+
   const wf = item.waterFormula || waterDefault;
   const ef = item.electricFormula || electricDefault;
-  item.priceWater = item.waterActive ? calculateComplexPrice(item.meterWater.unit, item.waterRate, wf) : 0;
-  item.priceElectric = item.electricActive ? calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef) : 0;
+  item.waterServiceFee = item.waterActive && svcCfg.enabled ? item.meterWater.unit * svcCfg.waterRate : 0;
+  item.electricServiceFee = item.electricActive && svcCfg.enabled ? item.meterElectric.unit * svcCfg.electricRate : 0;
+  item.priceWater = (item.waterActive ? calculateComplexPrice(item.meterWater.unit, item.waterRate, wf) : 0) + item.waterServiceFee;
+  item.priceElectric = (item.electricActive ? calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef) : 0) + item.electricServiceFee;
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);
 
   calculateOverdueFine(item, overdueCfg, monthYear);
@@ -374,6 +421,8 @@ export function generateBillForMonth(monthYear: string, ctx: GenCtx): BillItem[]
       meterElectric: { prev: elecPrev, curr: elecCurr, unit: 0 },
       priceWater: 0,
       priceElectric: 0,
+      waterServiceFee: 0,
+      electricServiceFee: 0,
       priceVehicle: 0,
       billVehicleItems,
       billTagItems,
@@ -450,6 +499,8 @@ export function normalizeBillItem(raw: any): BillItem {
     },
     priceWater: Number(raw?.priceWater) || 0,
     priceElectric: Number(raw?.priceElectric) || 0,
+    waterServiceFee: Number(raw?.waterServiceFee) || 0,
+    electricServiceFee: Number(raw?.electricServiceFee) || 0,
     priceVehicle: Number(raw?.priceVehicle) || 0,
     billVehicleItems: Array.isArray(raw?.billVehicleItems)
       ? raw.billVehicleItems.map((v: any) => ({
@@ -479,6 +530,7 @@ export function normalizeBillItem(raw: any): BillItem {
     waterDefaultFormula: raw?.waterDefaultFormula !== undefined ? String(raw.waterDefaultFormula) : undefined,
     electricDefaultFormula: raw?.electricDefaultFormula !== undefined ? String(raw.electricDefaultFormula) : undefined,
     overdueConfig: raw?.overdueConfig ? { ...raw.overdueConfig } : undefined,
+    serviceFeeConfig: raw?.serviceFeeConfig ? { ...raw.serviceFeeConfig } : undefined,
     sendLogs: Array.isArray(raw?.sendLogs) ? raw.sendLogs : [],
   };
 }
