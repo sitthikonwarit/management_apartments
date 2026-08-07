@@ -266,6 +266,9 @@ export default function SettingsPage() {
   const [uploadingRichMenu, setUploadingRichMenu] = useState({ guest: false, member: false, admin: false });
   const [creatingRichMenu, setCreatingRichMenu] = useState(false);
   const [richMenuMsg, setRichMenuMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showLiffEndpoints, setShowLiffEndpoints] = useState(false);
+  const [copiedEndpoint, setCopiedEndpoint] = useState("");
+  const [copiedLiffField, setCopiedLiffField] = useState("");
   const guestFileRef = useRef<HTMLInputElement>(null);
   const memberFileRef = useRef<HTMLInputElement>(null);
   const adminFileRef = useRef<HTMLInputElement>(null);
@@ -527,6 +530,14 @@ export default function SettingsPage() {
       img.src = e.target?.result as string;
     };
     reader.readAsDataURL(file);
+  }
+
+  function copyLiffField(field: string, label: string, value: string) {
+    if (!value.trim()) return;
+    navigator.clipboard.writeText(value.trim());
+    setCopiedLiffField(field);
+    setTimeout(() => setCopiedLiffField((cur) => (cur === field ? "" : cur)), 1500);
+    toastSuccess(`คัดลอก ${label} แล้ว`);
   }
 
   async function handleCreateRichMenus() {
@@ -1312,36 +1323,122 @@ export default function SettingsPage() {
                   ในหมวด "ฟีเจอร์เสริม &gt; ส่งบิลแจ้งเตือนทาง LINE" ก่อนถึงจะสร้างเมนูได้
                 </p>
 
+                <div className="detail-section mb-3" >
+                  <button type="button" onClick={() => setShowLiffEndpoints((v) => !v)}
+                    className="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2">
+                    <i className={`fas ${showLiffEndpoints ? "fa-chevron-up" : "fa-chevron-down"}`} />
+                    {showLiffEndpoints ? "ซ่อน Endpoint URL สำหรับสร้าง LIFF app" : "แสดง Endpoint URL สำหรับสร้าง LIFF app"}
+                  </button>
+
+                  {showLiffEndpoints && (
+                    <div className="mt-3">
+                      <div className="text-muted small mb-2">
+                        คลิกแถวเพื่อคัดลอก แล้ววางเป็น Endpoint URL ตอนสร้าง LIFF app แต่ละอันใน LINE Developers Console —
+                        เอา LIFF URL ที่ได้กลับมา (รูปแบบ <code className="small">https://liff.line.me/xxxxxxxxxx-xxxxxxxx</code>) ใส่ในช่องด้านล่างสุด
+                      </div>
+                      <div className="file-view-container">
+                        {([
+                          { label: "LIFF Login", path: "/liff/login", required: true },
+                          { label: "LIFF Payment", path: "/liff/payment", required: true },
+                          { label: "LIFF Profile (ข้อมูลผู้เช่า)", path: "/liff/profile", required: false },
+                          { label: "LIFF Repair (แจ้งซ่อม)", path: "/liff/repair", required: false },
+                          { label: "LIFF Rooms (ดูห้องว่าง)", path: "/liff/rooms", required: false },
+                          { label: "LIFF Booking (จองห้อง)", path: "/liff/booking", required: false },
+                        ]).map((l) => {
+                          const endpointUrl = `${window.location.origin}${l.path}?org=${config.orgSlug}`;
+                          const isCopied = copiedEndpoint === l.path;
+                          return (
+                            <div key={l.path} className="file-view-item" style={{ cursor: "pointer" }} onClick={() => {
+                              navigator.clipboard.writeText(endpointUrl);
+                              setCopiedEndpoint(l.path);
+                              setTimeout(() => setCopiedEndpoint((cur) => (cur === l.path ? "" : cur)), 1500);
+                              toastSuccess(`คัดลอก Endpoint URL ของ ${l.label} แล้ว`);
+                            }}>
+                              <i className="fas fa-link file-icon text-muted" style={{ fontSize: "1.1rem" }} />
+                              <div className="file-name" style={{ fontWeight: 400 }}>
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="fw-semibold">{l.label}</span>
+                                  {!l.required && <span className="badge bg-secondary" style={{ fontSize: 10, fontWeight: 400 }}>ไม่บังคับ</span>}
+                                </div>
+                                <div className="text-muted font-monospace" style={{ fontSize: "0.72rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {endpointUrl}
+                                </div>
+                              </div>
+                              <i className={`fas ${isCopied ? "fa-check text-success" : "fa-copy open-icon"}`} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="row g-3 mb-3">
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Login URL <span className="text-muted fw-normal">(ปุ่มใหญ่บนเมนู Guest)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffLoginUrl} onChange={(e) => setLiffLoginUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffLoginUrl} onChange={(e) => setLiffLoginUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffLoginUrl.trim()} onClick={() => copyLiffField("login", "LIFF Login URL", liffLoginUrl)}>
+                        <i className={`fas ${copiedLiffField === "login" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Payment URL <span className="text-muted fw-normal">(ปุ่มชำระเงินบนเมนู Member)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffPaymentUrl} onChange={(e) => setLiffPaymentUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffPaymentUrl} onChange={(e) => setLiffPaymentUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffPaymentUrl.trim()} onClick={() => copyLiffField("payment", "LIFF Payment URL", liffPaymentUrl)}>
+                        <i className={`fas ${copiedLiffField === "payment" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Profile URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffProfileUrl} onChange={(e) => setLiffProfileUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffProfileUrl} onChange={(e) => setLiffProfileUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffProfileUrl.trim()} onClick={() => copyLiffField("profile", "LIFF Profile URL", liffProfileUrl)}>
+                        <i className={`fas ${copiedLiffField === "profile" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Repair URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "แจ้งซ่อม" บนเมนู Member)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffRepairUrl} onChange={(e) => setLiffRepairUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffRepairUrl} onChange={(e) => setLiffRepairUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffRepairUrl.trim()} onClick={() => copyLiffField("repair", "LIFF Repair URL", liffRepairUrl)}>
+                        <i className={`fas ${copiedLiffField === "repair" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Rooms URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ดูห้องว่าง" บนเมนู Guest, คนละ LIFF App กับ Booking)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffRoomsUrl} onChange={(e) => setLiffRoomsUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffRoomsUrl} onChange={(e) => setLiffRoomsUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffRoomsUrl.trim()} onClick={() => copyLiffField("rooms", "LIFF Rooms URL", liffRoomsUrl)}>
+                        <i className={`fas ${copiedLiffField === "rooms" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">LIFF Booking URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "จองห้อง" บนเมนู Guest — หน้าจัดการห้องที่จองเอง/ยกเลิกเอง)</span></label>
-                    <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-                      value={liffBookingUrl} onChange={(e) => setLiffBookingUrl(e.target.value)} />
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={liffBookingUrl} onChange={(e) => setLiffBookingUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!liffBookingUrl.trim()} onClick={() => copyLiffField("booking", "LIFF Booking URL", liffBookingUrl)}>
+                        <i className={`fas ${copiedLiffField === "booking" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-bold">เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ" บนเมนู Guest/Member)</span></label>
