@@ -11,6 +11,12 @@ import { extractLiffId } from "../utils/liffHelpers";
 type Status = "loading" | "linked" | "unlinked" | "error";
 
 export default function LiffLoginPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ตั้งค่าไว้ใน LINE Developers Console ต่อ
+  // องค์กร (ดู resolveOrgId ใน backend/src/routes/liff.ts) อ่านทุก render (เบา ไม่ต้องพึ่ง state) รอดผ่านรอบ
+  // liff.login() redirect ได้เพราะเป็นการโหลดหน้าใหม่ทั้งหน้า (LIFF SDK คืน URL เดิมพร้อม query string เดิม
+  // กลับมาเสมอ — เหมือนที่ billId/roomId ใน LiffPaymentPage.tsx รอดผ่านรอบเดียวกันนี้ได้) undefined ถ้าไม่มี
+  // (ระบบยังมีองค์กรเดียว — ดู resolveOrgIdWithFallback ใน backend/src/lib/orgContext.ts)
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -27,7 +33,7 @@ export default function LiffLoginPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
 
@@ -43,7 +49,7 @@ export default function LiffLoginPage() {
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
 
-        const result = await liffApi.login(token);
+        const result = await liffApi.login(token, org);
         if (cancelled) return;
         if (result.linked) {
           setTenantName(result.tenantName);
@@ -73,7 +79,7 @@ export default function LiffLoginPage() {
     if (!phone.trim()) { setPhoneError("กรุณากรอกเบอร์โทรศัพท์"); return; }
     setLinkingPhone(true); setPhoneError("");
     try {
-      const result = await liffApi.linkPhone(accessToken, phone.trim());
+      const result = await liffApi.linkPhone(accessToken, phone.trim(), org);
       setTenantName(result.tenantName);
       setRoomNumber(result.roomNumber);
       setStatus("linked");

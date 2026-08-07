@@ -6,6 +6,7 @@
 import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { getLineSettings } from "../services/line";
+import { getDefaultOrgId } from "../lib/orgContext";
 
 // ตั้งเป็น URL หน้า LIFF จริงของระบบ (เช่น https://liff.line.me/xxxxxxxx) ก่อนรัน — ใส่ผ่าน .env ได้เลย
 // ไม่ต้องแก้ไฟล์นี้ตรงๆ
@@ -69,7 +70,12 @@ async function createRichMenu(
 }
 
 async function main() {
-  const settings = await getLineSettings();
+  // สคริปต์นี้เป็นเครื่องมือ CLI แบบรันเดี่ยวๆ (ไม่มีบริบท request/องค์กร) — ในระบบหลายองค์กร แนะนำให้ใช้ปุ่ม
+  // "สร้าง Rich Menu" ในหน้า Settings ของแต่ละองค์กรแทน (routes/settings.ts, org-scoped อยู่แล้ว) สคริปต์นี้
+  // ทำงานกับ "องค์กรแรกสุด" เท่านั้น เก็บไว้เผื่อ debug/ใช้กับระบบที่มีองค์กรเดียว
+  const orgId = await getDefaultOrgId();
+  if (!orgId) throw new Error("ยังไม่มีองค์กรในระบบ");
+  const settings = await getLineSettings(orgId);
   if (!settings.token) {
     throw new Error("ยังไม่ได้ตั้งค่า LINE Channel Access Token — ตั้งค่าได้ที่หน้า Settings ของเว็บก่อนรันสคริปต์นี้");
   }

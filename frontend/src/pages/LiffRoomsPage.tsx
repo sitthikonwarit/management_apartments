@@ -20,6 +20,8 @@ function fmtMoney(n: number) {
 }
 
 export default function LiffRoomsPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
@@ -35,7 +37,7 @@ export default function LiffRoomsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
         setBookingUrl(cfg.liffBookingUrl);
@@ -46,7 +48,7 @@ export default function LiffRoomsPage() {
         await liff.init({ liffId });
         if (!liff.isLoggedIn()) { liff.login(); return; }
 
-        const availableRooms = await liffApi.availableRooms();
+        const availableRooms = await liffApi.availableRooms(org);
         if (cancelled) return;
         setRooms(availableRooms);
         setStatus("ready");

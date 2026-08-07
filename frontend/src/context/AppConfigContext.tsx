@@ -12,6 +12,9 @@ export interface AppIdentity {
 }
 
 export interface AppConfig {
+  // รหัสองค์กร (?org=<slug>) ไว้ต่อท้าย Endpoint URL ของ LIFF app แต่ละองค์กรใน LINE Developers Console
+  // (ดู resolveOrgId ใน backend/src/routes/liff.ts) — แสดงในหน้า Settings > LINE Messaging ให้ก็อปไปใช้
+  orgSlug: string;
   electricRate: number;
   waterRate: number;
   // ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เช่น ค่าไฟหน่วยละ 4 บาท + ค่าบริการหน่วยละ 3 บาท
@@ -53,6 +56,9 @@ export interface AppConfig {
     // EasySlip — สร้าง QR PromptPay ระบุยอดเอง + ตรวจสลิปอัตโนมัติ (ว่าง = ปิดใช้งาน ใช้ QR/เลขบัญชีคงที่แทน)
     easySlipApiKey: string; promptPayId: string;
   };
+  // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — false = AuthenticatedShell (App.tsx) บังคับพาไปหน้า
+  // Settings ค้างไว้ทุก route จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" (ดู backend routes/settings.ts)
+  setupCompleted: boolean;
   updatedAt?: string;
 }
 
@@ -67,6 +73,7 @@ export function resolveNameCharColor(color: string | undefined): string | undefi
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
+  orgSlug: "",
   electricRate: 0,
   waterRate: 0,
   serviceFee: { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },
@@ -88,6 +95,9 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     menuIds: { guest: "", member: "", admin: "" },
   },
   payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipApiKey: "", promptPayId: "" },
+  // ค่าเริ่มต้น "true" ตั้งใจ (fail open) — กันไม่ให้แอปแวบล็อกทุกคนไปหน้า Settings ระหว่างที่ยังโหลดค่าจริง
+  // จาก backend ไม่เสร็จ (AuthenticatedShell เช็ค loading ของ context นี้ประกอบด้วยอยู่แล้ว แต่กันไว้อีกชั้น)
+  setupCompleted: true,
 };
 
 const AppConfigContext = createContext<{

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { settingsApi, authApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig, DEFAULT_APP_CONFIG, NAME_CHAR_DEFAULT, type AppConfig } from "../context/AppConfigContext";
@@ -216,14 +217,16 @@ function UserFormModal({ editingUser, onClose, onSaved }: {
 
 // ── Main SettingsPage ─────────────────────────────────────────────────────────
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const { setBreadcrumb } = useBreadcrumb();
-  const { config, setConfig } = useAppConfig();
+  const { config, setConfig, refresh: refreshConfig } = useAppConfig();
 
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [completingSetup, setCompletingSetup] = useState(false);
 
   // ── ร่างฟอร์ม (sync จาก context ตอนโหลดเสร็จ) ──
   const [electricRate, setElectricRate] = useState(0);
@@ -554,6 +557,8 @@ export default function SettingsPage() {
     setSaving(true); setSaveMsg(null);
     try {
       const payload: AppConfig = {
+        orgSlug: config.orgSlug, // อ่านอย่างเดียว backend ไม่รับค่านี้จาก body (ดู PUT /settings/config) ใส่ไว้ให้ตรง type เฉยๆ
+        setupCompleted: config.setupCompleted, // อ่านอย่างเดียวเหมือนกัน — เปลี่ยนได้แค่ผ่านปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" เท่านั้น (ดู handleCompleteSetup)
         electricRate: Number(electricRate) || 0,
         waterRate: Number(waterRate) || 0,
         serviceFee: {
@@ -621,6 +626,22 @@ export default function SettingsPage() {
     }
   }
 
+  // ปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" — ปลดล็อกไม่ให้ AuthenticatedShell (App.tsx) บังคับพากลับมาหน้านี้
+  // ทุก route อีกต่อไป แล้วพาไปแดชบอร์ดทันที (ดู POST /settings/config/complete-setup)
+  async function handleCompleteSetup() {
+    setCompletingSetup(true);
+    try {
+      await settingsApi.completeSetup();
+      await refreshConfig();
+      toastSuccess("ตั้งค่าเริ่มต้นเสร็จสิ้น ยินดีต้อนรับเข้าสู่ระบบ!");
+      navigate("/tenants", { replace: true });
+    } catch (e: any) {
+      toastError(e?.response?.data?.error ?? "ทำรายการไม่สำเร็จ");
+    } finally {
+      setCompletingSetup(false);
+    }
+  }
+
   async function handleDeleteFormula() {
     if (!confirmDeleteFormula) return;
     setDeletingFormula(true);
@@ -661,6 +682,24 @@ export default function SettingsPage() {
             {saveMsg.text}
           </span>
           <button type="button" className="btn-close btn-sm ms-3" onClick={() => setSaveMsg(null)} />
+        </div>
+      )}
+
+      {/* ── องค์กรใหม่ที่ยังไม่เคยกดเสร็จสิ้นการตั้งค่า — บังคับพามาหน้านี้ค้างไว้ (ดู AuthenticatedShell
+          ใน App.tsx) แสดงแบนเนอร์อธิบาย + ปุ่มปลดล็อกให้กดเมื่อพร้อมแล้ว ไม่บังคับว่าต้องกรอกอะไรครบก่อน
+          (เจ้าของอาจแค่อยากดูรอบระบบก่อนแล้วค่อยมาตั้งค่าจริงทีหลังก็ได้) */}
+      {!config.setupCompleted && (
+        <div className="alert alert-primary d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 py-3 px-3" style={{ borderRadius: "var(--border-radius-1)" }}>
+          <span>
+            <i className="fas fa-flag-checkered me-2" />
+            <strong>ยินดีต้อนรับ!</strong> ก่อนเริ่มใช้งาน กรุณาตรวจสอบ/ตั้งค่าระบบให้เรียบร้อยก่อน (อัตราค่าน้ำ-ไฟ,
+            รูปลักษณ์, LINE ฯลฯ) — ระบบจะพาอยู่ที่หน้านี้จนกว่าจะกดปุ่ม "เสร็จสิ้น" ด้านขวา
+          </span>
+          <button type="button" className="btn btn-primary flex-shrink-0" onClick={handleCompleteSetup} disabled={completingSetup}>
+            {completingSetup
+              ? <><span className="spinner-border spinner-border-sm me-2" />กำลังดำเนินการ...</>
+              : <><i className="fas fa-check me-2" />เสร็จสิ้นการตั้งค่าเริ่มต้น</>}
+          </button>
         </div>
       )}
 
@@ -1117,8 +1156,9 @@ export default function SettingsPage() {
                         ? `ถ้าไม่มีการกระทำใดๆ ในเว็บเกิน ${sessionTimeoutMinutes} นาที ระบบจะเด้งออกจากระบบอัตโนมัติ`
                         : "ปิดใช้งาน — จะไม่มีการเด้งออกจากระบบอัตโนมัติ"}
                     </p>
-                    <div className="input-group" style={{ width: 160 }}>
+                    <div className="input-group" style={{ width: 220 }}>
                       <input type="number" className="form-control fw-bold" min={0} max={1440}
+                        style={{ minWidth: 70, flex: "1 1 70px" }}
                         value={sessionTimeoutMinutes}
                         onChange={(e) => setSessionTimeoutMinutes(Math.max(0, Math.min(1440, Number(e.target.value) || 0)))} />
                       <span className="input-group-text">นาที (0=ปิด)</span>
@@ -1190,6 +1230,24 @@ export default function SettingsPage() {
                         <i className="fas fa-copy" />
                       </button>
                     </div>
+
+                    <label className="form-label small">รหัสองค์กร (ต่อท้าย Endpoint URL ของ LIFF app แต่ละอันเป็น ?org=รหัสนี้)</label>
+                    <div className="input-group mb-1">
+                      <input type="text" className="form-control" readOnly value={config.orgSlug} />
+                      <button type="button" className="btn btn-outline-secondary" onClick={() => {
+                        navigator.clipboard.writeText(config.orgSlug);
+                        toastSuccess("คัดลอกรหัสองค์กรแล้ว");
+                      }} title="คัดลอก">
+                        <i className="fas fa-copy" />
+                      </button>
+                    </div>
+                    <p className="text-muted small mb-3">
+                      ใช้เฉพาะระบบที่มีมากกว่า 1 องค์กรใช้งานร่วมกัน — ตอนสร้าง LIFF app แต่ละอัน (Login/Payment/
+                      Profile/แจ้งซ่อม/ดูห้องว่าง/จองห้อง) ใน LINE Developers Console ให้ตั้ง Endpoint URL เป็นหน้า
+                      LIFF ของระบบนี้ต่อท้ายด้วย <code>?org={config.orgSlug || "รหัสองค์กร"}</code> เช่น{" "}
+                      <code>{window.location.origin}/liff/login?org={config.orgSlug || "รหัสองค์กร"}</code> แล้วค่อยเอา
+                      URL แบบสั้น (liff.line.me/...) ที่ได้มาใส่ในช่อง LIFF URL ด้านล่างตามปกติ
+                    </p>
 
                     <div className="form-check form-switch mb-3">
                       <input className="form-check-input" type="checkbox" id="lineAutoSendSwitch"

@@ -34,9 +34,6 @@ api.interceptors.response.use(
 );
 
 export const authApi = {
-  setupStatus: () => api.get("/auth/setup-status").then((r) => r.data as { hasUsers: boolean }),
-  register: (username: string, password: string, displayName?: string) =>
-    api.post("/auth/register", { username, password, displayName }).then((r) => r.data),
   login: (username: string, password: string) =>
     api.post("/auth/login", { username, password }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
@@ -221,6 +218,8 @@ export const settingsApi = {
   deleteFormula: (id: string) => api.delete(`/settings/${id}`).then((r) => r.data),
   getConfig: () => api.get("/settings/config").then((r) => r.data),
   updateConfig: (data: any) => api.put("/settings/config", data).then((r) => r.data),
+  // กดยืนยัน "เสร็จสิ้นการตั้งค่าเริ่มต้น" — ปลดล็อกให้เข้าหน้าอื่นในระบบได้ (ดู AuthenticatedShell ใน App.tsx)
+  completeSetup: () => api.post("/settings/config/complete-setup").then((r) => r.data as { setupCompleted: boolean }),
   uploadRichMenuImage: (menu: "guest" | "member" | "admin", base64: string, name: string) =>
     api.post("/settings/richmenu/image", { menu, base64, name }).then((r) => r.data as { url: string }),
   createRichMenus: () =>
@@ -235,8 +234,12 @@ export const settingsApi = {
 // ── หน้า LIFF ฝั่งผู้เช่า (Login/Payment) — public endpoints ไม่ต้องแนบ token พนักงาน (ไม่ผ่าน
 // interceptor ข้างบนก็ได้เพราะไม่มี token ให้แนบอยู่แล้วในเบราว์เซอร์ผู้เช่า แต่ใช้ instance `api` เดิม
 // ร่วมกันเพื่อ baseURL "/api" เดียวกัน) ยืนยันตัวตนด้วย LIFF access token ของ LINE เอง ไม่ใช่ JWT ของเรา
+// `org` = slug ขององค์กร (?org=<slug> ที่อ่านจาก URL ของหน้า LIFF เอง — ดู Liff*Page.tsx) แนบเป็น query
+// param ในทุกคำขอ (ทั้ง GET/POST) ให้ backend รู้ว่า request นี้เป็นขององค์กรไหน (ดู resolveOrgId ใน
+// backend/src/routes/liff.ts) — undefined ได้ (axios ตัดพารามิเตอร์ที่เป็น undefined ทิ้งเองอัตโนมัติ) ตอนที่
+// ระบบยังมีองค์กรเดียว (ยังไม่ได้ตั้ง ?org= ใน LIFF Endpoint URL ของ LINE Developers Console)
 export const liffApi = {
-  getConfig: () => api.get("/liff/config").then((r) => r.data as {
+  getConfig: (org?: string) => api.get("/liff/config", { params: { org } }).then((r) => r.data as {
     liffLoginUrl: string;
     liffPaymentUrl: string;
     liffProfileUrl: string;
@@ -248,14 +251,14 @@ export const liffApi = {
     features: { splitRentByResidents: boolean };
     overdue: { enabled: boolean; day: number; type: "fixed" | "daily"; amount: number };
   }),
-  login: (accessToken: string) => api.post("/liff/login", { accessToken }).then((r) => r.data as
+  login: (accessToken: string, org?: string) => api.post("/liff/login", { accessToken }, { params: { org } }).then((r) => r.data as
     | { linked: false; lineUserId: string; displayName: string }
     | { linked: true; tenantName: string; roomNumber: string; menuLinked: boolean }
   ),
-  linkPhone: (accessToken: string, phone: string) => api.post("/liff/link-phone", { accessToken, phone }).then((r) => r.data as
+  linkPhone: (accessToken: string, phone: string, org?: string) => api.post("/liff/link-phone", { accessToken, phone }, { params: { org } }).then((r) => r.data as
     { linked: true; tenantName: string; roomNumber: string; menuLinked: boolean }
   ),
-  payment: (accessToken: string) => api.post("/liff/payment", { accessToken }).then((r) => r.data as
+  payment: (accessToken: string, org?: string) => api.post("/liff/payment", { accessToken }, { params: { org } }).then((r) => r.data as
     | { linked: false }
     | {
         linked: true; tenantName: string; roomNumber: string;
@@ -266,22 +269,22 @@ export const liffApi = {
         };
       }
   ),
-  billDetail: (accessToken: string, billId: string, roomId: string) =>
-    api.post("/liff/bill-detail", { accessToken, billId, roomId }).then((r) => r.data as { item: any; monthYear: string }),
-  billDetailThisMonth: (accessToken: string) =>
-    api.post("/liff/bill-detail/this-month", { accessToken }).then((r) => r.data as { billId: string; roomId: string; item: any; monthYear: string }),
-  generateQr: (accessToken: string, billId: string, roomId: string, amount: number) =>
-    api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }).then((r) => r.data as {
+  billDetail: (accessToken: string, billId: string, roomId: string, org?: string) =>
+    api.post("/liff/bill-detail", { accessToken, billId, roomId }, { params: { org } }).then((r) => r.data as { item: any; monthYear: string }),
+  billDetailThisMonth: (accessToken: string, org?: string) =>
+    api.post("/liff/bill-detail/this-month", { accessToken }, { params: { org } }).then((r) => r.data as { billId: string; roomId: string; item: any; monthYear: string }),
+  generateQr: (accessToken: string, billId: string, roomId: string, amount: number, org?: string) =>
+    api.post("/liff/payment/qr", { accessToken, billId, roomId, amount }, { params: { org } }).then((r) => r.data as {
       intentId: string;
       qrImage: string | null;
       amount: number;
       accountInfo: { bankName: string; accountName: string; accountNumber: string } | null;
     }),
-  paymentStatus: (accessToken: string, intentId: string) =>
-    api.post("/liff/payment/status", { accessToken, intentId }).then((r) => r.data as { status: "pending" | "confirmed" }),
-  confirmPayment: (accessToken: string, intentId: string, slipBase64: string) =>
-    api.post("/liff/payment/confirm", { accessToken, intentId, slipImage: { base64: slipBase64 } }).then((r) => r.data as { ok: boolean; messageId: string }),
-  profile: (accessToken: string) => api.post("/liff/profile", { accessToken }).then((r) => r.data as
+  paymentStatus: (accessToken: string, intentId: string, org?: string) =>
+    api.post("/liff/payment/status", { accessToken, intentId }, { params: { org } }).then((r) => r.data as { status: "pending" | "confirmed" }),
+  confirmPayment: (accessToken: string, intentId: string, slipBase64: string, org?: string) =>
+    api.post("/liff/payment/confirm", { accessToken, intentId, slipImage: { base64: slipBase64 } }, { params: { org } }).then((r) => r.data as { ok: boolean; messageId: string }),
+  profile: (accessToken: string, org?: string) => api.post("/liff/profile", { accessToken }, { params: { org } }).then((r) => r.data as
     | { linked: false }
     | {
         linked: true;
@@ -293,10 +296,10 @@ export const liffApi = {
         }[];
       }
   ),
-  submitRepair: (accessToken: string, title: string, details: string, photos: string[]) =>
-    api.post("/liff/repair", { accessToken, title, details, photos }).then((r) => r.data as { ok: boolean; messageId: string }),
-  profileFull: (accessToken: string, idLicenseLast4: string) =>
-    api.post("/liff/profile/full", { accessToken, idLicenseLast4 }).then((r) => r.data as {
+  submitRepair: (accessToken: string, title: string, details: string, photos: string[], org?: string) =>
+    api.post("/liff/repair", { accessToken, title, details, photos }, { params: { org } }).then((r) => r.data as { ok: boolean; messageId: string }),
+  profileFull: (accessToken: string, idLicenseLast4: string, org?: string) =>
+    api.post("/liff/profile/full", { accessToken, idLicenseLast4 }, { params: { org } }).then((r) => r.data as {
       personal: {
         idLicense: string; title: string; firstName: string; lastName: string; tel: string; idLine: string;
         houseNo: string; soi: string; road: string; tambon: string; amphoe: string; province: string;
@@ -307,18 +310,104 @@ export const liffApi = {
       vehicles: { id: string; licensePlate: string; brand: string; color: string; typeName: string; typeIcon: string; images: string[] }[];
       files: { name: string; url: string }[];
     }),
-  availableRooms: () => api.get("/liff/rooms").then((r) => r.data as {
+  availableRooms: (org?: string) => api.get("/liff/rooms", { params: { org } }).then((r) => r.data as {
     id: string; number: string; floor: string; towerName: string; towerColor: string;
     price: number; dailyPrice: number; detail: string; pictures: { url: string; name?: string }[];
   }[]),
-  bookRoom: (accessToken: string, roomId: string, name: string, tel: string) =>
-    api.post("/liff/rooms/book", { accessToken, roomId, name, tel }).then((r) => r.data as { ok: boolean; messageId: string; bookingId: string }),
-  myBookings: (accessToken: string) => api.post("/liff/rooms/mine", { accessToken }).then((r) => r.data as {
+  bookRoom: (accessToken: string, roomId: string, name: string, tel: string, org?: string) =>
+    api.post("/liff/rooms/book", { accessToken, roomId, name, tel }, { params: { org } }).then((r) => r.data as { ok: boolean; messageId: string; bookingId: string }),
+  myBookings: (accessToken: string, org?: string) => api.post("/liff/rooms/mine", { accessToken }, { params: { org } }).then((r) => r.data as {
     bookings: {
       bookingId: string; roomId: string; roomNumber: string; towerName: string; towerColor: string;
       floor: string; price: number; detail: string; pictures: { url: string; name?: string }[]; bookedAt: string;
     }[];
   }),
-  cancelBooking: (accessToken: string, bookingId: string) =>
-    api.post("/liff/rooms/cancel", { accessToken, bookingId }).then((r) => r.data as { ok: boolean }),
+  cancelBooking: (accessToken: string, bookingId: string, org?: string) =>
+    api.post("/liff/rooms/cancel", { accessToken, bookingId }, { params: { org } }).then((r) => r.data as { ok: boolean }),
+};
+
+// ── หน้าควบคุมแพลตฟอร์ม (ดูรายชื่อองค์กรลูกค้าทั้งหมด/ระงับ/ลบองค์กร) — คนเดียว (คุณ) เท่านั้น ─────
+// เก็บโทเค็นแยก localStorage key จากบัญชีพนักงาน (TOKEN_STORAGE_KEY ด้านบน) เพราะเป็นคนละระบบสิทธิ์กัน
+// โดยสิ้นเชิง (ดู backend/src/lib/superAdminDerive.ts) — เบราว์เซอร์เดียวกันจะได้ล็อกอินทั้งสองแบบพร้อมกัน
+// ได้โดยไม่ทับกัน (เช่น เปิดแท็บนึงดูหน้าควบคุม อีกแท็บล็อกอินเป็นพนักงานองค์กรตัวเองตามปกติ)
+const SUPERADMIN_TOKEN_STORAGE_KEY = "lineweb_superadmin_token";
+export function getSuperAdminToken(): string | null {
+  return localStorage.getItem(SUPERADMIN_TOKEN_STORAGE_KEY);
+}
+export function setSuperAdminToken(token: string) {
+  localStorage.setItem(SUPERADMIN_TOKEN_STORAGE_KEY, token);
+}
+export function clearSuperAdminToken() {
+  localStorage.removeItem(SUPERADMIN_TOKEN_STORAGE_KEY);
+}
+
+const superAdminHttp = axios.create({ baseURL: "/api" });
+superAdminHttp.interceptors.request.use((config) => {
+  const token = getSuperAdminToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export interface SuperAdminRequestRate { last1m: number; last5m: number }
+
+export interface SuperAdminApiHealthWindow { count: number; errorCount: number; errorRate: number; avgResponseMs: number }
+
+export interface SuperAdminSystemHealth {
+  server: {
+    uptimeSec: number;
+    cpuPercent: number;
+    memory: { rssBytes: number; systemTotalBytes: number; systemUsedBytes: number; systemUsedPercent: number };
+  };
+  api: { last1m: SuperAdminApiHealthWindow; last5m: SuperAdminApiHealthWindow };
+  database: { connected: boolean; latencyMs: number };
+}
+
+export interface SuperAdminOrg {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  createdAt: string;
+  counts: { rooms: number; tenants: number; users: number };
+  storage: { dbBytes: number; uploadBytes: number; totalBytes: number };
+  apiUsage: SuperAdminRequestRate;
+  owner: { username: string | null; phone: string | null; lineLinked: boolean };
+}
+
+export const superAdminApi = {
+  // ล็อกอินด้วยรหัสผ่านเดียว (SUPERADMIN_PASSWORD ใน .env) — ทางเลือกที่เร็วกว่า LINE Login (ดู
+  // SuperAdminLoginPage.tsx) คืน token ตรงๆ ให้หน้าเว็บเก็บเองผ่าน setSuperAdminToken ไม่ต้อง redirect
+  // ผ่าน backend เหมือนขั้นตอน LINE Login
+  login: (password: string) => superAdminHttp.post("/auth/superadmin/login", { password }).then((r) => r.data as { token: string }),
+  getOrganizations: () => superAdminHttp.get("/superadmin/organizations").then((r) => r.data as SuperAdminOrg[]),
+  // อัตราเรียก API สดๆ (ไม่แตะ DB ฝั่ง backend เลย — ดู lib/apiUsageTracker.ts) หน้าเว็บ poll endpoint นี้
+  // ทุกๆ ~5 วินาทีแทนการโหลด getOrganizations() ทั้งก้อนซ้ำๆ (หนักกว่ามากเพราะต้องคำนวณพื้นที่ใช้งานด้วย)
+  getApiUsage: () => superAdminHttp.get("/superadmin/api-usage").then((r) => r.data as { global: SuperAdminRequestRate; perOrg: Record<string, SuperAdminRequestRate> }),
+  // พื้นที่ไฟล์แนบแชทที่ยังแยกตามองค์กรไม่ได้ (ดูคอมเมนต์ที่ lib/storageUsage.ts ฝั่ง backend)
+  getStorageSummary: () => superAdminHttp.get("/superadmin/storage-summary").then((r) => r.data as { unattributedBytes: number }),
+  // ความเสถียรของระบบ (เครื่องเซิร์ฟ + API + ฐานข้อมูล) — poll เบาๆ ทุก ~5 วิ เหมือน getApiUsage
+  getSystemHealth: () => superAdminHttp.get("/superadmin/system-health").then((r) => r.data as SuperAdminSystemHealth),
+  createOrganization: (data: { name: string; phone: string; displayName?: string }) =>
+    superAdminHttp.post("/superadmin/organizations", data).then((r) => r.data as { id: string; name: string; slug: string; status: string; ownerPhone: string }),
+  updateOrgStatus: (id: string, status: "active" | "suspended") =>
+    superAdminHttp.patch(`/superadmin/organizations/${id}/status`, { status }).then((r) => r.data as { id: string; status: string }),
+  deleteOrg: (id: string, confirmName: string) =>
+    superAdminHttp.delete(`/superadmin/organizations/${id}`, { data: { confirmName } }).then((r) => r.data as { deleted: string }),
+  // รีเซ็ตรหัสผ่านบัญชีเจ้าของ — คืนรหัสผ่านใหม่แบบ plaintext ครั้งเดียว (backend ไม่เก็บไว้ดูย้อนหลังได้อีก)
+  resetOwnerPassword: (id: string) =>
+    superAdminHttp.post(`/superadmin/organizations/${id}/reset-password`).then((r) => r.data as { username: string; password: string }),
+  // สร้าง Rich Menu ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — ส่ง token/URL/รูปมาในคำขอเดียวจบ (ไม่มี
+  // ที่เก็บถาวรฝั่ง backend ดู routes/superadmin.ts)
+  createRichMenuSet: (data: {
+    token: string;
+    liffLoginUrl: string; liffPaymentUrl: string;
+    liffProfileUrl?: string; liffRepairUrl?: string; liffRoomsUrl?: string; liffBookingUrl?: string; contactUrl?: string;
+    images: { guest: string; member: string; admin: string };
+    previousIds?: { guest?: string; member?: string; admin?: string };
+  }) =>
+    superAdminHttp.post("/superadmin/richmenu/create", data).then((r) => r.data as {
+      menuIds: { guest: string; member: string; admin: string };
+      defaultSet: boolean;
+      warning?: string;
+    }),
 };

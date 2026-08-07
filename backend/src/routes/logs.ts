@@ -1,7 +1,8 @@
 import { Elysia } from "elysia";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { activityLogs } from "../db/schema";
+import { authDerive } from "../lib/authDerive";
 
 function safeParse(v: string | null, fallback: any = null) {
   try { return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -33,7 +34,10 @@ function parseLog(r: typeof activityLogs.$inferSelect) {
 const MAX_LOGS = 2000;
 
 export const logsRoute = new Elysia({ prefix: "/logs" })
-  .get("/", async () => {
-    const rows = await db.select().from(activityLogs).orderBy(desc(activityLogs.timestamp)).limit(MAX_LOGS);
+  .use(authDerive)
+  .get("/", async ({ authUser }) => {
+    const rows = await db.select().from(activityLogs)
+      .where(eq(activityLogs.orgId, authUser!.orgId))
+      .orderBy(desc(activityLogs.timestamp)).limit(MAX_LOGS);
     return rows.map(parseLog);
   });

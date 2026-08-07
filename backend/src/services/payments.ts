@@ -10,20 +10,20 @@ import { appConfig, bills, payments, paymentIntents } from "../db/schema";
 import { verifySlipImage } from "./easyslip";
 import { sendPaymentReceiptLine } from "./line";
 import { broadcastChange } from "../lib/wsHub";
+import { decryptField } from "../lib/encryption";
 
-const CONFIG_ID = "default";
 const INTENT_MAX_AGE_MS = 2 * 60 * 60 * 1000; // รายการรอชำระที่สร้างไว้เกิน 2 ชม. ไม่เอามาจับคู่ กันจับคู่ผิดกับ QR เก่าที่ค้างไว้นาน
 const AMOUNT_MATCH_TOLERANCE = 0.5; // บาท — เผื่อการปัดเศษสตางค์ของแต่ละธนาคาร
 
-export async function tryAutoConfirmSlipPayment(lineUserId: string, imageRelPath: string): Promise<void> {
+export async function tryAutoConfirmSlipPayment(orgId: string, lineUserId: string, imageRelPath: string): Promise<void> {
   try {
     if (!imageRelPath) return;
-    const [config] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));
-    const apiKey = config?.easySlipApiKey || "";
+    const [config] = await db.select().from(appConfig).where(eq(appConfig.id, orgId));
+    const apiKey = decryptField(config?.easySlipApiKey || "");
     if (!apiKey) return;
 
     const pending = await db.select().from(paymentIntents)
-      .where(and(eq(paymentIntents.lineUserId, lineUserId), eq(paymentIntents.status, "pending")));
+      .where(and(eq(paymentIntents.orgId, orgId), eq(paymentIntents.lineUserId, lineUserId), eq(paymentIntents.status, "pending")));
     const recent = pending.filter((it) => Date.now() - new Date(it.createdAt || 0).getTime() < INTENT_MAX_AGE_MS);
     if (recent.length === 0) return;
 
@@ -37,7 +37,7 @@ export async function tryAutoConfirmSlipPayment(lineUserId: string, imageRelPath
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
     if (!matched) return;
 
-    await recordConfirmedPayment(matched, {
+    await recordConfirmedPayment(orgId, matched, {
       slipUrl: imageRelPath,
       actor: "ระบบอัตโนมัติ (EasySlip)",
       note: `ชำระผ่าน LIFF — ตรวจสลิปอัตโนมัติด้วย EasySlip (อ้างอิง ${result.transRef})`,
@@ -57,10 +57,11 @@ export interface ConfirmedPaymentResult {
 // ทั้งเส้นทางตรวจสลิปอัตโนมัติด้วย EasySlip (ด้านบน) และเส้นทางพนักงานกดยืนยันเองจากการ์ดในหน้าแชท (ดู
 // PATCH /chat/conversations/:lineUserId/messages/:id/payment-confirm ใน routes/chat.ts)
 export async function recordConfirmedPayment(
+  orgId: string,
   intent: typeof paymentIntents.$inferSelect,
   opts: { slipUrl: string; actor: string; note: string }
 ): Promise<ConfirmedPaymentResult> {
-  const [billRow] = await db.select().from(bills).where(eq(bills.id, intent.billId));
+  const [billRow] = await db.select().from(bills).where(and(eq(bills.id, intent.billId), eq(bills.orgId, orgId)));
   if (!billRow) return { ok: false, message: "ไม่พบบิลของรายการรอชำระนี้" };
   let data: any[] = [];
   try { data = billRow.data ? JSON.parse(billRow.data) : []; } catch { data = []; }
@@ -84,6 +85,7 @@ export async function recordConfirmedPayment(
   const ts = new Date().toISOString();
   await db.insert(payments).values({
     id: paymentId,
+    orgId,
     billId: intent.billId,
     tenantId: intent.tenantId || "",
     paymentDate: ts,
@@ -100,7 +102,7 @@ export async function recordConfirmedPayment(
   await db.update(paymentIntents).set({ status: "confirmed", confirmedAt: ts, paymentId }).where(eq(paymentIntents.id, intent.id));
 
   try {
-    await sendPaymentReceiptLine({
+    await sendPaymentReceiptLine(orgId, {
       tenantId: intent.tenantId, roomNumber: intent.roomNumber || "", monthYear: intent.monthYear || "",
       method: "scan", amount: amountApplied, change: 0, note: "", paymentDate: ts,
       billTotal: Number(item.total) || 0, paidTotal: newPaidAmount, slipUrl: opts.slipUrl, actor: opts.actor,
@@ -109,8 +111,8 @@ export async function recordConfirmedPayment(
     console.error("[record-confirmed-payment][receipt]", e);
   }
 
-  broadcastChange("bill", "update", `ชำระเงินผ่าน LIFF (${opts.actor})`, opts.actor);
-  broadcastChange("payment", "create", "ชำระเงินผ่าน LIFF", opts.actor);
+  broadcastChange(orgId, "bill", "update", `ชำระเงินผ่าน LIFF (${opts.actor})`, opts.actor);
+  broadcastChange(orgId, "payment", "create", "ชำระเงินผ่าน LIFF", opts.actor);
 
   return { ok: true };
 }

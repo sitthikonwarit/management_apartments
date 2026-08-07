@@ -17,6 +17,12 @@ import LockScreen from "./components/LockScreen";
 import ChatToastHost from "./components/ChatToastHost";
 import UpdateBanner from "./components/UpdateBanner";
 import LoginPage from "./pages/LoginPage";
+import LineLoginCallbackPage from "./pages/LineLoginCallbackPage";
+import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
+import SuperAdminCallbackPage from "./pages/SuperAdminCallbackPage";
+import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
+import SuperAdminRichMenuPage from "./pages/SuperAdminRichMenuPage";
+import SuperAdminShell from "./components/layout/SuperAdminShell";
 import LiffLoginPage from "./pages/LiffLoginPage";
 import LiffPaymentPage from "./pages/LiffPaymentPage";
 import LiffProfilePage from "./pages/LiffProfilePage";
@@ -47,7 +53,11 @@ const PAGE_TITLES: Record<string, string> = {
 // ── โครงแอปหลัก (Sidebar/Header/หน้าต่างๆ) — ต้องล็อกอินก่อนถึงจะเห็น ไม่งั้นเด้งไป /login ─────
 function AuthenticatedShell() {
   const { user, loading, locked, lock } = useAuth();
-  const { config } = useAppConfig();
+  const { config, loading: configLoading } = useAppConfig();
+  // องค์กรใหม่ที่ยังไม่เคยกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" ในหน้า Settings (setupCompleted=false ใน
+  // app_config — ดู backend routes/settings.ts) ต้องรอโหลด config จริงจบก่อน (configLoading) ไม่งั้นจะติด
+  // ค่า default ชั่วคราวแล้วเด้งพาไป Settings ผิดๆ ตอนเพิ่งล็อกอินเสร็จใหม่ๆ
+  const setupLocked = !configLoading && !config.setupCompleted;
   // เมนูด้านข้างบนมือถือ (ซ่อนไว้เป็นค่าเริ่มต้นตาม CSS @media ที่ ≤768px) — ปุ่มแฮมเบอร์เกอร์ใน Header
   // เปิด, กากบาท/แตะพื้นหลังใน Sidebar ปิด ไม่กระทบจอเดสก์ท็อปเพราะ CSS นั้นใช้เฉพาะช่วงจอแคบเท่านั้น
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,15 +93,26 @@ function AuthenticatedShell() {
         <BreadcrumbBar />
         <div id="content-wrapper">
           <Routes>
-            <Route path="/" element={<Navigate to="/tenants" replace />} />
-            <Route path="/tenants" element={<TenantsPage />} />
-            <Route path="/rooms" element={<RoomsPage />} />
-            <Route path="/meters" element={<MetersPage />} />
-            <Route path="/bills" element={<BillsPage />} />
-            <Route path="/vehicles" element={<VehiclesPage />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/logs" element={<LogPage />} />
+            {setupLocked ? (
+              // ยังไม่เสร็จสิ้นการตั้งค่าเริ่มต้น — บังคับทุก route ไปหน้า Settings ค้างไว้ (แม้พิมพ์ URL อื่น
+              // เองตรงๆ ก็เด้งกลับมาเสมอ) จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" ใน SettingsPage.tsx
+              <>
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/settings" replace />} />
+              </>
+            ) : (
+              <>
+                <Route path="/" element={<Navigate to="/tenants" replace />} />
+                <Route path="/tenants" element={<TenantsPage />} />
+                <Route path="/rooms" element={<RoomsPage />} />
+                <Route path="/meters" element={<MetersPage />} />
+                <Route path="/bills" element={<BillsPage />} />
+                <Route path="/vehicles" element={<VehiclesPage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/logs" element={<LogPage />} />
+              </>
+            )}
           </Routes>
         </div>
       </main>
@@ -118,6 +139,15 @@ export default function App() {
         <VersionCheckBanner />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* ปลายทางหลัง redirect กลับจาก LINE Login สำเร็จ (ดู backend/src/routes/lineLogin.ts) */}
+          <Route path="/line-login-callback" element={<LineLoginCallbackPage />} />
+          {/* หน้าควบคุมแพลตฟอร์ม (ดูรายชื่อองค์กรลูกค้าทั้งหมด/ระงับ/ลบองค์กร) — คนเดียว (คุณ) เท่านั้น
+              ไม่มีลิงก์จากที่ไหนในแอปเลย เข้าถึงได้แค่พิมพ์ URL ตรงๆ เท่านั้น คนละระบบสิทธิ์กับ
+              AuthenticatedShell ด้านล่างโดยสิ้นเชิง (ดู SuperAdminDashboardPage.tsx) */}
+          <Route path="/superadmin/login" element={<SuperAdminLoginPage />} />
+          <Route path="/superadmin/callback" element={<SuperAdminCallbackPage />} />
+          <Route path="/superadmin" element={<SuperAdminShell title="องค์กรทั้งหมด"><SuperAdminDashboardPage /></SuperAdminShell>} />
+          <Route path="/superadmin/richmenu" element={<SuperAdminShell title="สร้าง Rich Menu"><SuperAdminRichMenuPage /></SuperAdminShell>} />
           {/* หน้า LIFF ฝั่งผู้เช่า — สาธารณะ ไม่ผ่าน AuthenticatedShell (ไม่มี Sidebar/Header, ไม่ต้อง
               ล็อกอินด้วยบัญชีพนักงาน) เปิดจากปุ่มบน LINE Rich Menu ผ่านเบราว์เซอร์ในตัวของ LINE เอง */}
           <Route path="/liff/login" element={<LiffLoginPage />} />

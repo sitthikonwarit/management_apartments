@@ -37,6 +37,8 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export default function LiffPaymentPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -87,7 +89,7 @@ export default function LiffPaymentPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
         setPreviewConfig({ appIdentity: cfg.appIdentity, features: cfg.features, overdue: cfg.overdue });
@@ -102,7 +104,7 @@ export default function LiffPaymentPage() {
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
 
-        const result = await liffApi.payment(token);
+        const result = await liffApi.payment(token, org);
         if (cancelled) return;
         if (result.linked) {
           setTenantName(result.tenantName);
@@ -128,7 +130,7 @@ export default function LiffPaymentPage() {
             setPayItem({ billId: linkedBillId, roomId: linkedRoomId, monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
             setPayBillDetail(null);
             setLoadingPayDetail(true);
-            liffApi.billDetail(token, linkedBillId, linkedRoomId)
+            liffApi.billDetail(token, linkedBillId, linkedRoomId, org)
               .then((r) => { if (!cancelled) applyPayDetail(linkedBillId, linkedRoomId, r); })
               .catch(() => { if (!cancelled) setPayBillDetail(null); })
               .finally(() => { if (!cancelled) setLoadingPayDetail(false); });
@@ -140,7 +142,7 @@ export default function LiffPaymentPage() {
             setPayItem({ billId: "", roomId: "", monthYear: "", roomNumber: "", total: 0, paidAmount: 0, amount: 0 });
             setPayBillDetail(null);
             setLoadingPayDetail(true);
-            liffApi.billDetailThisMonth(token)
+            liffApi.billDetailThisMonth(token, org)
               .then((r) => { if (!cancelled) applyPayDetail(r.billId, r.roomId, r); })
               .catch((e: any) => {
                 if (cancelled) return;
@@ -163,7 +165,7 @@ export default function LiffPaymentPage() {
 
   async function refreshOutstanding() {
     try {
-      const result = await liffApi.payment(accessToken);
+      const result = await liffApi.payment(accessToken, org);
       if (result.linked) { setItems(result.outstanding.items); setTotal(result.outstanding.total); }
     } catch {
       // รีเฟรชพื้นหลังไม่สำเร็จไม่เป็นไร ผู้เช่าจะได้ใบเสร็จทางแชทอยู่แล้ว
@@ -191,7 +193,7 @@ export default function LiffPaymentPage() {
     stopPolling();
 
     setLoadingPayDetail(true);
-    liffApi.billDetail(accessToken, item.billId, item.roomId)
+    liffApi.billDetail(accessToken, item.billId, item.roomId, org)
       .then((r) => setPayBillDetail(r))
       .catch(() => setPayBillDetail(null))
       .finally(() => setLoadingPayDetail(false));
@@ -212,7 +214,7 @@ export default function LiffPaymentPage() {
     }
     setGeneratingQr(true); setQrError("");
     try {
-      const result = await liffApi.generateQr(accessToken, payItem.billId, payItem.roomId, amountNum);
+      const result = await liffApi.generateQr(accessToken, payItem.billId, payItem.roomId, amountNum, org);
       setQrImage(result.qrImage || "");
       setIntentAccountInfo(result.accountInfo);
       setIntentStarted(true);
@@ -222,7 +224,7 @@ export default function LiffPaymentPage() {
       pollTimer.current = setInterval(async () => {
         attempts++;
         try {
-          const s = await liffApi.paymentStatus(accessToken, result.intentId);
+          const s = await liffApi.paymentStatus(accessToken, result.intentId, org);
           if (s.status === "confirmed") {
             setPayStatus("confirmed");
             stopPolling();
@@ -245,7 +247,7 @@ export default function LiffPaymentPage() {
     setManualSubmitting(true); setManualError("");
     try {
       const base64 = await readFileAsBase64(file);
-      await liffApi.confirmPayment(accessToken, currentIntentId, base64);
+      await liffApi.confirmPayment(accessToken, currentIntentId, base64, org);
       setManualSubmitted(true);
     } catch (e: any) {
       setManualError(e?.response?.data?.error ?? e?.message ?? "ส่งสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");

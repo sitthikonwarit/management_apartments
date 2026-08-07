@@ -1,10 +1,33 @@
-import { pgTable, text, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const str = (name: string) => text(name).notNull().default("");
 const json = (name: string) => text(name).notNull().default("[]");
+// ── Multi-tenant scoping column ──────────────────────────────────────────────
+// Push #2: backend/src/db/backfill-org.ts ได้ backfill ค่าให้ครบทุกแถวแล้ว (ยืนยัน 0 แถวเหลือ NULL) จึง
+// เปลี่ยนเป็น NOT NULL ได้แล้ว — composite PK ของ liveMeterConfigs/lineProfiles ยังเป็น Push #3 แยกต่างหาก
+const orgId = () => text("org_id").notNull();
+
+// ── องค์กร/ลูกค้าแต่ละราย (แต่ละหอพัก/อพาร์ตเมนต์ที่ใช้ระบบนี้) ──────────────────
+// สร้างอัตโนมัติตอน LINE Login ครั้งแรกของบัญชี LINE ที่ยังไม่เคยมี users แถวใดผูกไว้ (ดู routes/lineLogin.ts)
+export const organizations = pgTable("organizations", {
+  id: text("id").primaryKey(),
+  name: str("name"),
+  // ตัวระบุสั้นๆ ไว้ใช้ใน query string ของ LIFF URL ต่อองค์กร — สุ่มตอนสร้างองค์กร (ดู routes/lineLogin.ts)
+  // แนบเป็น ?org=<slug> ท้าย Endpoint URL ของ LIFF app แต่ละองค์กรใน LINE Developers Console (ดู
+  // routes/liff.ts, resolveOrgIdBySlug ใน lib/orgContext.ts) unique บังคับจริงด้วย slugUnique ด้านล่าง
+  slug: str("slug"),
+  status: text("status").notNull().default("active"), // active | suspended
+  createdAt: str("created_at"),
+  updatedAt: str("updated_at"),
+}, (table) => ({
+  // unique เฉพาะแถวที่มี slug จริง (ไม่กระทบแถวเก่าที่ยังไม่ได้ backfill slug ที่ slug เป็น "" ได้หลายแถว)
+  slugUnique: uniqueIndex("organizations_slug_unique").on(table.slug).where(sql`${table.slug} != ''`),
+}));
 
 export const rooms = pgTable("rooms", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   code: str("code"),
   number: str("number"),
   detail: str("detail"),
@@ -22,6 +45,7 @@ export const rooms = pgTable("rooms", {
 
 export const tenants = pgTable("tenants", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   checkInDate: str("check_in_date"),
   amount: str("amount"),
   idLicense: str("id_license"),
@@ -59,6 +83,7 @@ export const tenants = pgTable("tenants", {
 
 export const bookings = pgTable("bookings", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   timestamp: str("timestamp"),
   source: str("source"),
   // ห้องที่จองจริง (ผูกไว้เพื่อ auto-revert สถานะห้องตอนยกเลิกจอง) — แถวเก่าจากยุค Google Sheets ไม่มีค่านี้
@@ -82,6 +107,7 @@ export const bookings = pgTable("bookings", {
 
 export const towers = pgTable("towers", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   prefix: str("prefix"),
   name: str("name"),
   color: str("color"),
@@ -95,6 +121,7 @@ export const towers = pgTable("towers", {
 
 export const roomTags = pgTable("room_tags", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   name: str("name"),
   icon: str("icon"),
   color: str("color"),
@@ -103,6 +130,7 @@ export const roomTags = pgTable("room_tags", {
 
 export const meterReadings = pgTable("meter_readings", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   monthYear: str("month_year"),
   data: text("data").notNull().default("{}"),
   recordDate: str("record_date"),
@@ -112,6 +140,7 @@ export const meterReadings = pgTable("meter_readings", {
 
 export const vehicles = pgTable("vehicles", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   customerId: str("customer_id"),
   licensePlate: str("license_plate"),
   vehicleTypeId: str("vehicle_type_id"),
@@ -124,6 +153,7 @@ export const vehicles = pgTable("vehicles", {
 
 export const vehicleTypes = pgTable("vehicle_types", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   name: str("name"),
   icon: str("icon"),
   defaultFee: str("default_fee"),
@@ -132,6 +162,7 @@ export const vehicleTypes = pgTable("vehicle_types", {
 
 export const bills = pgTable("bills", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   monthYear: str("month_year"),
   data: text("data").notNull().default("{}"),
   createdAt: str("created_at"),
@@ -144,6 +175,7 @@ export const bills = pgTable("bills", {
 
 export const tenantTags = pgTable("tenant_tags", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   name: str("name"),
   icon: str("icon"),
   color: str("color"),
@@ -152,6 +184,7 @@ export const tenantTags = pgTable("tenant_tags", {
 
 export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   name: str("name"),
   type: str("type"),
   formula: str("formula"),
@@ -161,6 +194,7 @@ export const appSettings = pgTable("app_settings", {
 
 export const payments = pgTable("payments", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   billId: str("bill_id"),
   tenantId: str("tenant_id"),
   paymentDate: str("payment_date"),
@@ -174,6 +208,7 @@ export const payments = pgTable("payments", {
 // ตรวจสอบยอด+บันทึกชำระเงินอัตโนมัติผ่าน EasySlip (ดู services/payments.ts, services/easyslip.ts)
 export const paymentIntents = pgTable("payment_intents", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   tenantId: str("tenant_id"),
   tenantName: str("tenant_name"),
   billId: str("bill_id"),
@@ -188,8 +223,12 @@ export const paymentIntents = pgTable("payment_intents", {
   paymentId: str("payment_id"),
 });
 
+// PK ปัจจุบันคือ slaveId เดี่ยวๆ (รหัสอุปกรณ์ Modbus จริง) — เฟสถัดไปเมื่อมีมากกว่า 1 องค์กรใช้ฮาร์ดแวร์
+// พร้อมกัน ต้องเปลี่ยนเป็น composite key (org_id, slave_id) เพราะรหัส slave ซ้ำกันข้ามองค์กรได้ (ดู plan
+// migration Push #3) — ยังไม่มี route ไหนอ่าน/เขียนตารางนี้ในโค้ดปัจจุบัน จึงยังไม่กระทบ endpoint ใดๆ ตอนนี้
 export const liveMeterConfigs = pgTable("live_meter_configs", {
   slaveId: text("slave_id").primaryKey(),
+  orgId: orgId(),
   roomId: str("room_id"),
   type: str("type"),
   updatedAt: str("updated_at"),
@@ -209,8 +248,22 @@ export const liveMeterLogs = pgTable("live_meter_logs", {
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  passwordHash: str("password_hash"),
+  orgId: orgId(),
+  // "owner" = ผู้สร้างองค์กร (ล็อกอินผ่าน LINE Login) / "staff" = บัญชีลูกน้องที่ owner สร้างเพิ่มด้วย username/password
+  role: text("role").notNull().default("staff"),
+  // ทั้ง username และ passwordHash เป็น nullable ตอนนี้ (เดิมบังคับ notNull+unique ทั้งคู่) เพราะบัญชีที่สร้าง
+  // จาก LINE Login ไม่มีรหัสผ่านเลยจนกว่าเจ้าของจะมาตั้งเพิ่มเองทีหลัง — ความ unique ของ username ต้องกลาย
+  // เป็นแบบ "ต่อองค์กร" (org_id, username) แทน unique ทั้งระบบแบบเดิม เพราะสองบ้านเช่าตั้งชื่อผู้ใช้ซ้ำกันได้
+  username: text("username"),
+  passwordHash: text("password_hash"),
+  // ผูกกับบัญชี LINE ส่วนตัวของเจ้าของ (LINE Login "sub") — คนละอย่างกับ tenants.lineUserId (ผู้เช่า) และ
+  // คนละอย่างกับ Messaging API ของแต่ละองค์กร (เก็บใน app_config) เป็น identity ของ "คนที่ล็อกอินเข้าระบบหลังบ้าน"
+  lineUserId: text("line_user_id"),
+  // เบอร์โทรที่ superadmin กรอกไว้ตอนสร้างองค์กรแทน username/password (ดู routes/superadmin.ts) — ใช้เป็น
+  // "รหัสจับคู่" ครั้งเดียวตอนเจ้าของมาล็อกอินด้วย LINE ครั้งแรก (หน้า Login กรอกเบอร์นี้ก่อนกดเชื่อม LINE ดู
+  // routes/lineLogin.ts) เพื่อผูก lineUserId เข้ากับบัญชีที่สร้างไว้ล่วงหน้าแทนที่จะสร้างองค์กรใหม่ซ้อน หลังผูก
+  // สำเร็จแล้วค่านี้ยังเก็บไว้เฉยๆ ไม่ได้ล้าง (ใช้ lineUserId ไม่ใช่ phone เป็นตัวเช็คว่า "ผูกแล้วหรือยัง")
+  phone: text("phone"),
   displayName: str("display_name"),
   createdAt: str("created_at"),
   updatedAt: str("updated_at"),
@@ -219,12 +272,20 @@ export const users = pgTable("users", {
   // (claim "sid") ด้วย ทุก request ที่ล็อกอินแล้วจะเทียบ sid ในโทเค็นกับค่านี้ในนี้เสมอ (ดู authDerive.ts)
   // ถ้าไม่ตรงกันแปลว่ามีการ login ซ้อนจากที่อื่นทีหลัง โทเค็นเก่าจะถือเป็นใช้ไม่ได้ทันที (บังคับ session เดียว)
   currentSessionId: str("current_session_id"),
-});
+}, (table) => ({
+  // unique เฉพาะแถวที่มี lineUserId จริง (ไม่กระทบบัญชี username/password ที่ lineUserId เป็น null ได้หลายแถว)
+  // ป้องกัน race condition ตอน LINE Login ครั้งแรกพร้อมกัน 2 request ไม่ให้สร้างองค์กรซ้ำ (ดู routes/lineLogin.ts)
+  lineUserIdUnique: uniqueIndex("users_line_user_id_unique").on(table.lineUserId).where(sql`${table.lineUserId} IS NOT NULL`),
+  // unique เฉพาะแถวที่มี phone จริง — กันสร้างสองบัญชี "รอผูก LINE" ด้วยเบอร์เดียวกันซ้อนกัน (จะทำให้ตอนกรอก
+  // เบอร์เชื่อม LINE ไม่รู้ว่าจะผูกกับบัญชีไหน) ดู routes/superadmin.ts, routes/lineLogin.ts
+  phoneUnique: uniqueIndex("users_phone_unique").on(table.phone).where(sql`${table.phone} IS NOT NULL`),
+}));
 
 // บันทึกกิจกรรม (audit log) — เก็บทุกการกระทำที่เปลี่ยนแปลงข้อมูล (POST/PUT/PATCH/DELETE) ทั้งระบบ
 // เขียนโดย middleware กลางใน index.ts (ดักทุก request อัตโนมัติ) + จุดพิเศษ login/logout ใน auth.ts
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   timestamp: str("timestamp"),
   userId: str("user_id"),
   username: str("username"),
@@ -245,6 +306,7 @@ export const activityLogs = pgTable("activity_logs", {
 // ประวัติแชท LINE 2 ทาง — ข้อความเข้า (จาก webhook) และข้อความออก (พนักงานตอบจากหน้า Inbox)
 export const chatMessages = pgTable("chat_messages", {
   id: text("id").primaryKey(),
+  orgId: orgId(),
   lineUserId: text("line_user_id").notNull(),
   tenantId: str("tenant_id"),
   direction: text("direction").notNull(), // "in" | "out"
@@ -262,13 +324,19 @@ export const chatMessages = pgTable("chat_messages", {
 
 // แคชโปรไฟล์ LINE (ชื่อ+รูปโปรไฟล์) ต่อ lineUserId — ใช้แสดงรูปโปรไฟล์ในหน้าแชท เติมข้อมูลจาก LINE Profile
 // API ตอนมีข้อความเข้าใหม่ (ดู lineWebhook.ts) หรือกดรีเฟรชเองจากหน้าแชท (ดู routes/chat.ts)
+// PK เดิมเป็น lineUserId เดี่ยวๆ — เฟสถัดไปจะเปลี่ยนเป็น composite (org_id, line_user_id) เพราะบัญชี LINE
+// เดียวกันอาจทักแชทเข้ามาหลายองค์กรได้ (ดู plan migration Push #3) ตอนนี้ยังคง PK เดิมไว้ก่อน
 export const lineProfiles = pgTable("line_profiles", {
   lineUserId: text("line_user_id").primaryKey(),
+  orgId: orgId(),
   displayName: str("display_name"),
   pictureUrl: str("picture_url"),
   updatedAt: str("updated_at"),
 });
 
+// ── ค่าคอนฟิกระบบต่อองค์กร ────────────────────────────────────────────────────
+// เดิมเป็น singleton แถวเดียวทั้งระบบ (id = "default" เสมอ) — ตอนนี้ id ของแถวนี้ "คือ" org_id ตรงๆ
+// (แถวละ 1 องค์กร) แทนที่ sentinel "default" เดิม ดู getOrCreateConfig(orgId) ใน routes/settings.ts
 export const appConfig = pgTable("app_config", {
   id: text("id").primaryKey(),
   electricRate: str("electric_rate"),
@@ -296,9 +364,16 @@ export const appConfig = pgTable("app_config", {
   // นาทีที่ไม่มีการใช้งานแล้วให้เด้งออกจากระบบอัตโนมัติ — "0" = ปิดใช้งาน (ไม่ auto-logout)
   sessionTimeoutMinutes: str("session_timeout_minutes"),
   // ── ส่งบิลทาง LINE (LINE Messaging API — Push Message ไปยัง lineUserId ของผู้เช่าแต่ละคน) ──
+  // token/secret ของแต่ละองค์กรเป็น Messaging API channel ของ "ตัวเอง" (คนละอย่างกับ LINE Login channel
+  // ของผู้ให้บริการระบบที่ใช้ตอนเจ้าของหอพักล็อกอินเข้าหลังบ้าน — ดู routes/lineLogin.ts)
   lineMessagingEnabled: text("line_messaging_enabled").notNull().default("false"),
   lineChannelAccessToken: str("line_channel_access_token"),
   lineChannelSecret: str("line_channel_secret"),
+  // LINE User ID ของบอทช่องทางนี้เอง (ดึงจาก GET /v2/bot/info ตอนบันทึก lineChannelAccessToken — ดู
+  // getBotUserId ใน services/line.ts) ใช้จับคู่ payload.destination ที่ LINE Webhook ส่งมากับองค์กรเจ้าของ
+  // ช่องทางจริง (ดู resolveOrgIdByDestination ใน lib/orgContext.ts, routes/lineWebhook.ts) ว่างได้ถ้ายังไม่
+  // เคยบันทึก token สำเร็จ หรือดึงจาก LINE ไม่สำเร็จตอนบันทึก (best-effort ไม่บล็อกการบันทึกค่าอื่น)
+  lineBotUserId: str("line_bot_user_id"),
   lineAutoSendEnabled: text("line_auto_send_enabled").notNull().default("false"),
   // ส่งบิลใบเดียวกันให้ "ผู้ร่วมพักอาศัย" ที่ผูก LINE User ID ไว้ด้วยพร้อมกับผู้ทำสัญญาหลักไหม (ดู
   // sendBillLineForRoom ใน services/line.ts) เปิดเป็นค่าเริ่มต้น ปิดได้ที่หน้า Settings ถ้าไม่ต้องการ
@@ -335,5 +410,11 @@ export const appConfig = pgTable("app_config", {
   // อัตโนมัติ (ดู services/easyslip.ts, services/payments.ts) ──
   easySlipApiKey: str("easyslip_api_key"),
   paymentPromptPayId: str("payment_promptpay_id"), // เบอร์มือถือ (10 หลัก) หรือเลขบัตร ปชช. (13 หลัก) ที่ผูก PromptPay ไว้
+  // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — ค่า default "false" มีผลกับ "องค์กรใหม่" เท่านั้น (แถวนี้
+  // ถูกสร้างแบบ lazy ตอนเปิดหน้า Settings ครั้งแรก ดู getOrCreateConfig ใน routes/settings.ts) องค์กรเดิมที่มี
+  // อยู่ก่อนฟีเจอร์นี้ถูก backfill เป็น "true" แล้วครั้งเดียว (ดู db/backfill-setup-completed.ts) เป็น false
+  // อยู่ = ฝั่ง frontend บังคับพาไปหน้า Settings ค้างไว้จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" (ดู
+  // POST /settings/config/complete-setup ด้านล่าง, AuthenticatedShell ใน frontend/src/App.tsx)
+  setupCompleted: text("setup_completed").notNull().default("false"),
   updatedAt: str("updated_at"),
 });

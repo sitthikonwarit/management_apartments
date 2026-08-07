@@ -39,6 +39,8 @@ export function sanitizeForLog(data: unknown): any {
 }
 
 export async function recordLog(entry: {
+  // ว่าง = ไม่ทราบองค์กร (เช่น พยายาม login ด้วย username ที่ไม่มีอยู่จริง — ยังไม่รู้ว่าเป็นของใคร)
+  orgId?: string;
   userId: string;
   username: string;
   method: string;
@@ -57,6 +59,7 @@ export async function recordLog(entry: {
     await db.insert(activityLogs).values({
       id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       timestamp: new Date().toISOString(),
+      orgId: entry.orgId ?? "",
       userId: entry.userId,
       username: entry.username,
       method: entry.method,

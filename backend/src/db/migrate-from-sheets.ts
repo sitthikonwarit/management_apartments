@@ -6,6 +6,7 @@ import {
   tenantTags, appSettings, payments, liveMeterConfigs,
 } from "./schema";
 import { COL } from "../config";
+import { encryptField } from "../lib/encryption";
 
 function s(val: any): string {
   if (val === null || val === undefined) return "";
@@ -59,17 +60,17 @@ async function main() {
       id: s(r[COL.CUSTOMERS.ID]),
       checkInDate: s(r[COL.CUSTOMERS.CHECK_IN_DATE]),
       amount: s(r[COL.CUSTOMERS.AMOUNT]),
-      idLicense: s(r[COL.CUSTOMERS.ID_LICENSE]),
+      idLicense: encryptField(s(r[COL.CUSTOMERS.ID_LICENSE])),
       firstName: s(r[COL.CUSTOMERS.FIRST_NAME]),
       lastName: s(r[COL.CUSTOMERS.LAST_NAME]),
-      houseNo: s(r[COL.CUSTOMERS.HOUSE_NO]),
-      soi: s(r[COL.CUSTOMERS.SOI]),
-      road: s(r[COL.CUSTOMERS.ROAD]),
-      province: s(r[COL.CUSTOMERS.PROVINCE]),
-      amphoe: s(r[COL.CUSTOMERS.AMPHOE]),
-      tambon: s(r[COL.CUSTOMERS.TAMBON]),
-      zipcode: s(r[COL.CUSTOMERS.ZIPCODE]),
-      address: s(r[COL.CUSTOMERS.ADDRESS]),
+      houseNo: encryptField(s(r[COL.CUSTOMERS.HOUSE_NO])),
+      soi: encryptField(s(r[COL.CUSTOMERS.SOI])),
+      road: encryptField(s(r[COL.CUSTOMERS.ROAD])),
+      province: encryptField(s(r[COL.CUSTOMERS.PROVINCE])),
+      amphoe: encryptField(s(r[COL.CUSTOMERS.AMPHOE])),
+      tambon: encryptField(s(r[COL.CUSTOMERS.TAMBON])),
+      zipcode: encryptField(s(r[COL.CUSTOMERS.ZIPCODE])),
+      address: encryptField(s(r[COL.CUSTOMERS.ADDRESS])),
       tel: s(r[COL.CUSTOMERS.TEL]),
       idLine: s(r[COL.CUSTOMERS.ID_LINE]),
       pdfLinks: s(r[COL.CUSTOMERS.PDF_LINKS]) || "[]",

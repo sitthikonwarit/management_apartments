@@ -59,6 +59,8 @@ function BillStatusBadge({ bill }: { bill: BillRow }) {
 }
 
 export default function LiffProfilePage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
@@ -93,7 +95,7 @@ export default function LiffProfilePage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
         setPreviewConfig({ appIdentity: cfg.appIdentity, features: cfg.features, overdue: cfg.overdue });
@@ -108,7 +110,7 @@ export default function LiffProfilePage() {
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
 
-        const result = await liffApi.profile(token);
+        const result = await liffApi.profile(token, org);
         if (cancelled) return;
         if (result.linked) {
           setTenant(result.tenant);
@@ -132,7 +134,7 @@ export default function LiffProfilePage() {
     setDetailData(null);
     setLoadingDetail(true);
     try {
-      const result = await liffApi.billDetail(accessToken, bill.billId, bill.roomId);
+      const result = await liffApi.billDetail(accessToken, bill.billId, bill.roomId, org);
       setDetailData(result);
     } catch {
       setDetailData(null);
@@ -146,7 +148,7 @@ export default function LiffProfilePage() {
     if (!/^\d{4}$/.test(digits)) { setVerifyError("กรุณากรอกตัวเลข 4 หลัก"); return; }
     setVerifying(true); setVerifyError("");
     try {
-      const result = await liffApi.profileFull(accessToken, digits);
+      const result = await liffApi.profileFull(accessToken, digits, org);
       setFullProfile(result);
     } catch (e: any) {
       setVerifyError(e?.response?.data?.error ?? e?.message ?? "ยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");

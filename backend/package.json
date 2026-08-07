@@ -6,7 +6,10 @@
     "start": "bun src/index.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:migrate": "bun src/db/migrate-from-sheets.ts"
+    "db:migrate": "bun src/db/migrate-from-sheets.ts",
+    "db:backfill-org": "bun src/db/backfill-org.ts",
+    "db:backfill-setup-completed": "bun src/db/backfill-setup-completed.ts",
+    "db:encrypt-existing-data": "bun src/db/encrypt-existing-data.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.3",

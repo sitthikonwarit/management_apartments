@@ -3,6 +3,7 @@ import { authApi, getAuthToken, setAuthToken, clearAuthToken } from "../api/clie
 
 export interface AuthUser {
   id: string;
+  orgId: string;
   username: string;
   displayName: string;
 }
@@ -20,7 +21,9 @@ interface AuthContextValue {
   // เครื่องนี้ออกอัตโนมัติ — ใช้โชว์ข้อความอธิบายที่หน้า login แทนที่จะปล่อยให้งงว่าทำไมหลุดออกมาเฉยๆ
   sessionRevoked: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName?: string) => Promise<void>;
+  // เข้าสู่ระบบด้วยโทเค็นที่ backend ออกให้แล้ว (มาจากขั้นตอน LINE Login redirect — ดู
+  // pages/LineLoginCallbackPage.tsx) ต่างจาก login() ตรงที่ไม่มี username/password ให้ยิง /auth/login เอง
+  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
   lock: () => void;
   unlock: (password: string) => Promise<void>;
@@ -32,7 +35,7 @@ const AuthContext = createContext<AuthContextValue>({
   locked: false,
   sessionRevoked: false,
   login: async () => {},
-  register: async () => {},
+  loginWithToken: async () => {},
   logout: () => {},
   lock: () => {},
   unlock: async () => {},
@@ -104,10 +107,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionRevoked(false);
   }
 
-  async function register(username: string, password: string, displayName?: string) {
-    const res = await authApi.register(username, password, displayName);
-    setAuthToken(res.token);
-    setUser(res.user);
+  // โทเค็นออกมาจาก backend แล้ว (ผ่านการ redirect กลับจาก LINE Login เรียบร้อย) แค่เก็บแล้วดึงข้อมูล
+  // ผู้ใช้ปัจจุบันมาเติม state — ไม่มี username/password ให้เรียก /auth/login ซ้ำ
+  async function loginWithToken(token: string) {
+    setAuthToken(token);
+    try {
+      const u = await authApi.me();
+      setUser(u);
+      setSessionRevoked(false);
+    } catch (e) {
+      clearAuthToken();
+      throw e;
+    }
   }
 
   // ปลดล็อกหน้าจอ — ใช้ชื่อผู้ใช้เดิม (ไม่ต้องพิมพ์ใหม่) ยืนยันแค่รหัสผ่านแล้วต่อเซสชันเดิมที่หน้าเดิม
@@ -120,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, locked, sessionRevoked, login, register, logout, lock, unlock }}>
+    <AuthContext.Provider value={{ user, loading, locked, sessionRevoked, login, loginWithToken, logout, lock, unlock }}>
       {children}
     </AuthContext.Provider>
   );

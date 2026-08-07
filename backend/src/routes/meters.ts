@@ -1,10 +1,11 @@
 import { Elysia } from "elysia";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { existsSync } from "fs";
 import { db } from "../db";
 import { meterReadings } from "../db/schema";
 import { getRows } from "../services/sheets";
 import { COL } from "../config";
+import { authDerive } from "../lib/authDerive";
 
 function parseRow(r: typeof meterReadings.$inferSelect) {
   let data: any = {};
@@ -13,12 +14,14 @@ function parseRow(r: typeof meterReadings.$inferSelect) {
 }
 
 export const metersRoute = new Elysia({ prefix: "/meters" })
-  .get("/", async () => {
-    const rows = await db.select().from(meterReadings);
+  .use(authDerive)
+  .get("/", async ({ authUser }) => {
+    const rows = await db.select().from(meterReadings).where(eq(meterReadings.orgId, authUser!.orgId));
     return rows.map(parseRow).sort((a, b) => b.monthYear.localeCompare(a.monthYear));
   })
   // ── sync-sheets ต้องอยู่ก่อน /:id เพื่อไม่ให้ชนกับ dynamic route ──
-  .post("/sync-sheets", async ({ set }) => {
+  .post("/sync-sheets", async ({ authUser, set }) => {
+    const orgId = authUser!.orgId;
     // ปิดชั่วคราว — ตั้ง GOOGLE_INTEGRATION_ENABLED=true ใน .env เพื่อเปิดกลับมาใช้งาน
     if (process.env.GOOGLE_INTEGRATION_ENABLED !== "true") {
       set.status = 503;
@@ -69,13 +72,14 @@ export const metersRoute = new Elysia({ prefix: "/meters" })
         }
         const record = {
           id,
+          orgId,
           monthYear:  s(r[COL.METER_READINGS.MONTH_YEAR]),
           data:       dataStr || "{}",
           recordDate: s(r[COL.METER_READINGS.RECORD_DATE]),
           createdAt:  s(r[COL.METER_READINGS.CREATED_AT]),
           updatedAt:  s(r[COL.METER_READINGS.UPDATED_AT]),
         };
-        const [existing] = await db.select().from(meterReadings).where(eq(meterReadings.id, id));
+        const [existing] = await db.select().from(meterReadings).where(and(eq(meterReadings.id, id), eq(meterReadings.orgId, orgId)));
         if (existing) {
           await db.update(meterReadings).set(record).where(eq(meterReadings.id, id));
           updated++;
@@ -84,7 +88,7 @@ export const metersRoute = new Elysia({ prefix: "/meters" })
           inserted++;
         }
       }
-      const all = await db.select().from(meterReadings);
+      const all = await db.select().from(meterReadings).where(eq(meterReadings.orgId, orgId));
       const sampleRaw = rows.length > 0 ? String(rows[0][COL.METER_READINGS.DATA] ?? "").slice(0, 500) : "";
       return { inserted, updated, skipped, total: all.length, records: all.map(parseRow), sampleRaw };
     } catch (e: any) {
@@ -94,24 +98,25 @@ export const metersRoute = new Elysia({ prefix: "/meters" })
       return { error: msg };
     }
   })
-  .post("/", async ({ body, set }) => {
+  .post("/", async ({ authUser, body, set }) => {
+    const orgId = authUser!.orgId;
     const { monthYear } = body as any;
     if (!monthYear) { set.status = 400; return { error: "ต้องระบุเดือน/ปี" }; }
-    const existing = await db.select().from(meterReadings).where(eq(meterReadings.monthYear, monthYear));
+    const existing = await db.select().from(meterReadings).where(and(eq(meterReadings.monthYear, monthYear), eq(meterReadings.orgId, orgId)));
     if (existing.length) { set.status = 409; return { error: "มีข้อมูลเดือนนี้อยู่แล้ว" }; }
     const now = new Date();
     const id = `MTR-${Date.now()}`;
     const ts = now.toISOString();
     await db.insert(meterReadings).values({
-      id, monthYear, data: "{}", recordDate: ts.slice(0, 10), createdAt: ts, updatedAt: ts,
+      id, orgId, monthYear, data: "{}", recordDate: ts.slice(0, 10), createdAt: ts, updatedAt: ts,
     });
     const [row] = await db.select().from(meterReadings).where(eq(meterReadings.id, id));
     return parseRow(row);
   })
-  .put("/:id", async ({ params, body, set }) => {
+  .put("/:id", async ({ authUser, params, body, set }) => {
     const { id } = params;
     const { data } = body as any;
-    const [existing] = await db.select().from(meterReadings).where(eq(meterReadings.id, id));
+    const [existing] = await db.select().from(meterReadings).where(and(eq(meterReadings.id, id), eq(meterReadings.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบข้อมูล" }; }
     const updatedAt = new Date().toISOString();
     await db.update(meterReadings).set({
@@ -121,8 +126,8 @@ export const metersRoute = new Elysia({ prefix: "/meters" })
     const [row] = await db.select().from(meterReadings).where(eq(meterReadings.id, id));
     return parseRow(row);
   })
-  .delete("/:id", async ({ params, set }) => {
-    const [existing] = await db.select().from(meterReadings).where(eq(meterReadings.id, params.id));
+  .delete("/:id", async ({ authUser, params, set }) => {
+    const [existing] = await db.select().from(meterReadings).where(and(eq(meterReadings.id, params.id), eq(meterReadings.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบข้อมูล" }; }
     await db.delete(meterReadings).where(eq(meterReadings.id, params.id));
     return { deleted: params.id };

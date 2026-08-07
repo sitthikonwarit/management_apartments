@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { users } from "../db/schema";
+import { users, organizations } from "../db/schema";
 import { signToken } from "../lib/jwt";
 import { authDerive } from "../lib/authDerive";
 import { recordLog } from "../lib/activityLog";
@@ -10,6 +10,7 @@ import { revokeSessionsForUser } from "../lib/wsHub";
 function parseUser(r: typeof users.$inferSelect) {
   return {
     id: r.id,
+    orgId: r.orgId,
     username: r.username,
     displayName: r.displayName,
     createdAt: r.createdAt,
@@ -18,65 +19,50 @@ function parseUser(r: typeof users.$inferSelect) {
   };
 }
 
+// ตัด .toLowerCase() ออกโดยตั้งใจ — username ต้องพิมพ์ตัวพิมพ์เล็ก/ใหญ่ตรงเป๊ะทั้งตอนสมัครและตอนล็อกอิน
+// ("Admin" กับ "admin" ถือเป็นคนละชื่อผู้ใช้กัน) เหลือแค่ trim ช่องว่างหัวท้ายที่พิมพ์เผลอเท่านั้น
 function normalizeUsername(v: unknown): string {
-  return String(v ?? "").trim().toLowerCase();
+  return String(v ?? "").trim();
 }
 
-// ── เส้นทางสาธารณะ (ไม่ต้องล็อกอิน): เช็คว่ามีผู้ใช้ในระบบหรือยัง, ตั้งค่าบัญชีแรก, เข้าสู่ระบบ ──
+// ── เส้นทางสาธารณะ (ไม่ต้องล็อกอิน): เข้าสู่ระบบด้วย username/password ──────────────
+// การสมัคร/สร้างองค์กรใหม่ทำผ่าน LINE Login เท่านั้นแล้ว (ดู routes/lineLogin.ts) — endpoint นี้เหลือไว้
+// สำหรับบัญชีพนักงาน (username/password) ที่เจ้าขององค์กรสร้างเพิ่มจากหน้า Settings หลังมีองค์กรแล้วเท่านั้น
+// (เดิมมี /auth/setup-status + /auth/register ไว้ "สมัครบัญชีแรกของทั้งระบบ" แบบไม่ต้องล็อกอิน — เอาออกแล้ว
+// เพราะแนวคิด "ยังไม่มีผู้ใช้เลยในระบบ" ใช้ไม่ได้อีกต่อไปเมื่อมีมากกว่า 1 องค์กร)
 export const authPublicRoute = new Elysia({ prefix: "/auth" })
-  .get("/setup-status", async () => {
-    const rows = await db.select({ id: users.id }).from(users).limit(1);
-    return { hasUsers: rows.length > 0 };
-  })
-  // สมัครบัญชีแรกได้แบบไม่ต้องล็อกอิน "เฉพาะตอนที่ยังไม่มีผู้ใช้เลยในระบบ" (ตั้งค่าครั้งแรกใช้งาน) —
-  // หลังจากนั้นต้องเข้าสู่ระบบก่อนแล้วไปเพิ่มผู้ใช้ที่ /auth/users แทน กันคนแปลกหน้ามาสมัครเองทีหลัง
-  .post("/register", async ({ body, set, headers, server, request }) => {
-    const b = body as any;
-    const username = normalizeUsername(b.username);
-    const password = String(b.password ?? "");
-    const displayName = String(b.displayName ?? "").trim();
-    if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
-    if (password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
-
-    const existingAny = await db.select({ id: users.id }).from(users).limit(1);
-    if (existingAny.length > 0) {
-      set.status = 403;
-      return { error: "ระบบมีผู้ใช้อยู่แล้ว กรุณาเข้าสู่ระบบแล้วเพิ่มผู้ใช้จากหน้าตั้งค่า" };
-    }
-
-    const id = `USR-${Date.now()}`;
-    const ts = new Date().toISOString();
-    const passwordHash = await Bun.password.hash(password);
-    const sessionId = crypto.randomUUID();
-    await db.insert(users).values({ id, username, passwordHash, displayName, createdAt: ts, updatedAt: ts, currentSessionId: sessionId });
-    const [row] = await db.select().from(users).where(eq(users.id, id));
-    const token = signToken({ sub: row.id, username: row.username, sid: sessionId });
-    await recordLog({
-      userId: row.id, username: row.username, method: "POST", path: "/auth/register",
-      action: "login", entityType: "auth", description: "สมัครบัญชีแรกและเข้าสู่ระบบ", status: 200,
-      requestBody: body, userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
-    });
-    return { token, user: parseUser(row) };
-  })
   .post("/login", async ({ body, set, headers, server, request }) => {
     const b = body as any;
     const username = normalizeUsername(b.username);
     const password = String(b.password ?? "");
     if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
 
-    const [row] = await db.select().from(users).where(eq(users.username, username));
-    if (!row || !(await Bun.password.verify(password, row.passwordHash))) {
+    // username unique แค่ "ต่อองค์กร" ไม่ใช่ทั้งระบบ (สองหอพักตั้งชื่อผู้ใช้ "admin" ซ้ำกันได้) อาจเจอมากกว่า
+    // 1 แถวที่ username ตรงกัน — วนเช็ครหัสผ่านทีละแถวจนกว่าจะเจอที่ตรง (แถวที่เหลือ hash ไม่ตรงจะ verify ไม่ผ่านเอง)
+    const candidates = await db.select().from(users).where(eq(users.username, username));
+    let row: typeof users.$inferSelect | undefined;
+    for (const c of candidates) {
+      if (c.passwordHash && (await Bun.password.verify(password, c.passwordHash))) { row = c; break; }
+    }
+    if (!row || !row.orgId) {
       set.status = 401;
       return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" };
+    }
+    // องค์กรถูกระงับโดยหน้าควบคุมแพลตฟอร์ม (ดู routes/superadmin.ts) — ห้ามออก token ใหม่เลย แม้ชื่อ
+    // ผู้ใช้/รหัสผ่านจะถูกต้องก็ตาม (เหมือนกับที่ authDerive.ts เช็คซ้ำทุก request สำหรับ token ที่ออกไปแล้ว)
+    const [org] = await db.select({ status: organizations.status }).from(organizations).where(eq(organizations.id, row.orgId));
+    if (org?.status === "suspended") {
+      set.status = 403;
+      return { error: "องค์กรนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" };
     }
     const ts = new Date().toISOString();
     // สุ่มรหัสเซสชันใหม่ทุกครั้งที่ login สำเร็จ — ทับของเดิม ทำให้โทเค็นเก่าที่เครื่องอื่นถืออยู่ใช้ไม่ได้
     // ทันที (authDerive จะเทียบ sid แล้วปฏิเสธ) + ดันแจ้งเตือนเครื่องเก่าที่ยังต่อ WebSocket อยู่ให้ออกทันที
     const sessionId = crypto.randomUUID();
     await db.update(users).set({ lastLoginAt: ts, currentSessionId: sessionId }).where(eq(users.id, row.id));
-    const token = signToken({ sub: row.id, username: row.username, sid: sessionId });
+    const token = signToken({ sub: row.id, username: row.username, org: row.orgId, sid: sessionId });
     await recordLog({
-      userId: row.id, username: row.username, method: "POST", path: "/auth/login",
+      orgId: row.orgId, userId: row.id, username: row.username, method: "POST", path: "/auth/login",
       action: "login", entityType: "auth", description: "เข้าสู่ระบบ", status: 200,
       requestBody: body, userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
     });
@@ -92,7 +78,7 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
   .post("/logout", async ({ authUser, set, headers, server, request }) => {
     if (!authUser) { set.status = 401; return { error: "กรุณาเข้าสู่ระบบ" }; }
     await recordLog({
-      userId: authUser.id, username: authUser.username, method: "POST", path: "/auth/logout",
+      orgId: authUser.orgId, userId: authUser.id, username: authUser.username, method: "POST", path: "/auth/logout",
       action: "logout", entityType: "auth", description: "ออกจากระบบ", status: 200,
       userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
     });
@@ -104,30 +90,34 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
     if (!row) { set.status = 404; return { error: "ไม่พบผู้ใช้" }; }
     return parseUser(row);
   })
-  .get("/users", async () => {
-    const rows = await db.select().from(users);
+  // ── จัดการบัญชีพนักงาน (username/password) ภายในองค์กรตัวเองเท่านั้น ──────────────
+  // แก้บั๊กความปลอดภัยเดิม: ก่อนหน้านี้ทั้ง 4 endpoint นี้ไม่กรององค์กรเลย (list/create/edit/delete ข้ามองค์กร
+  // ได้หมดถ้ารู้/เดา user id) ตอนนี้ทุกจุดต้องกรอง org_id ให้ตรงกับ authUser.orgId เสมอ
+  .get("/users", async ({ authUser }) => {
+    const rows = await db.select().from(users).where(eq(users.orgId, authUser!.orgId));
     return rows.map(parseUser);
   })
-  .post("/users", async ({ body, set }) => {
+  .post("/users", async ({ authUser, body, set }) => {
+    const orgId = authUser!.orgId;
     const b = body as any;
     const username = normalizeUsername(b.username);
     const password = String(b.password ?? "");
     const displayName = String(b.displayName ?? "").trim();
     if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
     if (password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
-    const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+    const [dup] = await db.select({ id: users.id }).from(users).where(and(eq(users.username, username), eq(users.orgId, orgId)));
     if (dup) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว" }; }
 
     const id = `USR-${Date.now()}`;
     const ts = new Date().toISOString();
     const passwordHash = await Bun.password.hash(password);
-    await db.insert(users).values({ id, username, passwordHash, displayName, createdAt: ts, updatedAt: ts });
+    await db.insert(users).values({ id, orgId, role: "staff", username, passwordHash, displayName, createdAt: ts, updatedAt: ts });
     const [row] = await db.select().from(users).where(eq(users.id, id));
     return parseUser(row);
   })
   // เปลี่ยนรหัสผ่าน และ/หรือชื่อที่แสดง — ส่ง password มาก็ต่อเมื่อจะเปลี่ยนรหัสผ่านเท่านั้น
-  .put("/users/:id", async ({ params, body, set }) => {
-    const [existing] = await db.select().from(users).where(eq(users.id, params.id));
+  .put("/users/:id", async ({ authUser, params, body, set }) => {
+    const [existing] = await db.select().from(users).where(and(eq(users.id, params.id), eq(users.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบผู้ใช้" }; }
     const b = body as any;
     const patch: Partial<typeof users.$inferInsert> = { updatedAt: new Date().toISOString() };
@@ -142,8 +132,11 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
     return parseUser(row);
   })
   .delete("/users/:id", async ({ params, authUser, set }) => {
+    const orgId = authUser!.orgId;
     if (authUser?.id === params.id) { set.status = 400; return { error: "ลบบัญชีที่กำลังใช้งานอยู่ไม่ได้" }; }
-    const rows = await db.select({ id: users.id }).from(users);
+    const [existing] = await db.select().from(users).where(and(eq(users.id, params.id), eq(users.orgId, orgId)));
+    if (!existing) { set.status = 404; return { error: "ไม่พบผู้ใช้" }; }
+    const rows = await db.select({ id: users.id }).from(users).where(eq(users.orgId, orgId));
     if (rows.length <= 1) { set.status = 400; return { error: "ต้องมีผู้ใช้เหลืออย่างน้อย 1 บัญชี" }; }
     await db.delete(users).where(eq(users.id, params.id));
     return { deleted: params.id };

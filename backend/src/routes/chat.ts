@@ -8,6 +8,8 @@ import {
   getOutstandingBillsForTenant,
 } from "../services/line";
 import { recordConfirmedPayment } from "../services/payments";
+import { authDerive } from "../lib/authDerive";
+import { signUploadPath } from "../lib/encryption";
 
 // ข้อความตัวอย่างแสดงในรายชื่อสนทนา — "bill"/"receipt" เก็บ JSON ดิบไว้ใน text (ดู services/line.ts:
 // logOutboundChatMessage) ต้องแปลงเป็นข้อความสั้นๆ อ่านง่ายแทน ไม่งั้นโชว์ JSON ดิบๆ ในหน้ารายชื่อ
@@ -53,6 +55,25 @@ const ALLOWED_STICKERS = new Set([
   "11537:52002734", "11537:52002735", "11537:52002736", "11537:52002737", "11537:52002738",
 ]);
 
+// ข้อความ "repair"/"payment_confirm" ฝัง URL รูปภาพไว้ในตัว text (JSON string) เอง — คนละที่กับคอลัมน์
+// imageUrl/fileUrl ด้านล่าง ต้องเซ็นแยกต่างหาก (ดู lib/encryption.ts) ไม่งั้นรูปในการ์ดแจ้งซ่อม/แจ้งชำระเงิน
+// จะโหลดไม่ขึ้น (ตัวเก็บใน DB เป็น path ดิบไม่มีลายเซ็นเหมือนทุกที่อื่น เซ็นตอนส่งออกเท่านั้น)
+function signMessageText(messageType: string, text: string): string {
+  if (messageType !== "repair" && messageType !== "payment_confirm") return text;
+  try {
+    const snapshot = JSON.parse(text);
+    if (messageType === "repair") {
+      if (Array.isArray(snapshot.tenantPhotos)) snapshot.tenantPhotos = snapshot.tenantPhotos.map(signUploadPath);
+      if (Array.isArray(snapshot.adminPhotos)) snapshot.adminPhotos = snapshot.adminPhotos.map(signUploadPath);
+    } else if (snapshot.slipUrl) {
+      snapshot.slipUrl = signUploadPath(snapshot.slipUrl);
+    }
+    return JSON.stringify(snapshot);
+  } catch {
+    return text;
+  }
+}
+
 function parseMessage(r: typeof chatMessages.$inferSelect) {
   return {
     id: r.id,
@@ -60,9 +81,9 @@ function parseMessage(r: typeof chatMessages.$inferSelect) {
     tenantId: r.tenantId || null,
     direction: r.direction as "in" | "out",
     messageType: r.messageType,
-    text: r.text,
-    imageUrl: r.imageUrl || null,
-    fileUrl: r.fileUrl || null,
+    text: signMessageText(r.messageType, r.text),
+    imageUrl: r.imageUrl ? signUploadPath(r.imageUrl) : null,
+    fileUrl: r.fileUrl ? signUploadPath(r.fileUrl) : null,
     fileName: r.fileName || null,
     packageId: r.packageId || null,
     stickerId: r.stickerId || null,
@@ -72,28 +93,30 @@ function parseMessage(r: typeof chatMessages.$inferSelect) {
   };
 }
 
-async function resolveActorName(authUser: { id: string; username: string } | null): Promise<string> {
+async function resolveActorName(orgId: string, authUser: { id: string; username: string } | null): Promise<string> {
   if (!authUser?.id) return "พนักงาน";
-  const [u] = await db.select().from(users).where(eq(users.id, authUser.id));
+  const [u] = await db.select().from(users).where(and(eq(users.id, authUser.id), eq(users.orgId, orgId)));
   return u?.displayName || u?.username || authUser.username || "พนักงาน";
 }
 
 // มาร์คข้อความเข้าที่ยังไม่อ่านของ conversation นี้เป็นอ่านแล้ว — เรียกทุกครั้งที่พนักงานส่งอะไรกลับไป
 // (ถือว่าเปิดอ่านแล้วแน่ๆ ถ้าตอบอยู่)
-async function markInboundRead(lineUserId: string) {
+async function markInboundRead(orgId: string, lineUserId: string) {
   await db.update(chatMessages).set({ readAt: new Date().toISOString() })
-    .where(and(eq(chatMessages.lineUserId, lineUserId), eq(chatMessages.direction, "in")));
+    .where(and(eq(chatMessages.lineUserId, lineUserId), eq(chatMessages.direction, "in"), eq(chatMessages.orgId, orgId)));
 }
 
 export const chatRoute = new Elysia({ prefix: "/chat" })
+  .use(authDerive)
   // รายชื่อการสนทนาทั้งหมด เรียงตามข้อความล่าสุดก่อน — group ข้อความทั้งตารางด้วย JS (ข้อมูลระดับหอพักเดียว
   // ไม่ใหญ่พอที่จะต้องทำ aggregate query เอง เหมือนที่ tenants.ts/settings.ts ก็โหลดทั้งตารางมาประมวลผลเอง)
-  .get("/conversations", async () => {
+  .get("/conversations", async ({ authUser }) => {
+    const orgId = authUser!.orgId;
     const [messages, tenantRows, roomRows, profileRows] = await Promise.all([
-      db.select().from(chatMessages),
-      db.select().from(tenants),
-      db.select().from(rooms),
-      db.select().from(lineProfiles),
+      db.select().from(chatMessages).where(eq(chatMessages.orgId, orgId)),
+      db.select().from(tenants).where(eq(tenants.orgId, orgId)),
+      db.select().from(rooms).where(eq(rooms.orgId, orgId)),
+      db.select().from(lineProfiles).where(eq(lineProfiles.orgId, orgId)),
     ]);
     const tenantMap = new Map(tenantRows.map((t) => [t.id, t]));
     const roomMap = new Map(roomRows.map((r) => [r.id, r]));
@@ -132,24 +155,26 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     result.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
     return result;
   })
-  .get("/conversations/:lineUserId/messages", async ({ params }) => {
-    const rows = await db.select().from(chatMessages).where(eq(chatMessages.lineUserId, params.lineUserId));
+  .get("/conversations/:lineUserId/messages", async ({ authUser, params }) => {
+    const rows = await db.select().from(chatMessages)
+      .where(and(eq(chatMessages.lineUserId, params.lineUserId), eq(chatMessages.orgId, authUser!.orgId)));
     rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return rows.map(parseMessage);
   })
   // พนักงานตอบกลับผู้เช่า — ส่งเป็น push message (ไม่ใช้ reply token เพราะพนักงานอาจตอบช้ากว่า 1 นาทีที่
   // LINE จำกัดไว้กับ reply token) แล้วมาร์คข้อความเข้าที่ยังไม่อ่านของ conversation นี้เป็นอ่านแล้วไปด้วย
   .post("/conversations/:lineUserId/reply", async ({ params, body, set, authUser }) => {
+    const orgId = authUser!.orgId;
     const text = String((body as any)?.text ?? "").trim();
     if (!text) { set.status = 400; return { error: "กรุณากรอกข้อความ" }; }
 
-    const settings = await getLineSettings();
+    const settings = await getLineSettings(orgId);
     if (!settings.enabled || !settings.token) {
       set.status = 400;
       return { error: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
     }
 
-    const actor = await resolveActorName(authUser);
+    const actor = await resolveActorName(orgId, authUser);
     try {
       await sendTextMessage(settings.token, params.lineUserId, text);
     } catch (e: any) {
@@ -160,6 +185,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: params.lineUserId,
       tenantId: "",
       direction: "out",
@@ -169,7 +195,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       createdAt: new Date().toISOString(),
       readAt: new Date().toISOString(),
     });
-    await markInboundRead(params.lineUserId);
+    await markInboundRead(orgId, params.lineUserId);
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return parseMessage(row);
@@ -177,12 +203,13 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   // พนักงานส่งรูปภาพ/ไฟล์แนบ — รูปภาพส่งเป็น LINE image message จริง, ไฟล์อื่นๆ (LINE ไม่มี message type
   // "file" สำหรับส่งออก) ส่งเป็นข้อความลิงก์ดาวน์โหลดแทน (ดู sendFileLinkMessage ใน services/line.ts)
   .post("/conversations/:lineUserId/send-attachment", async ({ params, body, set, authUser }) => {
+    const orgId = authUser!.orgId;
     const b = body as any;
     const base64: string = String(b?.base64 ?? "");
     const name: string = String(b?.name ?? "attachment");
     if (!base64) { set.status = 400; return { error: "ไม่พบไฟล์ที่แนบมา" }; }
 
-    const settings = await getLineSettings();
+    const settings = await getLineSettings(orgId);
     if (!settings.enabled || !settings.token) {
       set.status = 400;
       return { error: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
@@ -190,7 +217,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
 
     const mimeType = base64.match(/data:([^;]+);/)?.[1] ?? "application/octet-stream";
     const isImage = mimeType.startsWith("image/");
-    const actor = await resolveActorName(authUser);
+    const actor = await resolveActorName(orgId, authUser);
     const relativeUrl = await uploadChatAttachment(name, base64);
     const publicUrl = toPublicUrl(relativeUrl);
 
@@ -210,6 +237,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: params.lineUserId,
       tenantId: "",
       direction: "out",
@@ -222,13 +250,14 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       createdAt: new Date().toISOString(),
       readAt: new Date().toISOString(),
     });
-    await markInboundRead(params.lineUserId);
+    await markInboundRead(orgId, params.lineUserId);
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return parseMessage(row);
   })
   // พนักงานส่งสติกเกอร์ทางการของ LINE — packageId/stickerId ต้องอยู่ใน ALLOWED_STICKERS เท่านั้น
   .post("/conversations/:lineUserId/send-sticker", async ({ params, body, set, authUser }) => {
+    const orgId = authUser!.orgId;
     const b = body as any;
     const packageId = String(b?.packageId ?? "");
     const stickerId = String(b?.stickerId ?? "");
@@ -237,13 +266,13 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       return { error: "สติกเกอร์นี้ไม่อยู่ในรายการที่ส่งได้" };
     }
 
-    const settings = await getLineSettings();
+    const settings = await getLineSettings(orgId);
     if (!settings.enabled || !settings.token) {
       set.status = 400;
       return { error: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
     }
 
-    const actor = await resolveActorName(authUser);
+    const actor = await resolveActorName(orgId, authUser);
     try {
       await sendStickerMessage(settings.token, params.lineUserId, packageId, stickerId);
     } catch (e: any) {
@@ -254,6 +283,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: params.lineUserId,
       tenantId: "",
       direction: "out",
@@ -265,34 +295,37 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       createdAt: new Date().toISOString(),
       readAt: new Date().toISOString(),
     });
-    await markInboundRead(params.lineUserId);
+    await markInboundRead(orgId, params.lineUserId);
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return parseMessage(row);
   })
-  .patch("/conversations/:lineUserId/read", async ({ params }) => {
-    await markInboundRead(params.lineUserId);
+  .patch("/conversations/:lineUserId/read", async ({ authUser, params }) => {
+    await markInboundRead(authUser!.orgId, params.lineUserId);
     return { ok: true };
   })
   // ดึงรูปโปรไฟล์/ชื่อ LINE สดๆ มาแคชใหม่ — ใช้ตอนเปิดแชทที่ยังไม่เคยแคชรูปไว้ (เช่น สนทนาเก่าก่อนมีฟีเจอร์นี้)
-  .post("/conversations/:lineUserId/refresh-profile", async ({ params, set }) => {
-    const settings = await getLineSettings();
+  .post("/conversations/:lineUserId/refresh-profile", async ({ authUser, params, set }) => {
+    const orgId = authUser!.orgId;
+    const settings = await getLineSettings(orgId);
     if (!settings.token) { set.status = 400; return { error: "ยังไม่ได้ตั้งค่า LINE Channel Access Token" }; }
     const profile = await getLineProfile(settings.token, params.lineUserId);
-    await cacheLineProfile(params.lineUserId, profile);
+    await cacheLineProfile(orgId, params.lineUserId, profile);
     return { pictureUrl: profile.pictureUrl || null, displayName: profile.displayName || null };
   })
   // ยอดค้างชำระทั้งหมดของผู้เช่าที่ผูกกับ conversation นี้ (ทุกบิลที่ยังไม่จ่ายครบ ไม่จำกัดแค่เดือนก่อนหน้า)
-  .get("/conversations/:lineUserId/outstanding-bills", async ({ params }) => {
-    const tenant = await findTenantByLineUserId(params.lineUserId);
+  .get("/conversations/:lineUserId/outstanding-bills", async ({ authUser, params }) => {
+    const orgId = authUser!.orgId;
+    const tenant = await findTenantByLineUserId(orgId, params.lineUserId);
     if (!tenant) return { tenantId: null, items: [], total: 0 };
-    const { items, total } = await getOutstandingBillsForTenant(tenant.id);
+    const { items, total } = await getOutstandingBillsForTenant(orgId, tenant.id);
     return { tenantId: tenant.id, items, total };
   })
   // พนักงานกรอกรายละเอียดการซ่อม (อุปกรณ์/ราคา/จำนวน/รูป/หมายเหตุ) แล้วกดยืนยันปิดงาน — แก้ไข JSON ของ
   // ข้อความ "repair" ที่ผู้เช่าแจ้งเข้ามาโดยตรง (ต่างจาก bill/receipt ที่เป็น snapshot ส่งครั้งเดียวจบ เพราะ
   // repair ต้องแก้ไขได้หลังสร้างแล้ว) แจ้งผู้เช่าทาง LINE ว่าซ่อมเสร็จแล้วไปด้วย (best-effort)
   .patch("/conversations/:lineUserId/messages/:id/repair", async ({ params, body, set, authUser }) => {
+    const orgId = authUser!.orgId;
     const b = body as any;
     const items: { name: string; price: number; qty: number }[] = Array.isArray(b?.items)
       ? b.items.map((it: any) => ({ name: String(it?.name ?? ""), price: Number(it?.price) || 0, qty: Number(it?.qty) || 1 }))
@@ -300,7 +333,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const note = String(b?.note ?? "");
     const photosBase64: string[] = Array.isArray(b?.photos) ? b.photos : [];
 
-    const [existing] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    const [existing] = await db.select().from(chatMessages).where(and(eq(chatMessages.id, params.id), eq(chatMessages.orgId, orgId)));
     if (!existing || existing.messageType !== "repair" || existing.lineUserId !== params.lineUserId) {
       set.status = 404;
       return { error: "ไม่พบรายการแจ้งซ่อม" };
@@ -316,14 +349,14 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       adminPhotos.push(url);
     }
 
-    const actor = await resolveActorName(authUser);
+    const actor = await resolveActorName(orgId, authUser);
     const now = new Date().toISOString();
     const total = items.reduce((sum, it) => sum + it.price * it.qty, 0);
 
     snapshot = { ...snapshot, status: "completed", adminItems: items, adminPhotos, adminNote: note, confirmedBy: actor, confirmedAt: now };
     await db.update(chatMessages).set({ text: JSON.stringify(snapshot) }).where(eq(chatMessages.id, params.id));
 
-    const settings = await getLineSettings();
+    const settings = await getLineSettings(orgId);
     if (settings.enabled && settings.token) {
       try {
         const itemLines = items.map((it) => `- ${it.name} x${it.qty} = ${(it.price * it.qty).toLocaleString("th-TH")} บาท`).join("\n");
@@ -347,12 +380,13 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   // เรียก recordConfirmedPayment ตัวเดียวกับที่ตรวจสลิปอัตโนมัติใช้ (services/payments.ts) เพื่อบันทึกยอด/
   // อัปเดตบิล/ส่งใบเสร็จให้ครบเหมือนกันทุกประการ ไม่ต้องเขียนตรรกะซ้ำ
   .patch("/conversations/:lineUserId/messages/:id/payment-confirm", async ({ params, body, set, authUser }) => {
+    const orgId = authUser!.orgId;
     const b = body as any;
     const action = b?.action === "reject" ? "reject" : b?.action === "confirm" ? "confirm" : null;
     if (!action) { set.status = 400; return { error: "ระบุการดำเนินการไม่ถูกต้อง" }; }
     const reason = String(b?.reason ?? "");
 
-    const [existing] = await db.select().from(chatMessages).where(eq(chatMessages.id, params.id));
+    const [existing] = await db.select().from(chatMessages).where(and(eq(chatMessages.id, params.id), eq(chatMessages.orgId, orgId)));
     if (!existing || existing.messageType !== "payment_confirm" || existing.lineUserId !== params.lineUserId) {
       set.status = 404;
       return { error: "ไม่พบคำขอแจ้งชำระเงิน" };
@@ -362,9 +396,9 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     try { snapshot = existing.text ? JSON.parse(existing.text) : {}; } catch { snapshot = {}; }
     if (snapshot.status !== "pending") { set.status = 400; return { error: "รายการนี้ถูกดำเนินการไปแล้ว" }; }
 
-    const actor = await resolveActorName(authUser);
+    const actor = await resolveActorName(orgId, authUser);
     const now = new Date().toISOString();
-    const settings = await getLineSettings();
+    const settings = await getLineSettings(orgId);
 
     if (action === "reject") {
       snapshot = { ...snapshot, status: "rejected", rejectReason: reason, confirmedBy: actor, confirmedAt: now };
@@ -387,13 +421,13 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       return parseMessage(row);
     }
 
-    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, snapshot.intentId));
+    const [intent] = await db.select().from(paymentIntents).where(and(eq(paymentIntents.id, snapshot.intentId), eq(paymentIntents.orgId, orgId)));
     if (!intent || intent.status !== "pending") {
       set.status = 400;
       return { error: "ไม่พบรายการรอชำระ หรือรายการนี้ถูกยืนยันไปแล้ว" };
     }
 
-    const result = await recordConfirmedPayment(intent, {
+    const result = await recordConfirmedPayment(orgId, intent, {
       slipUrl: snapshot.slipUrl || "",
       actor,
       note: "ยืนยันโดยพนักงานจากหน้าแชท",

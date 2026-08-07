@@ -252,7 +252,7 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
 
   return (
     <>
-      <div className="payment-history-list">
+      <div className="payment-history-list nicescrollbar">
         {history.map((p, i) => {
           const cancelled = !!p.data?.cancelled;
           return (

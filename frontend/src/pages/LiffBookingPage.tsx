@@ -27,6 +27,8 @@ function fmtMoney(n: number) {
 }
 
 export default function LiffBookingPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
@@ -51,7 +53,7 @@ export default function LiffBookingPage() {
   const [galleryIndex, setGalleryIndex] = useState(0);
 
   async function loadMyBookings(token: string) {
-    const res = await liffApi.myBookings(token);
+    const res = await liffApi.myBookings(token, org);
     setMyBookings(res.bookings);
     return res.bookings;
   }
@@ -60,7 +62,7 @@ export default function LiffBookingPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
 
@@ -79,7 +81,7 @@ export default function LiffBookingPage() {
 
         const roomId = new URLSearchParams(window.location.search).get("roomId");
         if (roomId && !bookings.some((b) => b.roomId === roomId)) {
-          const availableRooms = await liffApi.availableRooms();
+          const availableRooms = await liffApi.availableRooms(org);
           if (cancelled) return;
           const found = availableRooms.find((r) => r.id === roomId);
           if (found) setPendingRoom(found);
@@ -117,7 +119,7 @@ export default function LiffBookingPage() {
     if (!tel.trim()) { setFormError("กรุณากรอกเบอร์โทรศัพท์"); return; }
     setSubmitting(true); setFormError("");
     try {
-      await liffApi.bookRoom(accessToken, pendingRoom.id, name.trim(), tel.trim());
+      await liffApi.bookRoom(accessToken, pendingRoom.id, name.trim(), tel.trim(), org);
       setJustBooked(true);
       await loadMyBookings(accessToken);
       clearRoomIdFromUrl();
@@ -138,7 +140,7 @@ export default function LiffBookingPage() {
     if (!cancelTarget) return;
     setCancelling(true);
     try {
-      await liffApi.cancelBooking(accessToken, cancelTarget.bookingId);
+      await liffApi.cancelBooking(accessToken, cancelTarget.bookingId, org);
       setMyBookings((prev) => prev.filter((b) => b.bookingId !== cancelTarget.bookingId));
       setCancelTarget(null);
     } catch (e: any) {

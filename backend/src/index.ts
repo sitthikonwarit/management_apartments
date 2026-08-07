@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { db } from "./db";
-import { users } from "./db/schema";
+import { users, organizations } from "./db/schema";
 import { roomsRoute } from "./routes/rooms";
 import { tenantsRoute } from "./routes/tenants";
 import { metersRoute } from "./routes/meters";
@@ -16,20 +16,48 @@ import { chatRoute } from "./routes/chat";
 import { lineWebhookRoute } from "./routes/lineWebhook";
 import { liffRoute } from "./routes/liff";
 import { authPublicRoute, authProtectedRoute } from "./routes/auth";
+import { lineLoginRoute } from "./routes/lineLogin";
+import { superAdminAuthRoute, superAdminOrgRoute } from "./routes/superadmin";
 import { authDerive } from "./lib/authDerive";
 import { recordLog } from "./lib/activityLog";
 import { matchActivityLabel } from "./lib/activityLabels";
 import { verifyToken } from "./lib/jwt";
 import { registerClient, unregisterClient, broadcastChange } from "./lib/wsHub";
+import { recordRequest, recordApiCall } from "./lib/apiUsageTracker";
+import { verifyUploadSignature } from "./lib/encryption";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { getDriveImageBuffer } from "./services/sheets";
 import { runLineAutoSend } from "./services/line";
 
+// ── จับเวลา + สถานะของทุก request ที่เข้ามาทั้งระบบ ไว้คำนวณ "ความเสถียรของ API" (อัตรา error 5xx + เวลา
+// ตอบสนองเฉลี่ย) ในหน้าควบคุมแพลตฟอร์ม (ดู lib/apiUsageTracker.ts, routes/superadmin.ts) ต้องอยู่บนสุดของ
+// เชนก่อน route อื่นทั้งหมด (รวม superadmin/liff/line webhook ที่ไม่ผ่านการ์ด authDerive) ถึงจะครอบคลุมทุก
+// request จริงๆ — ใช้ WeakMap ผูกกับ object ของ request เอง (แทน store ของ Elysia ซึ่งเป็น global ไม่ใช่
+// per-request) เพราะ request เดิมถูกส่งผ่านทุก lifecycle hook (onRequest ถึง onError) ของคำขอเดียวกันเสมอ
+const requestStartTimes = new WeakMap<Request, number>();
+function statusFromErrorCode(code: unknown, set: { status?: number | string }): number {
+  if (typeof set.status === "number") return set.status;
+  if (typeof code === "number") return code;
+  if (code === "VALIDATION") return 422;
+  if (code === "NOT_FOUND") return 404;
+  if (code === "PARSE") return 400;
+  return 500;
+}
+
 const app = new Elysia()
   .use(cors({ origin: true }))
   .use(swagger({ path: "/docs" }))
-  .onError(({ error, code }) => {
+  .onRequest(({ request }) => {
+    requestStartTimes.set(request, Date.now());
+  })
+  .onAfterHandle(({ request, set }) => {
+    const start = requestStartTimes.get(request);
+    if (start !== undefined) recordApiCall(typeof set.status === "number" ? set.status : 200, Date.now() - start);
+  })
+  .onError(({ error, code, request, set }) => {
+    const start = requestStartTimes.get(request);
+    if (start !== undefined) recordApiCall(statusFromErrorCode(code, set), Date.now() - start);
     console.error(`[${code}]`, error);
     return { error: String(error) };
   })
@@ -51,7 +79,15 @@ const app = new Elysia()
       return { error: "Image not found" };
     }
   })
-  .get("/uploads/*", ({ params, set }) => {
+  // ตรวจลายเซ็น (ดู lib/encryption.ts signUploadPath/verifyUploadSignature) ก่อนเสิร์ฟไฟล์ทุกครั้ง — กัน
+  // เดา/ไล่สแกน URL (orgId แบบ ORG-timestamp และชื่อไฟล์แบบ timestamp เดากันได้ทั้งคู่ ไม่มีการเช็คสิทธิ์อะไร
+  // เลยแต่เดิม) ตอบ 404 เดียวกับไฟล์ไม่มีจริง (ไม่ตอบ 401/403) กันบอกใบ้ว่าไฟล์นี้ "มีอยู่จริงแค่ลายเซ็นผิด"
+  .get("/uploads/*", ({ params, query, set }) => {
+    const relPath = "/uploads/" + (params as any)["*"];
+    if (!verifyUploadSignature(relPath, (query as any)?.sig)) {
+      set.status = 404;
+      return { error: "File not found" };
+    }
     try {
       const filePath = resolve(process.cwd(), "uploads", (params as any)["*"]);
       const file = readFileSync(filePath);
@@ -74,12 +110,21 @@ const app = new Elysia()
   // /auth/setup-status, /auth/register, /auth/login — เปิดสาธารณะ ไม่ต้องล็อกอินก่อน (ต้องเรียกได้ตอนยัง
   // ไม่มี token) ต้องเมานต์ "ก่อน" การ์ดด้านล่าง เพราะ onBeforeHandle มีผลกับ route ที่ประกาศตามหลังเท่านั้น
   .use(authPublicRoute)
+  // /auth/line/authorize, /auth/line/callback — เจ้าของหอพัก (ผู้ดูแลระบบ) ล็อกอินเข้าหลังบ้านด้วย LINE Login
+  // (คนละ LINE product กับ Messaging API/LIFF ที่ใช้กับผู้เช่า) ต้องเปิดสาธารณะเช่นกัน (ยังไม่มี token ตอนนี้)
+  .use(lineLoginRoute)
   // /line/webhook — LINE เป็นคนยิงมาเอง ไม่มี Authorization: Bearer ของระบบเรา ต้องเปิดสาธารณะเช่นกัน
   // (ตรวจสิทธิ์ด้วย x-line-signature ของตัวเองแทน ดู verifyLineSignature ใน services/line.ts)
   .use(lineWebhookRoute)
   // /liff/* — หน้า LIFF ฝั่งผู้เช่า (Login/Payment) ผู้เช่าไม่มีบัญชีพนักงาน เปิดสาธารณะเช่นกัน (ยืนยัน
   // ตัวตนด้วย LIFF access token ของ LINE เองแทน ดู verifyLiffAccessToken ใน services/line.ts)
   .use(liffRoute)
+  // /auth/superadmin/authorize, /callback — เปิดสาธารณะ (ยังไม่มี token ตอนนี้เหมือน lineLoginRoute)
+  // /superadmin/* — มีการ์ดของตัวเอง (superAdminDerive + onBeforeHandle ในไฟล์เดียวกัน) ไม่ได้พึ่งการ์ด
+  // authDerive ของพนักงานด้านล่าง (คนละระบบสิทธิ์กันโดยสิ้นเชิง ดู routes/superadmin.ts) ต้องเมานต์ "ก่อน"
+  // การ์ดพนักงานเสมอ ไม่งั้นจะโดนเช็ค authUser (บัญชีพนักงาน) ทับซ้อนโดยไม่จำเป็น
+  .use(superAdminAuthRoute)
+  .use(superAdminOrgRoute)
   // ── WebSocket แจ้งเตือนแบบเรียลไทม์ — auth เองในตัว (แนบ token มาทาง query string เพราะ browser
   // WebSocket API แนบ custom header ไม่ได้) แยกจากการ์ด HTTP ด้านล่างเพราะ WS ไม่ผ่าน onBeforeHandle
   // แบบเดียวกับ HTTP request ปกติ ไม่ broadcast ข้อมูลอะไร แค่บอกว่า "entityType นี้เปลี่ยนแล้วนะ ไปโหลดใหม่"
@@ -92,12 +137,19 @@ const app = new Elysia()
         return;
       }
       // เช็ค sid เหมือน authDerive — token เก่าที่ถูกแทนที่แล้ว (login จากเครื่องอื่น) ต่อ WS ใหม่ไม่ได้
-      const [row] = await db.select({ currentSessionId: users.currentSessionId }).from(users).where(eq(users.id, payload.sub));
-      if (!row || (row.currentSessionId && payload.sid !== row.currentSessionId)) {
+      const [row] = await db.select({ currentSessionId: users.currentSessionId, orgId: users.orgId }).from(users).where(eq(users.id, payload.sub));
+      if (!row || !row.orgId || (row.currentSessionId && payload.sid !== row.currentSessionId)) {
         ws.close();
         return;
       }
-      registerClient(ws, payload.sub);
+      // องค์กรถูกระงับ (ดู routes/superadmin.ts) — เหมือน authDerive.ts ไม่ให้ต่อ WS ใหม่ได้เลย (connection
+      // เก่าที่เปิดค้างอยู่แล้วถูก revokeSessionsForOrg ปิดไปตอนระงับอยู่แล้ว จุดนี้กัน reconnect ใหม่)
+      const [org] = await db.select({ status: organizations.status }).from(organizations).where(eq(organizations.id, row.orgId));
+      if (org?.status === "suspended") {
+        ws.close();
+        return;
+      }
+      registerClient(ws, payload.sub, row.orgId);
     },
     close(ws) {
       unregisterClient(ws);
@@ -115,6 +167,12 @@ const app = new Elysia()
   // ไม่ต้องเขียนโค้ด log แยกในแต่ละ route handler — ครอบคลุมทุก route ที่เมานต์ "หลัง" จุดนี้อัตโนมัติ
   // (login/register/logout log แยกเป็นพิเศษที่จุดเกิดเหตุจริงใน auth.ts เพราะตอนนั้นยังไม่มี authUser)
   .onAfterHandle(async ({ request, authUser, set, body, response, headers, server }) => {
+    // นับอัตราเรียก API ต่อองค์กร (ทุก method รวม GET) ไว้โชว์ในหน้าควบคุมแพลตฟอร์ม (ดู
+    // lib/apiUsageTracker.ts, routes/superadmin.ts) — แยกจาก activity log ด้านล่างที่จำกัดแค่ POST/PUT/
+    // PATCH/DELETE เพราะจุดประสงค์ต่างกัน (activity log = "ใครแก้อะไร" ไว้ให้พนักงานเห็น, ตัวนี้ = "องค์กร
+    // ไหนใช้งานหนักแค่ไหน" ไว้ให้แพลตฟอร์มดูภาพรวม)
+    if (authUser) recordRequest(authUser.orgId);
+
     const method = request.method;
     if (method !== "POST" && method !== "PUT" && method !== "PATCH" && method !== "DELETE") return;
     if (!authUser) return;
@@ -124,6 +182,7 @@ const app = new Elysia()
     if (statusCode >= 400) return;
     const matched = matchActivityLabel(method, path);
     await recordLog({
+      orgId: authUser.orgId,
       userId: authUser.id,
       username: authUser.username,
       method, path,
@@ -136,8 +195,9 @@ const app = new Elysia()
       userAgent: headers["user-agent"] ?? "",
       ip: server?.requestIP(request)?.address ?? "",
     });
-    // แจ้งทุกเครื่องที่เปิดหน้าเว็บอยู่ (WebSocket) ให้รู้ว่าข้อมูลประเภทนี้เปลี่ยนไปแล้ว จะได้โหลดใหม่ทันที
-    if (matched) broadcastChange(matched.entityType, matched.action, matched.label, authUser.username);
+    // แจ้งทุกเครื่องขององค์กรเดียวกันที่เปิดหน้าเว็บอยู่ (WebSocket) ให้รู้ว่าข้อมูลประเภทนี้เปลี่ยนไปแล้ว
+    // จะได้โหลดใหม่ทันที (จำกัดเฉพาะองค์กรตัวเอง กันการแจ้งเตือนข้ามองค์กร — ดู wsHub.ts)
+    if (matched) broadcastChange(authUser.orgId, matched.entityType, matched.action, matched.label, authUser.username);
   })
   .use(authProtectedRoute)
   .use(addressRoute)

@@ -2,6 +2,11 @@
 // lineWebhook.ts) เพราะผู้เช่าไม่มีบัญชีพนักงาน ยืนยันตัวตนด้วย LIFF access token (ของผู้ใช้ LINE เอง)
 // กับ LINE ตรงๆ แทน (ดู verifyLiffAccessToken ใน services/line.ts) เมานต์คู่กับ authPublicRoute ใน
 // index.ts ก่อนการ์ด authDerive เสมอ ─────────────────────────────────────────────────────────────
+// Multi-tenant: แต่ละ endpoint รู้ "องค์กร" ของตัวเองจาก ?org=<slug> ที่แนบท้าย LIFF Endpoint URL ของแต่ละ
+// องค์กร (ตั้งค่าเองใน LINE Developers Console ตอนสร้าง LIFF app — ดู resolveOrgId ด้านล่าง, slug แสดงอยู่ใน
+// หน้า Settings > LINE Messaging) ถ้าไม่มี/slug ไม่ตรงกับองค์กรไหนเลย จะ fallback ไปองค์กรเดียวที่มีอยู่ใน
+// ระบบก็ต่อเมื่อระบบมีองค์กรเดียวจริงๆ เท่านั้น (ดู resolveOrgIdWithFallback ใน lib/orgContext.ts) — มีตั้งแต่
+// 2 องค์กรขึ้นไปแล้ว request ที่ไม่มี ?org= ที่ถูกต้องจะได้ 503 แทนที่จะหลุดไปอ่าน/เขียนข้อมูลองค์กรอื่นผิดๆ
 import { Elysia } from "elysia";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
@@ -14,11 +19,16 @@ import {
 import { linkRichMenuToUser } from "../services/richMenu";
 import { generatePromptPayQr } from "../services/easyslip";
 import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
+import { resolveOrgIdBySlug, resolveOrgIdWithFallback } from "../lib/orgContext";
+import { decryptField, signUploadPath } from "../lib/encryption";
 
-const CONFIG_ID = "default";
+async function resolveOrgId(orgSlug: unknown): Promise<string | null> {
+  const candidate = typeof orgSlug === "string" && orgSlug ? await resolveOrgIdBySlug(orgSlug) : null;
+  return resolveOrgIdWithFallback(candidate);
+}
 
-async function getConfigRow() {
-  const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));
+async function getConfigRow(orgId: string) {
+  const [row] = await db.select().from(appConfig).where(eq(appConfig.id, orgId));
   return row;
 }
 
@@ -74,9 +84,9 @@ function resetProfileVerifyAttempts(tenantId: string): void {
 
 // สลับจาก Rich Menu Guest เป็น Member เฉพาะ LINE User ID นี้ — ใช้ทั้งตอน login ปกติ (เจอว่าผูกไว้แล้ว)
 // และตอนผูกบัญชีเองผ่านเบอร์โทร (link-phone) เพิ่งผูกสำเร็จหมาดๆ
-async function linkMemberMenu(userId: string): Promise<boolean> {
-  const row = await getConfigRow();
-  const settings = await getLineSettings();
+async function linkMemberMenu(orgId: string, userId: string): Promise<boolean> {
+  const row = await getConfigRow(orgId);
+  const settings = await getLineSettings(orgId);
   if (!settings.token || !row?.richMenuMemberId) return false;
   return linkRichMenuToUser(settings.token, userId, row.richMenuMemberId);
 }
@@ -84,8 +94,9 @@ async function linkMemberMenu(userId: string): Promise<boolean> {
 export const liffRoute = new Elysia({ prefix: "/liff" })
   // ข้อมูลตั้งค่าที่จำเป็นก่อนเรียก liff.init() ฝั่ง frontend (LIFF ID ฝังอยู่ใน URL รูปแบบ
   // https://liff.line.me/{liffId}) + โลโก้/ชื่อระบบไว้ตกแต่งหน้าให้ตรงธีมเว็บหลัก — ไม่ใช่ข้อมูลลับ
-  .get("/config", async () => {
-    const row = await getConfigRow();
+  .get("/config", async ({ query }) => {
+    const orgId = await resolveOrgId(query.org);
+    const row = orgId ? await getConfigRow(orgId) : undefined;
     return {
       liffLoginUrl: row?.liffLoginUrl || "",
       liffPaymentUrl: row?.liffPaymentUrl || "",
@@ -113,19 +124,21 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   })
   // ปุ่ม "เข้าสู่ระบบ" บนเมนู Guest — ตรวจ access token กับ LINE แล้วหาว่าผูกกับผู้เช่าคนไหนไว้หรือยัง
   // ถ้าเจอ ผูก Rich Menu แบบ Member ให้อัตโนมัติ (สลับจาก Guest เป็น Member เฉพาะคนนี้)
-  .post("/login", async ({ body, set }) => {
+  .post("/login", async ({ body, set, query }) => {
     const { accessToken } = body as { accessToken?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) {
       return { linked: false, lineUserId: profile.userId, displayName: profile.displayName };
     }
 
-    const menuLinked = await linkMemberMenu(profile.userId);
+    const menuLinked = await linkMemberMenu(orgId, profile.userId);
 
     return {
       linked: true,
@@ -137,15 +150,17 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // ผูกบัญชี LINE เข้ากับผู้เช่าเองผ่านเบอร์โทร (ทางเลือกในหน้า LIFF Login ตอนยังไม่พบว่าผูกไว้) — ยึดหลัก
   // "1 เบอร์ต่อ 1 คน": ผูกได้ครั้งแรกที่เบอร์นี้ยังไม่เคยผูก LINE ไว้เท่านั้น ถ้ามีคนผูกไปแล้ว (ไม่ว่าจะเป็น
   // LINE ID เดียวกันหรือคนละคน) จะไม่ยอมให้เบอร์นี้ผูกทับ ป้องกันคนอื่นแอบพิมพ์เบอร์คนอื่นเพื่อขโมยบัญชีไปก่อน
-  .post("/link-phone", async ({ body, set }) => {
+  .post("/link-phone", async ({ body, set, query }) => {
     const { accessToken, phone } = body as { accessToken?: string; phone?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!phone?.trim()) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรศัพท์" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const matches = await findTenantsByPhone(phone);
+    const matches = await findTenantsByPhone(orgId, phone);
     if (matches.length === 0) { set.status = 404; return { error: "ไม่พบเบอร์โทรศัพท์นี้ในระบบ กรุณาติดต่อผู้ดูแลหอพัก" }; }
     if (matches.length > 1) { set.status = 409; return { error: "พบเบอร์นี้ซ้ำกันมากกว่า 1 คนในระบบ กรุณาติดต่อผู้ดูแลหอพัก" }; }
 
@@ -157,9 +172,9 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     }
 
     await db.update(tenants).set({ lineUserId: profile.userId }).where(eq(tenants.id, tenant.id));
-    broadcastChange("tenant", "update", "ผู้เช่าผูกบัญชี LINE เอง (เบอร์โทร)", tenantDisplayName(tenant));
+    broadcastChange(orgId, "tenant", "update", "ผู้เช่าผูกบัญชี LINE เอง (เบอร์โทร)", tenantDisplayName(tenant));
 
-    const menuLinked = await linkMemberMenu(profile.userId);
+    const menuLinked = await linkMemberMenu(orgId, profile.userId);
 
     return {
       linked: true,
@@ -169,18 +184,20 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     };
   })
   // ปุ่ม "ชำระเงิน" บนเมนู Member — แสดงยอดค้างชำระ + ข้อมูลบัญชี/QR ที่ตั้งค่าไว้ในหน้า Settings
-  .post("/payment", async ({ body, set }) => {
+  .post("/payment", async ({ body, set, query }) => {
     const { accessToken } = body as { accessToken?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) return { linked: false };
 
-    const row = await getConfigRow();
-    const outstanding = await getOutstandingBillsForTenant(tenant.id);
+    const row = await getConfigRow(orgId);
+    const outstanding = await getOutstandingBillsForTenant(orgId, tenant.id);
 
     return {
       linked: true,
@@ -205,18 +222,20 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // กดปุ่ม "ดูรายละเอียด" ที่บิลเดือนใดเดือนหนึ่งในหน้า LIFF Payment/Profile — คืน item ดิบ (ตรงกับ
   // BillItem ใน frontend/src/utils/billCalc.ts) ให้ฝั่ง frontend เรนเดอร์ด้วย BillLinePreview เดียวกับที่
   // พนักงานเห็นในหน้า Bills (หน้าตาแบบ "บิลอิเล็กทรอนิกส์ LINE") ไม่ใช่การ์ดแบบย่อในหน้าแชท
-  .post("/bill-detail", async ({ body, set }) => {
+  .post("/bill-detail", async ({ body, set, query }) => {
     const { accessToken, billId, roomId } = body as { accessToken?: string; billId?: string; roomId?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!billId || !roomId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า" }; }
 
-    const found = await getBillItemForTenant(billId, roomId, tenant.id);
+    const found = await getBillItemForTenant(orgId, billId, roomId, tenant.id);
     if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
 
     return { item: found.item, monthYear: found.monthYear };
@@ -224,17 +243,19 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // ปุ่ม "บิลเดือนนี้" บนเมนู Member (ลิงก์ "?view=thisMonth" ต่อท้าย LIFF Payment URL — ดู memberAreas ใน
   // services/richMenu.ts) ต่างจาก /bill-detail ตรงที่ไม่รู้ billId/roomId ล่วงหน้า (เมนูเป็น URL เดียวใช้ร่วมกัน
   // ทุกคน) ต้องไล่หาเองว่า "เดือนปัจจุบันตามเวลาไทย" ของผู้เช่าคนนี้คือบิลใบไหน (ดู getThisMonthBillItemForTenant)
-  .post("/bill-detail/this-month", async ({ body, set }) => {
+  .post("/bill-detail/this-month", async ({ body, set, query }) => {
     const { accessToken } = body as { accessToken?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
 
-    const found = await getThisMonthBillItemForTenant(tenant.id);
+    const found = await getThisMonthBillItemForTenant(orgId, tenant.id);
     if (!found) { set.status = 404; return { error: "ยังไม่มีบิลของคุณประจำเดือนนี้ในระบบ กรุณารอประกาศจากผู้ดูแลหอพัก" }; }
 
     return { billId: found.billId, roomId: found.roomId, item: found.item, monthYear: found.monthYear };
@@ -243,18 +264,20 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // สลิปที่จะส่งเข้าแชทภายหลัง (ดู services/payments.ts) — สร้าง QR PromptPay ระบุยอดจริงให้ด้วยถ้ามี
   // PromptPay ID ตั้งไว้ ไม่งั้นคืนแค่เลขบัญชีให้โชว์เป็นข้อความคัดลอกแทน (ตรวจสลิปอัตโนมัติได้เหมือนกันทั้ง
   // สองแบบ เพราะขึ้นกับ "รายการรอชำระ" ที่บันทึกไว้ ไม่ได้ขึ้นกับว่าสร้าง QR ได้จริงหรือเปล่า)
-  .post("/payment/qr", async ({ body, set }) => {
+  .post("/payment/qr", async ({ body, set, query }) => {
     const { accessToken, billId, roomId, amount } = body as { accessToken?: string; billId?: string; roomId?: string; amount?: number };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!billId || !roomId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า" }; }
 
-    const found = await getBillItemForTenant(billId, roomId, tenant.id);
+    const found = await getBillItemForTenant(orgId, billId, roomId, tenant.id);
     if (!found) { set.status = 404; return { error: "ไม่พบข้อมูลบิล" }; }
     const { item, monthYear } = found;
 
@@ -265,8 +288,8 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       return { error: `จำนวนเงินไม่ถูกต้อง (ยอดคงเหลือ ${remainingDue.toFixed(2)} บาท)` };
     }
 
-    const row = await getConfigRow();
-    const apiKey = row?.easySlipApiKey || "";
+    const row = await getConfigRow(orgId);
+    const apiKey = decryptField(row?.easySlipApiKey || "");
     const promptPayId = row?.paymentPromptPayId || "";
     if (!apiKey) {
       set.status = 400;
@@ -287,6 +310,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const intentId = `PINT-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(paymentIntents).values({
       id: intentId,
+      orgId,
       tenantId: tenant.id,
       tenantName: tenantDisplayName(tenant),
       billId, roomId,
@@ -311,14 +335,16 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   })
   // หน้า LIFF โพลสถานะเป็นระยะหลังสร้าง QR — ให้รู้ทันทีที่ตรวจสลิปสำเร็จอัตโนมัติ (ดู
   // tryAutoConfirmSlipPayment ใน services/payments.ts ที่อัปเดตสถานะนี้จาก routes/lineWebhook.ts)
-  .post("/payment/status", async ({ body, set }) => {
+  .post("/payment/status", async ({ body, set, query }) => {
     const { accessToken, intentId } = body as { accessToken?: string; intentId?: string };
     if (!accessToken || !intentId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, intentId));
+    const [intent] = await db.select().from(paymentIntents).where(and(eq(paymentIntents.id, intentId), eq(paymentIntents.orgId, orgId)));
     if (!intent || intent.lineUserId !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการ" }; }
 
     return { status: intent.status };
@@ -328,18 +354,20 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // "payment_confirm") ให้พนักงานเห็นการ์ดคำขอแล้วกดยืนยัน/ปฏิเสธได้ตรงจากหน้าแชทเลย (ดู PATCH
   // /chat/conversations/:lineUserId/messages/:id/payment-confirm ใน routes/chat.ts) ต่างจากส่งรูปสลิปเข้า
   // แชทเฉยๆ ตรงที่มีการ์อ้างอิง "รายการรอชำระ" (intentId) ชัดเจน ไม่ต้องให้พนักงานไปหาเองว่าเป็นของบิลไหน
-  .post("/payment/confirm", async ({ body, set }) => {
+  .post("/payment/confirm", async ({ body, set, query }) => {
     const { accessToken, intentId, slipImage } = body as {
       accessToken?: string; intentId?: string; slipImage?: { base64?: string };
     };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!intentId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
     if (!slipImage?.base64) { set.status = 400; return { error: "กรุณาแนบรูปสลิปการโอนเงิน" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const [intent] = await db.select().from(paymentIntents).where(eq(paymentIntents.id, intentId));
+    const [intent] = await db.select().from(paymentIntents).where(and(eq(paymentIntents.id, intentId), eq(paymentIntents.orgId, orgId)));
     if (!intent || intent.lineUserId !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการรอชำระ" }; }
     if (intent.status !== "pending") { set.status = 400; return { error: "รายการนี้ถูกยืนยันไปแล้ว" }; }
 
@@ -364,6 +392,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: profile.userId,
       tenantId: intent.tenantId || "",
       direction: "in",
@@ -374,31 +403,33 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     });
 
     const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
-    broadcastChatMessage({
+    broadcastChatMessage(orgId, {
       lineUserId: profile.userId,
       displayName: intent.tenantName || profile.displayName || "ไม่ทราบชื่อ",
       roomNumber: intent.roomNumber || null,
       pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
       preview: `💰 แจ้งชำระเงิน ${Number(intent.amount).toLocaleString("th-TH")} บาท`,
     });
-    broadcastChange("chat", "create", "มีการแจ้งชำระเงินใหม่", intent.tenantName || "");
+    broadcastChange(orgId, "chat", "create", "มีการแจ้งชำระเงินใหม่", intent.tenantName || "");
 
     return { ok: true, messageId: id };
   })
   // ปุ่ม "ข้อมูลผู้เช่า" บนเมนู Member — ข้อมูลส่วนตัว + บิลทุกใบ (ทั้งจ่ายแล้ว/ค้างอยู่) + ประวัติการชำระเงินทั้งหมด
-  .post("/profile", async ({ body, set }) => {
+  .post("/profile", async ({ body, set, query }) => {
     const { accessToken } = body as { accessToken?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) return { linked: false };
 
     const [tenantBills, paymentHistory] = await Promise.all([
-      getAllBillsForTenant(tenant.id),
-      getPaymentHistoryForTenant(tenant.id),
+      getAllBillsForTenant(orgId, tenant.id),
+      getPaymentHistoryForTenant(orgId, tenant.id),
     ]);
 
     return {
@@ -418,15 +449,17 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // ผู้พักอาศัยร่วม, รถ, ไฟล์แนบ/รูปที่อัปโหลดไว้) ต้องกรอกเลขบัตรประชาชน 4 ตัวท้ายให้ตรงกับที่บันทึกไว้ก่อน
   // (ชั้นป้องกันเพิ่มจาก LIFF access token เฉยๆ — กันกรณีมือถือ/เซสชันหลุดไปอยู่ในมือคนอื่น) จำกัดจำนวนครั้งที่
   // กรอกผิดได้ต่อผู้เช่า กันเดาเลข 4 หลักมั่วๆ ซ้ำๆ (ดู isProfileVerifyBlocked ด้านบน)
-  .post("/profile/full", async ({ body, set }) => {
+  .post("/profile/full", async ({ body, set, query }) => {
     const { accessToken, idLicenseLast4 } = body as { accessToken?: string; idLicenseLast4?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!idLicenseLast4?.trim()) { set.status = 400; return { error: "กรุณากรอกเลขบัตรประชาชน 4 ตัวท้าย" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
 
     if (isProfileVerifyBlocked(tenant.id)) {
@@ -454,8 +487,8 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     }
 
     const [vehicleRows, vehicleTypeRows] = await Promise.all([
-      db.select().from(vehicles).where(eq(vehicles.customerId, tenant.id)),
-      db.select().from(vehicleTypes),
+      db.select().from(vehicles).where(and(eq(vehicles.customerId, tenant.id), eq(vehicles.orgId, orgId))),
+      db.select().from(vehicleTypes).where(eq(vehicleTypes.orgId, orgId)),
     ]);
     const typeMap = new Map(vehicleTypeRows.map((t) => [t.id, t]));
     const tenantVehicles = vehicleRows.map((v) => ({
@@ -465,7 +498,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       color: v.color,
       typeName: typeMap.get(v.vehicleTypeId || "")?.name || "",
       typeIcon: typeMap.get(v.vehicleTypeId || "")?.icon || "fas fa-car",
-      images: parseJsonArray(v.images),
+      images: parseJsonArray(v.images).map(signUploadPath),
     }));
 
     return {
@@ -484,29 +517,31 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         province: tenant.province || "",
         zipcode: tenant.zipcode || "",
         address: tenant.address || "",
-        driveImageUrl: tenant.driveImageUrl || "",
+        driveImageUrl: signUploadPath(tenant.driveImageUrl || ""),
       },
       roomNumbers,
-      coResidents: parseJsonArray(tenant.coResidents),
+      coResidents: parseJsonArray(tenant.coResidents).map((cr: any) => (cr?.image ? { ...cr, image: signUploadPath(cr.image) } : cr)),
       vehicles: tenantVehicles,
-      files: parseJsonArray(tenant.pdfLinks),
+      files: parseJsonArray(tenant.pdfLinks).map((f: any) => (f?.url ? { ...f, url: signUploadPath(f.url) } : f)),
     };
   })
   // ปุ่ม "แจ้งซ่อม" บนเมนู Member — ผู้เช่ากรอกหัวข้อ/รายละเอียด/แนบรูป ส่งเข้ามาเป็นข้อความแชทพิเศษ
   // (messageType "repair") เด้งแจ้งเตือนในหน้าแชทของเว็บทันที (broadcastChatMessage เดียวกับข้อความเข้าใหม่
   // ปกติจาก routes/lineWebhook.ts) พนักงานกรอกรายละเอียดการซ่อม (อุปกรณ์/ราคา/รูป) แล้วกดยืนยันต่อได้จาก
   // หน้าแชทเลย (ดู PATCH /chat/conversations/:lineUserId/messages/:id/repair ใน routes/chat.ts)
-  .post("/repair", async ({ body, set }) => {
+  .post("/repair", async ({ body, set, query }) => {
     const { accessToken, title, details, photos } = body as {
       accessToken?: string; title?: string; details?: string; photos?: string[];
     };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!title?.trim()) { set.status = 400; return { error: "กรุณากรอกหัวข้อที่ต้องการแจ้งซ่อม" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const tenant = await findTenantByLineUserId(profile.userId);
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
     if (!tenant) { set.status = 404; return { error: "ไม่พบข้อมูลผู้เช่า กรุณาเข้าสู่ระบบก่อน" }; }
 
     const tenantPhotos: string[] = [];
@@ -534,6 +569,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: profile.userId,
       tenantId: tenant.id,
       direction: "in",
@@ -544,21 +580,26 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     });
 
     const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
-    broadcastChatMessage({
+    broadcastChatMessage(orgId, {
       lineUserId: profile.userId,
       displayName: senderName || profile.displayName || "ไม่ทราบชื่อ",
       roomNumber: roomNumber || null,
       pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
       preview: `🔧 แจ้งซ่อม: ${title.trim()}`,
     });
-    broadcastChange("chat", "create", "มีการแจ้งซ่อมใหม่", senderName);
+    broadcastChange(orgId, "chat", "create", "มีการแจ้งซ่อมใหม่", senderName);
 
     return { ok: true, messageId: id };
   })
   // ปุ่ม "ดูห้องว่าง"/"จองห้อง" บนเมนู Guest — สาธารณะจริงๆ ไม่ต้องยืนยันตัวตน (ต่างจาก endpoint อื่นในไฟล์นี้
   // ที่ต้องรู้ว่าเป็นผู้เช่าคนไหน) เพราะยังไม่ใช่ผู้เช่า ดูรายการห้องที่สถานะ "ว่าง" และเปิดใช้งานอยู่เท่านั้น
-  .get("/rooms", async () => {
-    const [roomRows, towerRows] = await Promise.all([db.select().from(rooms), db.select().from(towers)]);
+  .get("/rooms", async ({ query }) => {
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) return [];
+    const [roomRows, towerRows] = await Promise.all([
+      db.select().from(rooms).where(eq(rooms.orgId, orgId)),
+      db.select().from(towers).where(eq(towers.orgId, orgId)),
+    ]);
     const towerMap = new Map(towerRows.map((t) => [t.id, t]));
     return roomRows
       .filter((r) => r.status === "ว่าง" && r.isActive !== "false")
@@ -571,7 +612,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         price: Number(r.price) || 0,
         dailyPrice: Number(r.dailyPrice) || 0,
         detail: r.detail,
-        pictures: parseJsonArray(r.pictures),
+        pictures: parseJsonArray(r.pictures).map((p: any) => ({ ...p, url: signUploadPath(p.url) })),
       }));
   })
   // กด "จองห้องนี้" ในหน้า LIFF Booking (มาจากทางลัดในหน้า LiffRoomsPage หรือกรอกเองในหน้า LiffBookingPage) —
@@ -580,7 +621,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // ใครใช้ ตกค้างจากยุค Google Sheets) + **ล็อกห้องทันที** (rooms.status = "จอง") ผู้จองยกเลิกเองได้ที่หน้า
   // LiffBookingPage (ดู /rooms/cancel ด้านล่าง) ไม่ต้องรอพนักงานยืนยันอีกต่อไป — ยังคงขึ้นเป็นการ์ดในหน้าแชท
   // พนักงานเหมือนเดิม (messageType "booking") ไว้ให้เห็นเป็นแจ้งเตือนเฉยๆ
-  .post("/rooms/book", async ({ body, set }) => {
+  .post("/rooms/book", async ({ body, set, query }) => {
     const { accessToken, roomId, name, tel } = body as {
       accessToken?: string; roomId?: string; name?: string; tel?: string;
     };
@@ -588,11 +629,13 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     if (!roomId) { set.status = 400; return { error: "กรุณาเลือกห้องที่ต้องการจอง" }; }
     if (!name?.trim()) { set.status = 400; return { error: "กรุณากรอกชื่อ" }; }
     if (!tel?.trim()) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรศัพท์" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+    const [room] = await db.select().from(rooms).where(and(eq(rooms.id, roomId), eq(rooms.orgId, orgId)));
     if (!room) { set.status = 404; return { error: "ไม่พบห้องที่ต้องการจอง" }; }
     // กันจองซ้อน — ห้องอาจถูกคนอื่นจองไปแล้วระหว่างที่ผู้ใช้คนนี้ดูรายละเอียดอยู่ (สถานะเปลี่ยนจาก "ว่าง" ไปแล้ว)
     if (room.status !== "ว่าง") { set.status = 409; return { error: "ห้องนี้เพิ่งถูกจองไปแล้ว กรุณาเลือกห้องอื่น" }; }
@@ -601,6 +644,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const bookingId = `BK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(bookings).values({
       id: bookingId,
+      orgId,
       timestamp: ts,
       source: "LIFF",
       roomId: room.id,
@@ -631,6 +675,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(chatMessages).values({
       id,
+      orgId,
       lineUserId: profile.userId,
       tenantId: "",
       direction: "in",
@@ -641,33 +686,35 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     });
 
     const [profileCache] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, profile.userId));
-    broadcastChatMessage({
+    broadcastChatMessage(orgId, {
       lineUserId: profile.userId,
       displayName: name.trim() || profile.displayName || "ไม่ทราบชื่อ",
       roomNumber: room.number || null,
       pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
       preview: `🏠 จองห้อง ${room.number}`,
     });
-    broadcastChange("room", "update", "มีการจองห้องใหม่ (ล็อกห้องอัตโนมัติ)", name.trim());
+    broadcastChange(orgId, "room", "update", "มีการจองห้องใหม่ (ล็อกห้องอัตโนมัติ)", name.trim());
 
     return { ok: true, messageId: id, bookingId };
   })
   // หน้า LIFF Booking (LiffBookingPage.tsx) — รายการห้องที่ผู้ใช้ LINE คนนี้จองไว้อยู่ (status "active" เท่านั้น
   // อดีต/ที่ยกเลิกแล้วไม่ต้องโชว์) ใช้แสดงการ์ด "ห้องที่คุณจองอยู่" พร้อมปุ่มยกเลิกเอง
-  .post("/rooms/mine", async ({ body, set }) => {
+  .post("/rooms/mine", async ({ body, set, query }) => {
     const { accessToken } = body as { accessToken?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
     const myBookings = await db.select().from(bookings)
-      .where(and(eq(bookings.idLine, profile.userId), eq(bookings.status, "active")));
+      .where(and(eq(bookings.idLine, profile.userId), eq(bookings.status, "active"), eq(bookings.orgId, orgId)));
     if (myBookings.length === 0) return { bookings: [] };
 
     const roomIds = myBookings.map((b) => b.roomId).filter(Boolean);
     const roomRows = roomIds.length > 0 ? await db.select().from(rooms).where(inArray(rooms.id, roomIds)) : [];
-    const towerRows = await db.select().from(towers);
+    const towerRows = await db.select().from(towers).where(eq(towers.orgId, orgId));
     const roomMap = new Map(roomRows.map((r) => [r.id, r]));
     const towerMap = new Map(towerRows.map((t) => [t.id, t]));
 
@@ -683,7 +730,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
           floor: room?.floor || "",
           price: Number(b.roomPrice) || 0,
           detail: b.roomDetail,
-          pictures: room ? parseJsonArray(room.pictures) : [],
+          pictures: room ? parseJsonArray(room.pictures).map((p: any) => ({ ...p, url: signUploadPath(p.url) })) : [],
           bookedAt: b.timestamp,
         };
       }),
@@ -692,15 +739,17 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
   // ปุ่ม "ยกเลิกการจอง" ในหน้า LiffBookingPage — ยกเลิกได้เฉพาะรายการของตัวเอง (เช็ค idLine ตรงกับ token) และ
   // ต้องยัง "active" อยู่เท่านั้น ปลดล็อกห้องกลับเป็น "ว่าง" ให้อัตโนมัติ (เช็คก่อนว่าห้องยังเป็น "จอง" อยู่จริง
   // เผื่อพนักงานไปเปลี่ยนสถานะ/ผูกผู้เช่าจริงเข้าห้องนี้ไปแล้วระหว่างนั้น จะได้ไม่ไปเขี่ยสถานะที่ตั้งใจไว้ทิ้ง)
-  .post("/rooms/cancel", async ({ body, set }) => {
+  .post("/rooms/cancel", async ({ body, set, query }) => {
     const { accessToken, bookingId } = body as { accessToken?: string; bookingId?: string };
     if (!accessToken) { set.status = 400; return { error: "ไม่พบ access token จาก LINE" }; }
     if (!bookingId) { set.status = 400; return { error: "ข้อมูลไม่ครบ" }; }
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) { set.status = 503; return { error: "ระบบยังไม่พร้อมใช้งาน" }; }
 
     const profile = await verifyLiffAccessToken(accessToken);
     if (!profile) { set.status = 401; return { error: "ยืนยันตัวตนกับ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }; }
 
-    const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+    const [booking] = await db.select().from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.orgId, orgId)));
     if (!booking || booking.idLine !== profile.userId) { set.status = 404; return { error: "ไม่พบรายการจอง" }; }
     if (booking.status !== "active") { set.status = 400; return { error: "รายการนี้ถูกยกเลิกไปแล้ว" }; }
 
@@ -714,7 +763,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       }
     }
 
-    broadcastChange("room", "update", "ยกเลิกการจองห้องเอง", booking.firstName || "");
+    broadcastChange(orgId, "room", "update", "ยกเลิกการจองห้องเอง", booking.firstName || "");
 
     return { ok: true };
   });

@@ -20,6 +20,8 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export default function LiffRepairPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
@@ -35,7 +37,7 @@ export default function LiffRepairPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await liffApi.getConfig();
+        const cfg = await liffApi.getConfig(org);
         if (cancelled) return;
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });
 
@@ -75,7 +77,7 @@ export default function LiffRepairPage() {
     if (!title.trim()) { setFormError("กรุณากรอกหัวข้อที่ต้องการแจ้งซ่อม"); return; }
     setSubmitting(true); setFormError("");
     try {
-      await liffApi.submitRepair(accessToken, title.trim(), details.trim(), photos);
+      await liffApi.submitRepair(accessToken, title.trim(), details.trim(), photos, org);
       setStatus("submitted");
     } catch (e: any) {
       setFormError(e?.response?.data?.error ?? e?.message ?? "ส่งแจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");

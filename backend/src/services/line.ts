@@ -1,13 +1,15 @@
 // ── ส่งบิลแจ้งเตือนทาง LINE (LINE Messaging API — Push Message) ──────────────────
 // ตั้งค่า Channel Access Token + เปิด/ปิดใช้งานได้จากหน้า Settings (ตาราง app_config)
 // ใช้ทั้งตอนกดส่งเอง (bills.ts: POST /bills/:id/send-line) และตอนส่งอัตโนมัติตามวันนัด (runLineAutoSend)
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createHmac, timingSafeEqual } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { resolve } from "path";
 import { db } from "../db";
 import { appConfig, bills, chatMessages, lineProfiles, payments, tenants } from "../db/schema";
 import { broadcastChange } from "../lib/wsHub";
+import { listAllOrgIds } from "../lib/orgContext";
+import { decryptField, signUploadPath } from "../lib/encryption";
 
 const LINE_PROFILE_VERIFY_URL = "https://api.line.me/v2/profile";
 
@@ -64,8 +66,8 @@ export interface OutstandingBillItem {
 
 // ยอดค้างชำระทั้งหมดของผู้เช่าคนหนึ่ง (ทุกบิลที่ยังไม่จ่ายครบ ไม่จำกัดแค่เดือนก่อนหน้า) — ใช้ทั้งจากหน้า
 // แชท (routes/chat.ts) และหน้า LIFF Payment (routes/liff.ts) เลยแยกมาไว้ที่เดียวกันไม่ให้ query ต่างกัน
-export async function getOutstandingBillsForTenant(tenantId: string): Promise<{ items: OutstandingBillItem[]; total: number }> {
-  const billRows = await db.select().from(bills);
+export async function getOutstandingBillsForTenant(orgId: string, tenantId: string): Promise<{ items: OutstandingBillItem[]; total: number }> {
+  const billRows = await db.select().from(bills).where(eq(bills.orgId, orgId));
   const items: OutstandingBillItem[] = [];
   for (const row of billRows) {
     let data: any[] = [];
@@ -97,8 +99,8 @@ export interface TenantBillSummary {
 
 // บิลทุกใบของผู้เช่าคนหนึ่ง (ทั้งจ่ายแล้วและยังไม่จ่าย) เรียงใหม่ไปเก่า — ใช้ในหน้า LIFF Profile ให้ผู้เช่า
 // ดูประวัติบิลของตัวเองย้อนหลังได้ทั้งหมด ต่างจาก getOutstandingBillsForTenant ที่กรองเอาแต่ใบที่ค้างอยู่
-export async function getAllBillsForTenant(tenantId: string): Promise<TenantBillSummary[]> {
-  const billRows = await db.select().from(bills);
+export async function getAllBillsForTenant(orgId: string, tenantId: string): Promise<TenantBillSummary[]> {
+  const billRows = await db.select().from(bills).where(eq(bills.orgId, orgId));
   const result: TenantBillSummary[] = [];
   for (const row of billRows) {
     let data: any[] = [];
@@ -137,8 +139,8 @@ export interface TenantPaymentRecord {
 }
 
 // ประวัติการชำระเงินทุกรายการของผู้เช่าคนหนึ่ง เรียงใหม่ไปเก่า — ใช้ในหน้า LIFF Profile
-export async function getPaymentHistoryForTenant(tenantId: string): Promise<TenantPaymentRecord[]> {
-  const rows = await db.select().from(payments).where(eq(payments.tenantId, tenantId));
+export async function getPaymentHistoryForTenant(orgId: string, tenantId: string): Promise<TenantPaymentRecord[]> {
+  const rows = await db.select().from(payments).where(and(eq(payments.orgId, orgId), eq(payments.tenantId, tenantId)));
   const result: TenantPaymentRecord[] = rows.map((r) => {
     let data: any = {};
     try { data = r.data ? JSON.parse(r.data) : {}; } catch { data = {}; }
@@ -160,8 +162,8 @@ export async function getPaymentHistoryForTenant(tenantId: string): Promise<Tena
 
 // ดึงรายการห้องหนึ่งรายการในบิลกลุ่มหนึ่ง พร้อมตรวจว่าเป็นของผู้เช่าคนนี้จริง (กันผู้เช่าคนอื่นดู/จ่ายบิล
 // ของคนอื่นได้แค่เดา billId/roomId) — ใช้ในหน้า LIFF Payment ทั้งตอนดูรายละเอียดบิลและตอนสร้าง QR ชำระเงิน
-export async function getBillItemForTenant(billId: string, roomId: string, tenantId: string): Promise<{ item: any; monthYear: string } | null> {
-  const [row] = await db.select().from(bills).where(eq(bills.id, billId));
+export async function getBillItemForTenant(orgId: string, billId: string, roomId: string, tenantId: string): Promise<{ item: any; monthYear: string } | null> {
+  const [row] = await db.select().from(bills).where(and(eq(bills.id, billId), eq(bills.orgId, orgId)));
   if (!row) return null;
   let data: any[] = [];
   try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
@@ -170,16 +172,34 @@ export async function getBillItemForTenant(billId: string, roomId: string, tenan
   return { item: stripCarriedOutstanding(item), monthYear: row.monthYear };
 }
 
+// ถอดรหัสเลขบัตร ปชช./ที่อยู่ (เข้ารหัสไว้ในฐานข้อมูล — ดู lib/encryption.ts) ก่อนคืนแถวผู้เช่าออกจากไฟล์นี้
+// เสมอ — findTenantByLineUserId/findTenantsByPhone คืนแถวดิบตรงๆ ไม่ผ่าน parseTenant() ของ routes/tenants.ts
+// (เช่น routes/liff.ts /profile/full ต้องใช้ tenant.idLicense ที่ถอดรหัสแล้วมาตัดเอา 4 ตัวท้ายเทียบยืนยันตัวตน)
+function decryptTenantRow<T extends { idLicense: string | null; houseNo: string | null; soi: string | null; road: string | null; province: string | null; amphoe: string | null; tambon: string | null; zipcode: string | null; address: string | null }>(t: T): T {
+  return {
+    ...t,
+    idLicense: decryptField(t.idLicense ?? ""),
+    houseNo: decryptField(t.houseNo ?? ""),
+    soi: decryptField(t.soi ?? ""),
+    road: decryptField(t.road ?? ""),
+    province: decryptField(t.province ?? ""),
+    amphoe: decryptField(t.amphoe ?? ""),
+    tambon: decryptField(t.tambon ?? ""),
+    zipcode: decryptField(t.zipcode ?? ""),
+    address: decryptField(t.address ?? ""),
+  };
+}
+
 // หาผู้เช่าที่ผูก lineUserId นี้ไว้ (ผู้ทำสัญญาหลักหรือผู้ร่วมพักอาศัยก็ได้) — ไม่เจอคืน null เฉยๆ
 // ใช้ทั้งใน webhook (หาชื่อผู้ส่ง) และหน้าแชท (หาบิลค้างชำระของ tenant ที่ผูกกับ conversation นี้)
-export async function findTenantByLineUserId(lineUserId: string) {
-  const rows = await db.select().from(tenants);
+export async function findTenantByLineUserId(orgId: string, lineUserId: string) {
+  const rows = await db.select().from(tenants).where(eq(tenants.orgId, orgId));
   for (const t of rows) {
-    if ((t.lineUserId ?? "").trim() === lineUserId) return t;
+    if ((t.lineUserId ?? "").trim() === lineUserId) return decryptTenantRow(t);
     try {
       const coResidents = t.coResidents ? JSON.parse(t.coResidents) : [];
       if (Array.isArray(coResidents) && coResidents.some((c: any) => String(c?.lineId ?? "").trim() === lineUserId)) {
-        return t;
+        return decryptTenantRow(t);
       }
     } catch {
       // co-residents parse ไม่ได้ ข้ามไปเช็คคนถัดไป
@@ -199,25 +219,44 @@ function normalizePhone(raw: string): string {
 
 // หาผู้เช่าทั้งหมดที่เบอร์โทร (tenants.tel) ตรงกับเบอร์ที่กรอกมา — ปกติควรเจอแค่คนเดียว (1 เบอร์ต่อ 1 คน)
 // แต่คืนเป็น array เผื่อข้อมูลเดิมมีเบอร์ซ้ำกันหลายคน ให้ผู้เรียกตัดสินใจว่าจะปฏิเสธ/แจ้งเตือนอย่างไร
-export async function findTenantsByPhone(phone: string) {
+export async function findTenantsByPhone(orgId: string, phone: string) {
   const target = normalizePhone(phone);
   if (!target) return [];
-  const rows = await db.select().from(tenants);
-  return rows.filter((t) => normalizePhone(t.tel || "") === target);
+  const rows = await db.select().from(tenants).where(eq(tenants.orgId, orgId));
+  return rows.filter((t) => normalizePhone(t.tel || "") === target).map(decryptTenantRow);
 }
 
-const CONFIG_ID = "default";
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
 const LINE_PROFILE_URL = "https://api.line.me/v2/bot/profile";
 const LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message";
+const LINE_BOT_INFO_URL = "https://api.line.me/v2/bot/info";
 
-export async function getLineSettings() {
-  const [row] = await db.select().from(appConfig).where(eq(appConfig.id, CONFIG_ID));
+// ดึง LINE User ID ของบอทเจ้าของ channel access token นี้เอง — เรียกตอนบันทึกการตั้งค่า LINE Messaging ใน
+// หน้า Settings (ดู routes/settings.ts) เพื่อแคชไว้ที่ appConfig.lineBotUserId ใช้จับคู่ payload.destination
+// ที่ LINE Webhook ส่งมากับองค์กรเจ้าของช่องทางจริง (ดู resolveOrgIdByDestination ใน lib/orgContext.ts)
+// best-effort เฉยๆ (คืน null ถ้า token ผิด/เรียกไม่สำเร็จ) ไม่ควรบล็อกการบันทึกค่าตั้งค่าอื่นๆ
+export async function getBotUserId(token: string): Promise<string | null> {
+  try {
+    const res = await fetch(LINE_BOT_INFO_URL, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.userId ? String(data.userId) : null;
+  } catch {
+    return null;
+  }
+}
+
+// id ของแถว app_config "คือ" orgId ตรงๆ (เดิมเป็น sentinel "default" แถวเดียวทั้งระบบ — ดูคอมเมนต์ที่
+// ตาราง appConfig ใน db/schema.ts) แถวไม่มี = องค์กรนี้ยังไม่เคยเปิดหน้า Settings เลย ใช้ค่าเริ่มต้นทั้งหมด
+export async function getLineSettings(orgId: string) {
+  const [row] = await db.select().from(appConfig).where(eq(appConfig.id, orgId));
   return {
     enabled: row?.lineMessagingEnabled === "true",
     autoSendEnabled: row?.lineAutoSendEnabled === "true",
-    token: row?.lineChannelAccessToken ?? "",
-    channelSecret: row?.lineChannelSecret ?? "",
+    // token/channelSecret เข้ารหัสไว้ในฐานข้อมูล (ดู lib/encryption.ts) ต้องถอดรหัสตรงนี้ — chokepoint
+    // เดียวที่ทุก route (lineWebhook.ts, chat.ts, ส่งบิล) เรียกอ่านค่าตั้งค่า LINE Messaging ผ่าน
+    token: decryptField(row?.lineChannelAccessToken ?? ""),
+    channelSecret: decryptField(row?.lineChannelSecret ?? ""),
     appName: row?.appName ?? "",
     logoUrl: row?.logoUrl ?? "",
     yearFormat: (row?.yearFormat === "CE" ? "CE" : "BE") as "BE" | "CE",
@@ -397,9 +436,12 @@ function resolveSlipUrl(slipUrl: string | undefined): string {
 export function toPublicUrl(path: string): string {
   if (!path) return "";
   if (isUsableImageUrl(path)) return path;
+  // เซ็นลายเซ็นก่อนต่อ PUBLIC_BASE_URL เสมอ (ดู lib/encryption.ts) — signUploadPath เองจะข้าม path ที่ไม่ใช่
+  // /uploads/... ให้อัตโนมัติอยู่แล้ว (เผื่อ path หน้าตาแปลกๆ ที่ไม่ใช่ URL https แต่ก็ไม่ใช่ path อัปโหลดจริง)
+  const signedPath = signUploadPath(path);
   const base = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
   if (!isUsableImageUrl(`${base}/`)) return "";
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  return `${base}${signedPath.startsWith("/") ? "" : "/"}${signedPath}`;
 }
 
 interface LineAppearanceSettings {
@@ -612,16 +654,18 @@ export async function getLineProfile(token: string, userId: string): Promise<{ d
 
 // แคชรูปโปรไฟล์+ชื่อ LINE ลงตาราง line_profiles (upsert แบบ select-then-insert/update ตามแพทเทิร์นเดิม
 // ในไฟล์นี้ที่ไม่ใช้ onConflict) — เรียกจาก webhook (ข้อความเข้าใหม่) และปุ่มรีเฟรชโปรไฟล์ในหน้าแชท
-export async function cacheLineProfile(lineUserId: string, profile: { displayName: string; pictureUrl: string }) {
+export async function cacheLineProfile(orgId: string, lineUserId: string, profile: { displayName: string; pictureUrl: string }) {
   if (!profile.displayName && !profile.pictureUrl) return;
   const now = new Date().toISOString();
+  // PK ของตารางนี้ยังเป็น lineUserId เดี่ยวๆ ในเฟสนี้ (composite (org_id, line_user_id) เป็นเฟสถัดไป — ดู
+  // คอมเมนต์ที่ตาราง lineProfiles ใน db/schema.ts) จึงยัง lookup ด้วย lineUserId อย่างเดียว แค่ประทับ orgId ไว้ด้วย
   const [existing] = await db.select().from(lineProfiles).where(eq(lineProfiles.lineUserId, lineUserId));
   if (existing) {
     await db.update(lineProfiles)
-      .set({ displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now })
+      .set({ orgId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now })
       .where(eq(lineProfiles.lineUserId, lineUserId));
   } else {
-    await db.insert(lineProfiles).values({ lineUserId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now });
+    await db.insert(lineProfiles).values({ lineUserId, orgId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, updatedAt: now });
   }
 }
 
@@ -630,11 +674,12 @@ export async function cacheLineProfile(lineUserId: string, profile: { displayNam
 // "bill"/"receipt" เก็บ JSON สรุปข้อมูลบิล/ใบเสร็จไว้ใน text ให้หน้าแชทเรนเดอร์เป็นการ์ดหน้าตาเหมือนที่ส่งไป
 // จริงๆ (ไม่ใช่แค่ข้อความตัวหนังสือธรรมดา) มาร์คว่าอ่านแล้วทันทีเพราะเป็นข้อความขาออก แล้ว broadcast ให้
 // หน้าแชทที่เปิดอยู่รีเฟรชสดๆ เหมือนตอนมีข้อความเข้าใหม่
-async function logOutboundChatMessage(lineUserId: string, tenantId: string, messageType: string, payload: string, senderName: string) {
+async function logOutboundChatMessage(orgId: string, lineUserId: string, tenantId: string, messageType: string, payload: string, senderName: string) {
   if (!lineUserId || !lineUserId.startsWith("U")) return;
   const now = new Date().toISOString();
   await db.insert(chatMessages).values({
     id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    orgId,
     lineUserId,
     tenantId,
     direction: "out",
@@ -644,7 +689,7 @@ async function logOutboundChatMessage(lineUserId: string, tenantId: string, mess
     createdAt: now,
     readAt: now,
   });
-  broadcastChange("chat", "create", "มีข้อความแชทใหม่จาก LINE", senderName);
+  broadcastChange(orgId, "chat", "create", "มีข้อความแชทใหม่จาก LINE", senderName);
 }
 
 // ดาวน์โหลดเนื้อหาที่ผู้เช่าส่งเข้ามาทาง LINE (รูปภาพ/ไฟล์) มาเก็บไว้ใน uploads/chat/ แล้วคืน path สัมพัทธ์
@@ -688,8 +733,8 @@ export interface SendLineResult {
 
 // ส่งบิลของห้องหนึ่งห้อง (ภายในบิลกลุ่ม billId) ไปยัง LINE ของผู้เช่าห้องนั้น แล้วบันทึกผลลง sendLogs
 // ของห้องนั้นใน bills.data ทันที (ไม่ต้องรอผู้ใช้กด "บันทึก" อีกที)
-export async function sendBillLineForRoom(billId: string, roomId: string, method: "manual" | "auto" = "manual", actor: string = ""): Promise<SendLineResult> {
-  const [billRow] = await db.select().from(bills).where(eq(bills.id, billId));
+export async function sendBillLineForRoom(orgId: string, billId: string, roomId: string, method: "manual" | "auto" = "manual", actor: string = ""): Promise<SendLineResult> {
+  const [billRow] = await db.select().from(bills).where(and(eq(bills.id, billId), eq(bills.orgId, orgId)));
   if (!billRow) return { success: false, message: "ไม่พบบิล" };
 
   let data: any[] = [];
@@ -698,7 +743,7 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
   if (idx === -1) return { success: false, message: "ไม่พบข้อมูลห้องนี้ในบิล" };
   const item = data[idx];
 
-  const settings = await getLineSettings();
+  const settings = await getLineSettings(orgId);
   if (!settings.enabled || !settings.token) {
     return { success: false, message: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
   }
@@ -711,7 +756,7 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
   let lineUserId = "";
   let coLineUserIds: string[] = [];
   if (item.tenantId) {
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, String(item.tenantId)));
+    const [tenant] = await db.select().from(tenants).where(and(eq(tenants.id, String(item.tenantId)), eq(tenants.orgId, orgId)));
     lineUserId = (tenant?.lineUserId ?? "").trim();
     // ผู้ร่วมพักอาศัยที่ผูก LINE User ID ไว้ (ต้องขึ้นต้นด้วย "U" เหมือนผู้ทำสัญญาหลัก) — ส่งบิลใบเดียวกัน
     // ให้ทุกคนพร้อมกัน โดยเนื้อหาบิล (ชื่อผู้เช่าบนหัวบิล) ยังคงเป็นชื่อผู้ทำสัญญาเสมอ ไม่เปลี่ยนตามผู้รับ
@@ -765,7 +810,7 @@ export async function sendBillLineForRoom(billId: string, roomId: string, method
 
     const snapshot = buildChatBillSnapshot(item, billRow.monthYear, settings);
     await logOutboundChatMessage(
-      lineUserId, String(item.tenantId ?? ""), "bill", JSON.stringify(snapshot),
+      orgId, lineUserId, String(item.tenantId ?? ""), "bill", JSON.stringify(snapshot),
       log.by || "พนักงาน"
     );
   }
@@ -891,8 +936,8 @@ function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppe
 
 // ส่งใบเสร็จรับเงินทาง LINE — เรียกจาก bills.ts ทันทีหลังบันทึกรายการชำระเงินสำเร็จ (best-effort ไม่บล็อกการ
 // บันทึกยอดถ้าส่งไม่สำเร็จ เช่น ผู้เช่ายังไม่ได้ผูก LINE User ID หรือปิดใช้งาน LINE Messaging ไว้)
-export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promise<SendLineResult> {
-  const settings = await getLineSettings();
+export async function sendPaymentReceiptLine(orgId: string, input: PaymentReceiptInput): Promise<SendLineResult> {
+  const settings = await getLineSettings(orgId);
   if (!settings.enabled || !settings.token) {
     return { success: false, message: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
   }
@@ -900,7 +945,7 @@ export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promis
     return { success: false, message: "ห้องนี้ไม่มีผู้เช่าผูกอยู่" };
   }
 
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, String(input.tenantId)));
+  const [tenant] = await db.select().from(tenants).where(and(eq(tenants.id, String(input.tenantId)), eq(tenants.orgId, orgId)));
   const lineUserId = (tenant?.lineUserId ?? "").trim();
   if (!lineUserId || !lineUserId.startsWith("U")) {
     return { success: false, message: "ผู้เช่าห้องนี้ยังไม่ได้ผูก LINE User ID" };
@@ -911,7 +956,7 @@ export async function sendPaymentReceiptLine(input: PaymentReceiptInput): Promis
 
     const snapshot = buildChatReceiptSnapshot(input, settings);
     await logOutboundChatMessage(
-      lineUserId, String(input.tenantId ?? ""), "receipt", JSON.stringify(snapshot),
+      orgId, lineUserId, String(input.tenantId ?? ""), "receipt", JSON.stringify(snapshot),
       input.actor || "พนักงาน"
     );
 
@@ -947,9 +992,9 @@ function currentMonthYearBangkok(): string {
 // รายละเอียดบิลเดือนปัจจุบันให้ทันที ไม่ต้องรู้ billId/roomId ล่วงหน้าตอนสร้างเมนู (เมนูเป็น URL เดียวใช้ร่วมกัน
 // ทุกคน ระบุ user เฉพาะเจาะจงไม่ได้) จึงต้องมาไล่หาว่า "เดือนนี้ของผู้เช่าคนนี้" คือบิลใบไหนตอนเปิดหน้าจริง
 // (ดู POST /liff/bill-detail/this-month ใน routes/liff.ts ที่เรียกฟังก์ชันนี้)
-export async function getThisMonthBillItemForTenant(tenantId: string): Promise<{ billId: string; roomId: string; item: any; monthYear: string } | null> {
+export async function getThisMonthBillItemForTenant(orgId: string, tenantId: string): Promise<{ billId: string; roomId: string; item: any; monthYear: string } | null> {
   const monthYear = currentMonthYearBangkok();
-  const [row] = await db.select().from(bills).where(eq(bills.monthYear, monthYear));
+  const [row] = await db.select().from(bills).where(and(eq(bills.monthYear, monthYear), eq(bills.orgId, orgId)));
   if (!row) return null;
   let data: any[] = [];
   try { data = row.data ? JSON.parse(row.data) : []; } catch { data = []; }
@@ -958,14 +1003,14 @@ export async function getThisMonthBillItemForTenant(tenantId: string): Promise<{
   return { billId: row.id, roomId: String(item.roomId ?? ""), item: stripCarriedOutstanding(item), monthYear: row.monthYear };
 }
 
-// เรียกเป็นระยะจาก index.ts — เช็คบิลทุกใบที่ตั้ง "วันนัดส่ง" (scheduledDate) ตรงกับวันนี้ และยังไม่เคย
-// ส่งอัตโนมัติมาก่อน (lineAutoSentAt ว่าง) แล้วส่งให้ทุกห้องที่มีผู้เช่าและยังไม่จ่าย ครั้งเดียวต่อบิลต่อวัน
-export async function runLineAutoSend(): Promise<void> {
-  const settings = await getLineSettings();
+// เช็คบิลทุกใบ "ขององค์กรหนึ่ง" ที่ตั้ง "วันนัดส่ง" (scheduledDate) ตรงกับวันนี้ และยังไม่เคยส่งอัตโนมัติมาก่อน
+// (lineAutoSentAt ว่าง) แล้วส่งให้ทุกห้องที่มีผู้เช่าและยังไม่จ่าย ครั้งเดียวต่อบิลต่อวัน
+async function runLineAutoSendForOrg(orgId: string): Promise<void> {
+  const settings = await getLineSettings(orgId);
   if (!settings.enabled || !settings.autoSendEnabled || !settings.token) return;
 
   const today = todayBangkok();
-  const rows = await db.select().from(bills);
+  const rows = await db.select().from(bills).where(eq(bills.orgId, orgId));
 
   for (const row of rows) {
     if (!row.scheduledDate || row.scheduledDate !== today) continue;
@@ -977,12 +1022,25 @@ export async function runLineAutoSend(): Promise<void> {
     for (const item of data) {
       if (!item?.tenantId || item?.status === "paid") continue;
       try {
-        await sendBillLineForRoom(row.id, String(item.roomId), "auto", "ระบบอัตโนมัติ");
+        await sendBillLineForRoom(orgId, row.id, String(item.roomId), "auto", "ระบบอัตโนมัติ");
       } catch (e) {
-        console.error(`[line-auto-send] bill=${row.id} room=${item.roomId}`, e);
+        console.error(`[line-auto-send] org=${orgId} bill=${row.id} room=${item.roomId}`, e);
       }
     }
 
     await db.update(bills).set({ lineAutoSentAt: new Date().toISOString() }).where(eq(bills.id, row.id));
+  }
+}
+
+// เรียกเป็นระยะจาก index.ts — วนทำทีละองค์กร (ไม่ใช่ทั้งระบบรวมกันแบบเดิม) เพราะแต่ละองค์กรมีการตั้งค่า LINE
+// Messaging/วันนัดส่งของตัวเอง ความล้มเหลวขององค์กรหนึ่ง (เช่น token หมดอายุ) ต้องไม่กระทบองค์กรอื่น
+export async function runLineAutoSend(): Promise<void> {
+  const orgIds = await listAllOrgIds();
+  for (const orgId of orgIds) {
+    try {
+      await runLineAutoSendForOrg(orgId);
+    } catch (e) {
+      console.error(`[line-auto-send] org=${orgId} failed`, e);
+    }
   }
 }
