@@ -396,17 +396,17 @@ export const superAdminApi = {
   // รีเซ็ตรหัสผ่านบัญชีเจ้าของ — คืนรหัสผ่านใหม่แบบ plaintext ครั้งเดียว (backend ไม่เก็บไว้ดูย้อนหลังได้อีก)
   resetOwnerPassword: (id: string) =>
     superAdminHttp.post(`/superadmin/organizations/${id}/reset-password`).then((r) => r.data as { username: string; password: string }),
-  // สร้าง Rich Menu ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — ส่ง token/URL/รูปมาในคำขอเดียวจบ (ไม่มี
-  // ที่เก็บถาวรฝั่ง backend ดู routes/superadmin.ts)
+  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — ส่ง
+  // token/URL/รูปมาในคำขอเดียวจบ (ไม่มีที่เก็บถาวรฝั่ง backend ดู routes/superadmin.ts)
   createRichMenuSet: (data: {
     token: string;
-    liffLoginUrl: string; liffPaymentUrl: string;
-    liffProfileUrl?: string; liffRepairUrl?: string; liffRoomsUrl?: string; liffBookingUrl?: string; contactUrl?: string;
-    images: { guest: string; member: string; admin: string };
-    previousIds?: { guest?: string; member?: string; admin?: string };
+    liffLoginUrl: string;
+    contactUrl?: string;
+    image: string;
+    previousGuestId?: string;
   }) =>
     superAdminHttp.post("/superadmin/richmenu/create", data).then((r) => r.data as {
-      menuIds: { guest: string; member: string; admin: string };
+      menuId: string;
       defaultSet: boolean;
       warning?: string;
     }),

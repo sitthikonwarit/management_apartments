@@ -19,7 +19,7 @@ import { generateSlug } from "../lib/orgContext";
 import { getOrgStorageBytes, getUnattributedStorageBytes, UPLOAD_SUBDIRS } from "../lib/storageUsage";
 import { getOrgRequestRate, getGlobalRequestRate, getApiHealth } from "../lib/apiUsageTracker";
 import { getServerHealth, checkDatabaseHealth } from "../lib/serverHealth";
-import { createAllRichMenus, type RichMenuImageInput } from "../services/richMenu";
+import { createGuestRichMenu, type RichMenuImageInput } from "../services/richMenu";
 
 // ตัดทุกอย่างที่ไม่ใช่ตัวเลขออก (เว้นวรรค/ขีด/+66 ที่ลูกค้าอาจพิมพ์ปนมา) ให้เหลือแค่ตัวเลขล้วนๆ ไว้เทียบกับ
 // ที่เก็บใน users.phone — ใช้ตัวเดียวกันทั้งตอนสร้างองค์กร (ที่นี่) และตอนกรอกเบอร์เชื่อม LINE ครั้งแรก (ดู
@@ -363,21 +363,21 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     console.error(`[superadmin] DELETED org=${params.id} (${org.name}) — all data removed`);
     return { deleted: params.id };
   })
-  // สร้าง Rich Menu ชุด Guest/Member/Admin ให้ LINE OA "อิสระ" ใดๆ ก็ได้ ไม่ผูกกับองค์กรในระบบเลย (ต่างจาก
-  // POST /richmenu/create ใน routes/settings.ts ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่ล็อกอินอยู่
-  // เสมอ) ใช้ตอนอยากทำ Rich Menu ให้ LINE OA อื่น เช่น บัญชีทดลอง/ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้
-  // รับ token + รูปทั้ง 3 มาในคำขอเดียวจบเลย ไม่มีที่เก็บถาวรฝั่งเรา (เก็บแค่ระหว่างเรียก LINE API เท่านั้น)
-  // ไฟล์รูปเลยไม่ต้องเขียนลงดิสก์เหมือนของ routes/settings.ts — ถอด base64 เป็น Buffer ในหน่วยความจำตรงๆ
+  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA "อิสระ" ใดๆ ก็ได้ ไม่ผูกกับองค์กรในระบบเลย
+  // (ต่างจาก POST /richmenu/create ใน routes/settings.ts ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่
+  // ล็อกอินอยู่เสมอ และยังสร้างครบ 3 เมนู Guest/Member/Admin) ใช้ตอนอยากทำ Rich Menu ให้ LINE OA อื่น เช่น
+  // บัญชีทดลอง/ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ รับ token + รูปมาในคำขอเดียวจบเลย ไม่มีที่เก็บ
+  // ถาวรฝั่งเรา (เก็บแค่ระหว่างเรียก LINE API เท่านั้น) ไฟล์รูปเลยไม่ต้องเขียนลงดิสก์เหมือนของ routes/settings.ts
+  // — ถอด base64 เป็น Buffer ในหน่วยความจำตรงๆ
   .post("/richmenu/create", async ({ body, set }) => {
     const b = body as any;
     const token = String(b.token ?? "").trim();
     if (!token) { set.status = 400; return { error: "กรุณากรอก LINE Channel Access Token" }; }
 
     const liffLoginUrl = String(b.liffLoginUrl ?? "").trim();
-    const liffPaymentUrl = String(b.liffPaymentUrl ?? "").trim();
-    if (!liffLoginUrl || !liffPaymentUrl) {
+    if (!liffLoginUrl) {
       set.status = 400;
-      return { error: "กรุณากรอก LIFF Login URL และ LIFF Payment URL ให้ครบ" };
+      return { error: "กรุณากรอก LIFF Login URL" };
     }
 
     function decodeImage(base64: unknown, label: string): RichMenuImageInput {
@@ -388,36 +388,24 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
       return { buffer: Buffer.from(raw, "base64"), mimeType };
     }
 
-    let images: { guest: RichMenuImageInput; member: RichMenuImageInput; admin: RichMenuImageInput };
+    let image: RichMenuImageInput;
     try {
-      images = {
-        guest: decodeImage(b.images?.guest, "Guest"),
-        member: decodeImage(b.images?.member, "Member"),
-        admin: decodeImage(b.images?.admin, "Admin"),
-      };
+      image = decodeImage(b.image, "Guest");
     } catch (e: any) {
       set.status = 400;
       return { error: e?.message ?? "รูปเมนูไม่ถูกต้อง" };
     }
 
-    const previousIds = {
-      guest: String(b.previousIds?.guest ?? "").trim() || undefined,
-      member: String(b.previousIds?.member ?? "").trim() || undefined,
-      admin: String(b.previousIds?.admin ?? "").trim() || undefined,
-    };
+    const previousGuestId = String(b.previousGuestId ?? "").trim() || undefined;
 
     try {
-      const result = await createAllRichMenus(token, {
-        liffLoginUrl, liffPaymentUrl,
-        liffProfileUrl: String(b.liffProfileUrl ?? "").trim(),
-        liffRepairUrl: String(b.liffRepairUrl ?? "").trim(),
-        liffRoomsUrl: String(b.liffRoomsUrl ?? "").trim(),
-        liffBookingUrl: String(b.liffBookingUrl ?? "").trim(),
+      const result = await createGuestRichMenu(token, {
+        liffLoginUrl,
         contactUrl: String(b.contactUrl ?? "").trim(),
-      }, images, previousIds);
+      }, image, previousGuestId);
 
-      console.log(`[superadmin] created ad-hoc rich menu set — guest=${result.ids.guest} member=${result.ids.member} admin=${result.ids.admin}`);
-      return { menuIds: result.ids, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError };
+      console.log(`[superadmin] created ad-hoc guest rich menu — guest=${result.id}`);
+      return { menuId: result.id, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError };
     } catch (e: any) {
       set.status = 500;
       return { error: e?.message ?? "สร้าง Rich Menu ไม่สำเร็จ" };

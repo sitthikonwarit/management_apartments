@@ -36,6 +36,19 @@ function guestAreas(liffLoginUrl: string, contactUrl: string, liffRoomsUrl: stri
   ];
 }
 
+// เลย์เอาต์ Guest แบบตัดเหลือแค่ปุ่มใหญ่บน (เข้าเว็บหลัก management ผ่าน LINE Login) + ปุ่มล่าง 3 ปุ่ม
+// (ติดต่อ/แจ้งปัญหา/เพิ่มเติม) — ใช้เฉพาะเครื่องมือ Superadmin > สร้าง Rich Menu (SuperAdminRichMenuPage.tsx)
+// ที่ตัดเมนู Member/Admin ออกไปแล้ว "แจ้งปัญหา"/"เพิ่มเติม" เป็นข้อความส่งเข้าแชทเสมอ (ยังไม่มีหน้า LIFF รองรับ)
+// ไม่แตะ guestAreas() เดิมด้านบนเพื่อไม่ให้กระทบดีไซน์เมนู Guest ขององค์กรอื่นในระบบ (หน้า Settings ปกติ)
+function guestOnlyAreas(liffLoginUrl: string, contactUrl: string): RichMenuArea[] {
+  return [
+    { bounds: { x: 0, y: 0, width: 2500, height: 843 }, action: { type: "uri", uri: liffLoginUrl } },
+    { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: uriOrMessage(contactUrl, "ติดต่อ") },
+    { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: { type: "message", text: "แจ้งปัญหา" } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "message", text: "เพิ่มเติม" } },
+  ];
+}
+
 const W = 833;
 const H = 843;
 
@@ -199,4 +212,34 @@ export async function createAllRichMenus(
   }
 
   return { ids, defaultSet: true };
+}
+
+export interface CreateGuestRichMenuResult {
+  id: string;
+  defaultSet: boolean;
+  defaultError?: string;
+}
+
+// สร้างเมนู Guest แบบเดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง ไม่มี Member/Admin) — ใช้เฉพาะเครื่องมือ Superadmin >
+// สร้าง Rich Menu (routes/superadmin.ts) ต่างจาก createAllRichMenus ด้านบนที่หน้า Settings ปกติของแต่ละ
+// องค์กร (routes/settings.ts) ยังใช้อยู่เหมือนเดิม
+export async function createGuestRichMenu(
+  token: string,
+  urls: { liffLoginUrl: string; contactUrl: string },
+  image: RichMenuImageInput,
+  previousGuestId?: string
+): Promise<CreateGuestRichMenuResult> {
+  if (previousGuestId) await deleteRichMenu(token, previousGuestId);
+
+  const guestId = await createOne(token, "Guest Menu", "เมนูผู้มาเยือน", guestOnlyAreas(urls.liffLoginUrl, urls.contactUrl), image.buffer, image.mimeType);
+
+  const setDefaultRes = await fetch(`${LINE_DEFAULT_RICHMENU_URL}/${guestId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!setDefaultRes.ok) {
+    const text = await setDefaultRes.text().catch(() => "");
+    return { id: guestId, defaultSet: false, defaultError: `ตั้งเมนู Guest เป็นค่าเริ่มต้นไม่สำเร็จ (${setDefaultRes.status}): ${text}` };
+  }
+  return { id: guestId, defaultSet: true };
 }
