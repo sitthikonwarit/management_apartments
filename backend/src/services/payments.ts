@@ -19,6 +19,7 @@ export async function tryAutoConfirmSlipPayment(orgId: string, lineUserId: strin
   try {
     if (!imageRelPath) return;
     const [config] = await db.select().from(appConfig).where(eq(appConfig.id, orgId));
+    if (config?.easySlipEnabled !== "true") return;
     const apiKey = decryptField(config?.easySlipApiKey || "");
     if (!apiKey) return;
 

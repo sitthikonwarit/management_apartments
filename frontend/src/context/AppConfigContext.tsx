@@ -53,8 +53,9 @@ export interface AppConfig {
   // ข้อมูลบัญชีรับชำระเงิน — แสดงในหน้า LIFF Payment ให้ผู้เช่าโอนเงินเอง
   payment: {
     bankName: string; accountName: string; accountNumber: string; qrImage: string; bankLogoImage: string;
-    // EasySlip — สร้าง QR PromptPay ระบุยอดเอง + ตรวจสลิปอัตโนมัติ (ว่าง = ปิดใช้งาน ใช้ QR/เลขบัญชีคงที่แทน)
-    easySlipApiKey: string; promptPayId: string;
+    // EasySlip — สร้าง QR PromptPay ระบุยอดเอง + ตรวจสลิปอัตโนมัติ (ต้องเปิด easySlipEnabled ด้วย ไม่ใช่แค่มี
+    // API Key ถึงจะใช้งานจริง — ปิดสวิตช์ = ใช้ QR/เลขบัญชีคงที่แทนเสมอ)
+    easySlipEnabled: boolean; easySlipApiKey: string; promptPayId: string;
   };
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — false = AuthenticatedShell (App.tsx) บังคับพาไปหน้า
   // Settings ค้างไว้ทุก route จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" (ดู backend routes/settings.ts)
@@ -94,7 +95,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },
-  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipApiKey: "", promptPayId: "" },
+  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipEnabled: false, easySlipApiKey: "", promptPayId: "" },
   // ค่าเริ่มต้น "true" ตั้งใจ (fail open) — กันไม่ให้แอปแวบล็อกทุกคนไปหน้า Settings ระหว่างที่ยังโหลดค่าจริง
   // จาก backend ไม่เสร็จ (AuthenticatedShell เช็ค loading ของ context นี้ประกอบด้วยอยู่แล้ว แต่กันไว้อีกชั้น)
   setupCompleted: true,

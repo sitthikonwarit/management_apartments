@@ -283,6 +283,7 @@ export default function SettingsPage() {
   const [paymentBankLogoImage, setPaymentBankLogoImage] = useState("");
   const [uploadingBankLogo, setUploadingBankLogo] = useState(false);
   const bankLogoFileRef = useRef<HTMLInputElement>(null);
+  const [easySlipEnabled, setEasySlipEnabled] = useState(false);
   const [easySlipApiKey, setEasySlipApiKey] = useState("");
   const [easySlipApiKeyVisible, setEasySlipApiKeyVisible] = useState(false);
   const [promptPayId, setPromptPayId] = useState("");
@@ -381,6 +382,7 @@ export default function SettingsPage() {
     setPaymentAccountNumber(config.payment.accountNumber);
     setPaymentQrImage(config.payment.qrImage);
     setPaymentBankLogoImage(config.payment.bankLogoImage);
+    setEasySlipEnabled(config.payment.easySlipEnabled);
     setEasySlipApiKey(config.payment.easySlipApiKey);
     setPromptPayId(config.payment.promptPayId);
     setLogoUrl(config.appIdentity.logoUrl);
@@ -607,7 +609,7 @@ export default function SettingsPage() {
         payment: {
           bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
           accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage, bankLogoImage: paymentBankLogoImage,
-          easySlipApiKey: easySlipApiKey.trim(), promptPayId: promptPayId.trim(),
+          easySlipEnabled, easySlipApiKey: easySlipApiKey.trim(), promptPayId: promptPayId.trim(),
         },
       };
       const updated = await settingsApi.updateConfig(payload);
@@ -1079,41 +1081,50 @@ export default function SettingsPage() {
                   </div>
                 </Searchable>
 
-                <Searchable query={q} keywords="easyslip ตรวจสลิป promptpay สแกนจ่าย qr อัตโนมัติ ยืนยันการชำระเงิน">
+                <Searchable query={q} keywords="easyslip ตรวจสลิป promptpay สแกนจ่าย qr อัตโนมัติ ยืนยันการชำระเงิน เปิดปิด">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
-                    <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
-                      <i className="fas fa-robot me-2" />EasySlip — เลือกจำนวนเงิน + ตรวจสลิปอัตโนมัติ
-                    </h6>
+                    <div className="d-flex justify-content-between align-items-center mb-2" style={{ borderBottom: "2px solid #06C755", paddingBottom: 8 }}>
+                      <h6 className="mb-0" style={{ fontWeight: 700, color: "#06C755", border: "none", padding: 0, margin: 0 }}>
+                        <i className="fas fa-robot me-2" />EasySlip — เลือกจำนวนเงิน + ตรวจสลิปอัตโนมัติ
+                      </h6>
+                      <div className="form-check form-switch mb-0">
+                        <input className="form-check-input" type="checkbox"
+                          checked={easySlipEnabled} onChange={(e) => setEasySlipEnabled(e.target.checked)} />
+                      </div>
+                    </div>
                     <p className="text-muted small mb-3">
                       ให้ผู้เช่าเลือกเดือน/จำนวนเงินที่จะจ่ายเอง (จ่ายเป็นงวดได้) — เมื่อส่งสลิปกลับเข้าแชท LINE ระบบจะตรวจสอบยอดกับ EasySlip อัตโนมัติ
-                      ถ้ายอดตรงและไม่ใช่สลิปซ้ำ จะบันทึกยอดชำระ+ส่งใบเสร็จให้ทันที ไม่ต้องรอพนักงาน
+                      ถ้ายอดตรงและไม่ใช่สลิปซ้ำ จะบันทึกยอดชำระ+ส่งใบเสร็จให้ทันที ไม่ต้องรอพนักงาน — ปิดสวิตช์นี้เพื่อกลับไปใช้ QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปแทน โดยไม่ต้องลบ API Key ทิ้ง
                     </p>
 
-                    <label className="form-label small">EasySlip API Key</label>
-                    <div className="input-group mb-2">
-                      <input type={easySlipApiKeyVisible ? "text" : "password"} className="form-control" autoComplete="off"
-                        placeholder="วาง API Key จาก easyslip.com"
-                        value={easySlipApiKey} onChange={(e) => setEasySlipApiKey(e.target.value)} />
-                      <button type="button" className="btn btn-outline-secondary" onClick={() => setEasySlipApiKeyVisible((v) => !v)}
-                        title={easySlipApiKeyVisible ? "ซ่อน" : "แสดง"}>
-                        <i className={`fas fa-eye${easySlipApiKeyVisible ? "-slash" : ""}`} />
-                      </button>
-                    </div>
-                    <div className="form-text small mb-2">อย่างเดียวก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (แสดงเลขบัญชีด้านบนให้คัดลอกแทน QR)</div>
+                    <div style={{ opacity: easySlipEnabled ? 1 : 0.5, pointerEvents: easySlipEnabled ? "auto" : "none" }}>
+                      <label className="form-label small">EasySlip API Key</label>
+                      <div className="input-group mb-2">
+                        <input type={easySlipApiKeyVisible ? "text" : "password"} className="form-control" autoComplete="off"
+                          placeholder="วาง API Key จาก easyslip.com"
+                          value={easySlipApiKey} onChange={(e) => setEasySlipApiKey(e.target.value)} />
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => setEasySlipApiKeyVisible((v) => !v)}
+                          title={easySlipApiKeyVisible ? "ซ่อน" : "แสดง"}>
+                          <i className={`fas fa-eye${easySlipApiKeyVisible ? "-slash" : ""}`} />
+                        </button>
+                      </div>
+                      <div className="form-text small mb-2">อย่างเดียวก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (แสดงเลขบัญชีด้านบนให้คัดลอกแทน QR)</div>
 
-                    <label className="form-label small">PromptPay ID <span className="text-muted fw-normal">(ไม่บังคับ — ใส่เพิ่มถ้าอยากให้สร้าง QR สแกนจ่ายได้จริง)</span></label>
-                    <div className="input-group mb-2">
-                      <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้ (เว้นว่างได้ถ้าผูกแค่บัญชีธนาคารธรรมดา)"
-                        value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} />
+                      <label className="form-label small">PromptPay ID <span className="text-muted fw-normal">(ไม่บังคับ — ใส่เพิ่มถ้าอยากให้สร้าง QR สแกนจ่ายได้จริง)</span></label>
+                      <div className="input-group mb-2">
+                        <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้ (เว้นว่างได้ถ้าผูกแค่บัญชีธนาคารธรรมดา)"
+                          value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} />
+                      </div>
                     </div>
 
                     <div className="alert alert-light border small mb-0" style={{ background: "var(--color-background)" }}>
                       <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
                       <ol className="mb-0 ps-3 mt-1">
-                        <li>สมัครใช้งาน EasySlip ที่ easyslip.com แล้วคัดลอก API Key มาวางในช่องด้านบน — แค่นี้ก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (ผูกบัญชีธนาคารธรรมดากับ EasySlip ก็ใช้ได้ ไม่จำเป็นต้องมี PromptPay)</li>
+                        <li>เปิดสวิตช์ด้านบนขวา แล้วสมัครใช้งาน EasySlip ที่ easyslip.com คัดลอก API Key มาวางในช่องด้านบน — แค่นี้ก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (ผูกบัญชีธนาคารธรรมดากับ EasySlip ก็ใช้ได้ ไม่จำเป็นต้องมี PromptPay)</li>
                         <li>ถ้าอยากให้ผู้เช่าสแกน QR จ่ายได้เลยแทนการโอนด้วยเลขบัญชี ให้กรอกเบอร์มือถือ/เลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริงในช่อง PromptPay ID ด้วย (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
                         <li>กด "บันทึกการตั้งค่าทั้งหมด" ด้านบนสุดของหน้านี้ — หน้า LIFF Payment จะเปลี่ยนไปให้เลือกจำนวนเงินเองอัตโนมัติ</li>
                         <li>ระบบตรวจสลิปให้เฉพาะสลิปที่ส่งเข้าแชทหลังเลือกจำนวนเงินภายใน 2 ชั่วโมง และยอดต้องตรงกับที่เลือกไว้เป๊ะเท่านั้น — นอกเหนือจากนี้พนักงานยังบันทึกยอดเองได้ตามปกติ</li>
+                        <li>ปิดสวิตช์เมื่อใดก็หยุดตรวจสลิปอัตโนมัติทันที กลับไปโชว์ QR/เลขบัญชีคงที่ในหน้า LIFF Payment แทน โดยไม่กระทบ API Key/PromptPay ID ที่เคยกรอกไว้</li>
                       </ol>
                     </div>
                   </div>

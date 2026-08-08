@@ -210,12 +210,13 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         accountNumber: row?.paymentAccountNumber || "",
         qrImage: row?.paymentQrImage || "",
         bankLogoUrl: row?.paymentBankLogoImage || "",
-        // มี API key ก็เลือกจำนวนเงินเอง+ตรวจสลิปอัตโนมัติได้แล้ว (endpoint /payment/qr ด้านล่าง) — ไม่
-        // จำเป็นต้องมี PromptPay ID ด้วย (บางที่ผูกบัญชีธนาคารธรรมดากับ EasySlip ไว้ ไม่มี PromptPay ID
-        // ให้ใช้สร้าง QR จริง) ถ้าไม่มี PromptPay ID จะโชว์เลขบัญชีให้คัดลอกแทน QR แต่ยังตรวจสลิปอัตโนมัติได้
-        // เหมือนเดิม ไม่มี API key เลยถึงจะ fallback ไปโชว์แค่ QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้
-        autoTrackingAvailable: !!row?.easySlipApiKey,
-        qrGenerationAvailable: !!(row?.easySlipApiKey && row?.paymentPromptPayId),
+        // เปิดสวิตช์ EasySlip ไว้ (easySlipEnabled) และมี API key ก็เลือกจำนวนเงินเอง+ตรวจสลิปอัตโนมัติได้แล้ว
+        // (endpoint /payment/qr ด้านล่าง) — ไม่จำเป็นต้องมี PromptPay ID ด้วย (บางที่ผูกบัญชีธนาคารธรรมดากับ
+        // EasySlip ไว้ ไม่มี PromptPay ID ให้ใช้สร้าง QR จริง) ถ้าไม่มี PromptPay ID จะโชว์เลขบัญชีให้คัดลอกแทน
+        // QR แต่ยังตรวจสลิปอัตโนมัติได้เหมือนเดิม ปิดสวิตช์ไว้หรือไม่มี API key เลยถึงจะ fallback ไปโชว์แค่
+        // QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้
+        autoTrackingAvailable: row?.easySlipEnabled === "true" && !!row?.easySlipApiKey,
+        qrGenerationAvailable: row?.easySlipEnabled === "true" && !!(row?.easySlipApiKey && row?.paymentPromptPayId),
       },
     };
   })
@@ -289,6 +290,10 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     }
 
     const row = await getConfigRow(orgId);
+    if (row?.easySlipEnabled !== "true") {
+      set.status = 400;
+      return { error: "ระบบยังไม่ได้เปิดใช้งาน EasySlip กรุณาติดต่อผู้ดูแลระบบ" };
+    }
     const apiKey = decryptField(row?.easySlipApiKey || "");
     const promptPayId = row?.paymentPromptPayId || "";
     if (!apiKey) {

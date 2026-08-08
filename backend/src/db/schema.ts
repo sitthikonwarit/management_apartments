@@ -407,7 +407,9 @@ export const appConfig = pgTable("app_config", {
   paymentQrImage: str("payment_qr_image"), // base64 data URI เหมือน logoUrl (ดู comment ที่ logoUrl) — fallback ตอน EasySlip ยังไม่ได้ตั้งค่า
   paymentBankLogoImage: str("payment_bank_logo_image"), // โลโก้ธนาคาร base64 data URI เดียวกัน — โชว์คู่ชื่อธนาคารในหน้า LIFF Payment
   // ── EasySlip (https://easyslip.com) — สร้าง QR PromptPay แบบระบุยอดเอง + ตรวจสลิปที่ผู้เช่าส่งเข้าแชท
-  // อัตโนมัติ (ดู services/easyslip.ts, services/payments.ts) ──
+  // อัตโนมัติ (ดู services/easyslip.ts, services/payments.ts) ── สวิตช์เปิด/ปิดแยกจากการมี API Key อยู่ในช่อง
+  // เพื่อให้ปิดฟีเจอร์ชั่วคราวได้โดยไม่ต้องลบ API Key ทิ้ง (เช่น โควตา EasySlip หมดชั่วคราว)
+  easySlipEnabled: text("easyslip_enabled").notNull().default("false"),
   easySlipApiKey: str("easyslip_api_key"),
   paymentPromptPayId: str("payment_promptpay_id"), // เบอร์มือถือ (10 หลัก) หรือเลขบัตร ปชช. (13 หลัก) ที่ผูก PromptPay ไว้
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — ค่า default "false" มีผลกับ "องค์กรใหม่" เท่านั้น (แถวนี้
