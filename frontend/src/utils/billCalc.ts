@@ -6,7 +6,9 @@ import { tenantOccupiesRoom } from "./tenantRoom";
 export interface BillTagItem { id: string; name: string; price: number; color?: string; icon?: string }
 export interface BillVehicleItem { id: string; plate: string; name: string; price: number }
 export interface BillLineItem { id: string; name: string; price: number }
-export interface OutstandingItem { monthYear: string; amount: number }
+// fineAmount = ค่าปรับล่าช้าปัจจุบันของบิลเดือนนั้น (หลังหักค่าปรับที่เคยยกเว้นไปก่อนแล้วถ้ามี) — ไว้ให้ป็อปอัพ
+// บันทึกการชำระเงินรู้ว่ายกเว้นค่าปรับของเดือนนี้เพิ่มได้อีกไม่เกินเท่าไหร่ (ดู PaymentModal ใน BillsPage.tsx)
+export interface OutstandingItem { monthYear: string; amount: number; fineAmount: number }
 export interface BillSendLog { timestamp: string; method: "manual" | "auto"; by?: string; status: "success" | "error"; detail: string }
 
 export interface BillItem {
@@ -178,19 +180,27 @@ export function getOutstandingBalance(
     const amt = (Number(roomBill.total) || 0) - (Number(roomBill.paidAmount) || 0);
     if (amt > 0) {
       amount += amt;
-      items.push({ monthYear: group.monthYear, amount: amt });
+      items.push({ monthYear: group.monthYear, amount: amt, fineAmount: Number(roomBill.fineAmount) || 0 });
     }
   }
   return { amount, items };
 }
+
+// ยกเว้นค่าปรับ/เพิ่มส่วนลดให้บิลเดือนก่อนหน้าที่กำลังจะปิดยอด (ตั้งค่าได้จากป็อปอัพบันทึกการชำระเงินของเดือน
+// ปัจจุบัน โดยไม่ต้องย้อนไปเปิดบิลเดือนนั้นแก้เอง) — key เป็น monthYear ของกลุ่มบิลที่จะปรับ
+export interface OutstandingAdjustment { fineWaiveAmount: number; discountItems: BillLineItem[] }
 
 // ── ปิดยอดค้างชำระเดือนก่อน ────────────────────────────────────────────────────
 // ตั้งสถานะบิลเดือนเก่าที่เลือกเป็น "จ่ายแล้ว" ไปพร้อมกับการบันทึกชำระเงินของเดือนปัจจุบัน (ดูป็อปอัพ
 // บันทึกการชำระเงิน) เพราะปกติ outstandingAmount ที่ยกมารวมในบิลเดือนนี้ไม่เคยไปอัปเดตสถานะบิลต้นทาง
 // เดือนเก่าให้เอง ทำให้ถ้าไม่ปิดตรงนี้ ยอดเดิมจะค้างวนเป็น outstanding ซ้ำในบิลเดือนถัดๆ ไปอีก
 // คืนเฉพาะกลุ่มบิลที่มีการแก้ไขจริง (ให้ผู้เรียกเอาไปเซฟทีละกลุ่มด้วย billsApi.update ต่อ)
+// adjustments (ถ้ามี) = ยกเว้นค่าปรับ/เพิ่มส่วนลดให้เดือนนั้นก่อนปิดยอด — total ของบิลเดือนก่อนหน้าจะลดลงตาม
+// จริง (ไม่ใช่แค่ยอดที่ยกมารวมในเดือนนี้) และ originalTotal ของบิลเดือนนั้นจะไม่ถูกแตะต้อง (ยังคงเป็นยอด
+// ตายตัวตอนสร้างบิลครั้งแรกเหมือนเดิม — ดู recalcItem)
 export function closeOutstandingBills(
-  allBills: BillGroup[], roomId: string, tenantId: string | null, tenantName: string, monthYears: string[]
+  allBills: BillGroup[], roomId: string, tenantId: string | null, tenantName: string, monthYears: string[],
+  adjustments?: Record<string, OutstandingAdjustment>
 ): { group: BillGroup; data: BillItem[] }[] {
   const wanted = new Set(monthYears);
   const result: { group: BillGroup; data: BillItem[] }[] = [];
@@ -201,7 +211,21 @@ export function closeOutstandingBills(
       String(r.roomId) === String(roomId) && r.status !== "paid" && sameOutstandingTenant(r, tenantId, tenantName)
     );
     if (idx === -1) continue;
-    const nextData = data.map((r, i) => (i === idx ? { ...r, paidAmount: r.total, status: "paid" as const } : r));
+    const target = data[idx];
+    const adj = adjustments?.[group.monthYear];
+    const fineWaive = Math.max(0, Math.min(Number(target.fineAmount) || 0, adj?.fineWaiveAmount || 0));
+    const extraDiscounts = adj?.discountItems ?? [];
+    const extraDiscountSum = extraDiscounts.reduce((s, d) => s + (Number(d.price) || 0), 0);
+    const adjustedTotal = Math.max(0, (Number(target.total) || 0) - fineWaive - extraDiscountSum);
+    const nextData = data.map((r, i) => (i === idx ? {
+      ...r,
+      fineAmount: Math.max(0, (Number(r.fineAmount) || 0) - fineWaive),
+      fineWaived: (Number(r.fineWaived) || 0) + fineWaive,
+      discountItems: [...(r.discountItems || []), ...extraDiscounts],
+      total: adjustedTotal,
+      paidAmount: adjustedTotal,
+      status: "paid" as const,
+    } : r));
     result.push({ group, data: nextData });
   }
   return result;

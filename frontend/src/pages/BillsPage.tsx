@@ -10,7 +10,7 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import ThaiDatePicker from "../components/ThaiDatePicker";
 import {
-  type BillGroup, type BillItem, type BillLineItem, type GenCtx,
+  type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
@@ -341,6 +341,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
     method: "cash" | "scan"; received: number; note: string; paymentDate: string;
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
+    settleOutstandingAdjustments: Record<string, OutstandingAdjustment>;
     sendReceipt: boolean;
   }) => Promise<void>;
   onCancelPayment: (p: any, reason: string) => Promise<void>;
@@ -361,6 +362,33 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   const [newDiscPrice, setNewDiscPrice] = useState("");
   const [settleMonths, setSettleMonths] = useState<Set<string>>(() => new Set(item.outstandingItems.map((o) => o.monthYear)));
 
+  // ยกเว้นค่าปรับ/เพิ่มส่วนลดของเดือนอื่นที่ค้างชำระ ก่อนกดปิดยอด — key เป็น monthYear ของเดือนนั้นๆ
+  // (คนละอันกับ fineWaiveAmount/discountItems ด้านบนที่เป็นของเดือนปัจจุบันเท่านั้น)
+  const [outstandingAdjustments, setOutstandingAdjustments] = useState<Record<string, OutstandingAdjustment>>({});
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+  const [monthDiscName, setMonthDiscName] = useState("");
+  const [monthDiscPrice, setMonthDiscPrice] = useState("");
+
+  function getAdjustment(my: string): OutstandingAdjustment {
+    return outstandingAdjustments[my] ?? { fineWaiveAmount: 0, discountItems: [] };
+  }
+  function setAdjustment(my: string, updater: (a: OutstandingAdjustment) => OutstandingAdjustment) {
+    setOutstandingAdjustments((prev) => ({ ...prev, [my]: updater(prev[my] ?? { fineWaiveAmount: 0, discountItems: [] }) }));
+  }
+  function adjustedOutstandingAmount(o: OutstandingItem): number {
+    const adj = getAdjustment(o.monthYear);
+    const discSum = adj.discountItems.reduce((s, d) => s + (Number(d.price) || 0), 0);
+    return Math.max(0, o.amount - adj.fineWaiveAmount - discSum);
+  }
+  function addMonthDiscount(my: string) {
+    if (!monthDiscName.trim()) return;
+    setAdjustment(my, (a) => ({ ...a, discountItems: [...a.discountItems, { id: `DC-${Date.now()}`, name: monthDiscName.trim(), price: Number(monthDiscPrice) || 0 }] }));
+    setMonthDiscName(""); setMonthDiscPrice("");
+  }
+  function removeMonthDiscount(my: string, i: number) {
+    setAdjustment(my, (a) => ({ ...a, discountItems: a.discountItems.filter((_, idx) => idx !== i) }));
+  }
+
   const originalDiscountSum = item.discountItems.reduce((s, d) => s + (Number(d.price) || 0), 0);
   const editedDiscountSum = discountItems.reduce((s, d) => s + (Number(d.price) || 0), 0);
   const discountDelta = editedDiscountSum - originalDiscountSum;
@@ -368,7 +396,10 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   // เดือนที่ไม่ติ๊กเลือกปิดยอด = ยังไม่เก็บวันนี้ ต้องหักออกจากยอดที่ต้องชำระวันนี้ด้วย (ไม่ใช่แค่ไม่ปิดสถานะบิลต้นทาง)
   // ไม่งั้นจะเก็บเงินไปเต็มโดยที่ไม่ได้ปิดยอดค้างเดือนนั้นจริง กลายเป็นเงินเกินไม่มีที่ไป
   const includedOutstandingItems = item.outstandingItems.filter((o) => settleMonths.has(o.monthYear));
-  const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + (Number(o.amount) || 0), 0);
+  // ใช้ยอดหลังยกเว้นค่าปรับ/เพิ่มส่วนลดของเดือนนั้นๆ แล้ว (ถ้ามีปรับ) ไม่ใช่ o.amount ดิบ — ยอดที่ลดไปนี้จะ
+  // หักออกจากยอดที่ต้องชำระวันนี้ไปด้วยผ่าน deferredOutstandingAmount ด้านล่างเหมือนกัน (รวมอยู่ในยอด
+  // effectiveTotal ก้อนเดียว ไม่ได้แยกเรียกเก็บเป็นบิลของเดือนนั้นต่างหาก — ยอดขึ้นเป็นชำระของเดือนนี้เดือนเดียว)
+  const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + adjustedOutstandingAmount(o), 0);
   const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount);
 
   const totalAdjustment = fineWaiveAmount + discountDelta + deferredOutstandingAmount;
@@ -422,10 +453,15 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
     setSubmitting(true);
     setError("");
     try {
+      const settleOutstandingAdjustments: Record<string, OutstandingAdjustment> = {};
+      for (const my of settleMonths) {
+        const a = outstandingAdjustments[my];
+        if (a && (a.fineWaiveAmount > 0 || a.discountItems.length > 0)) settleOutstandingAdjustments[my] = a;
+      }
       await onConfirm({
         method, received, note, paymentDate, slipImage,
         fineWaiveAmount, discountItems, settleOutstandingMonths: Array.from(settleMonths),
-        sendReceipt,
+        settleOutstandingAdjustments, sendReceipt,
       });
       toastSuccess("บันทึกการชำระเงินสำเร็จ");
     } catch (e: any) {
@@ -531,21 +567,70 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
 
               {item.outstandingItems.length > 0 && (
                 <div className="payment-adjust-row mt-2">
-                  <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />ปิดยอดค้างชำระเดือนก่อน</label>
-                  {item.outstandingItems.map((o) => (
-                    <label key={o.monthYear} htmlFor={`settle-${o.monthYear}`}
-                      className="d-flex justify-content-between align-items-center py-1 mb-0" style={{ cursor: "pointer" }}>
-                      <span>
-                        <input className="form-check-input me-2" type="checkbox" checked={settleMonths.has(o.monthYear)}
-                          onChange={() => toggleSettleMonth(o.monthYear)} id={`settle-${o.monthYear}`} />
-                        <span className="small">{monthYearLabel(o.monthYear)}</span>
-                      </span>
-                      <span className="small text-danger fw-bold">{money(o.amount)} ฿</span>
-                    </label>
-                  ))}
+                  <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />ปิดยอดค้างชำระเดือนก่อน (เลือกได้หลายเดือน)</label>
+                  {item.outstandingItems.map((o) => {
+                    const checked = settleMonths.has(o.monthYear);
+                    const adj = getAdjustment(o.monthYear);
+                    const adjustedAmt = adjustedOutstandingAmount(o);
+                    const hasAdjustment = adj.fineWaiveAmount > 0 || adj.discountItems.length > 0;
+                    const expanded = expandedMonth === o.monthYear;
+                    return (
+                      <div key={o.monthYear} className="mb-1">
+                        <div className="d-flex justify-content-between align-items-center py-1">
+                          <span style={{ cursor: "pointer" }} onClick={() => toggleSettleMonth(o.monthYear)}>
+                            <input className="form-check-input me-2" type="checkbox" checked={checked}
+                              onChange={() => toggleSettleMonth(o.monthYear)} id={`settle-${o.monthYear}`} />
+                            <span className="small">{monthYearLabel(o.monthYear)}</span>
+                          </span>
+                          <span className="d-flex align-items-center gap-2">
+                            {hasAdjustment && (
+                              <span className="text-muted text-decoration-line-through" style={{ fontSize: 11 }}>{money(o.amount)}</span>
+                            )}
+                            <span className="small text-danger fw-bold">{money(adjustedAmt)} ฿</span>
+                            {checked && (
+                              <button type="button" className="btn btn-sm btn-outline-secondary border-0 py-0 px-1"
+                                title="ปรับค่าปรับ/ส่วนลดของเดือนนี้ก่อนปิดยอด"
+                                onClick={() => setExpandedMonth(expanded ? null : o.monthYear)}>
+                                <i className="fas fa-sliders" style={{ fontSize: 11 }} />
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                        {checked && expanded && (
+                          <div className="p-2 mb-1" style={{ background: "var(--color-background)", borderRadius: 8 }}>
+                            {o.fineAmount > 0 && (
+                              <div className="mb-2">
+                                <label className="form-label small mb-1">ลดค่าปรับล่าช้าของเดือนนี้ (จากเดิม {money(o.fineAmount)} ฿)</label>
+                                <input type="number" className="form-control form-control-sm" min={0} max={o.fineAmount}
+                                  value={adj.fineWaiveAmount}
+                                  onChange={(e) => setAdjustment(o.monthYear, (a) => ({ ...a, fineWaiveAmount: Math.min(o.fineAmount, Math.max(0, Number(e.target.value) || 0)) }))} />
+                              </div>
+                            )}
+                            <label className="form-label small mb-1">ส่วนลดเพิ่มเติมของเดือนนี้</label>
+                            {adj.discountItems.map((d, i) => (
+                              <div key={d.id} className="bill-line-row">
+                                <span className="name"><i className="fas fa-tag me-1 text-danger" />{d.name}</span>
+                                <span className="price text-danger">-{money(d.price)}</span>
+                                <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => removeMonthDiscount(o.monthYear, i)}>
+                                  <i className="fas fa-times" />
+                                </button>
+                              </div>
+                            ))}
+                            <div className="d-flex gap-2 mt-1">
+                              <input className="form-control form-control-sm" placeholder="ชื่อส่วนลด" value={monthDiscName} onChange={(e) => setMonthDiscName(e.target.value)} />
+                              <input type="number" className="form-control form-control-sm text-end" style={{ maxWidth: 110 }} placeholder="จำนวนเงิน" value={monthDiscPrice} onChange={(e) => setMonthDiscPrice(e.target.value)} />
+                              <button type="button" className="btn btn-sm btn-outline-danger flex-shrink-0" onClick={() => addMonthDiscount(o.monthYear)}>
+                                <i className="fas fa-plus" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   <div className="text-muted small mt-1">
-                    เดือนที่ติ๊กเลือกจะถูกปิดเป็น "จ่ายแล้ว" ในบิลเดือนนั้นทันทีที่บันทึกยอดนี้ และถูกรวมในยอดที่ต้องชำระวันนี้ด้วย
-                    ส่วนเดือนที่ไม่ติ๊กจะไม่ถูกบวกเข้ายอดวันนี้ และยังคงค้างต่อไปให้เก็บภายหลัง
+                    เดือนที่ติ๊กเลือกจะถูกปิดเป็น "จ่ายแล้ว" ในบิลเดือนนั้นทันทีที่บันทึกยอดนี้ (กดไอคอน <i className="fas fa-sliders" /> เพื่อลดค่าปรับ/เพิ่มส่วนลดของเดือนนั้นก่อนปิดได้)
+                    และถูกรวมในยอดที่ต้องชำระวันนี้ด้วย ส่วนเดือนที่ไม่ติ๊กจะไม่ถูกบวกเข้ายอดวันนี้ และยังคงค้างต่อไปให้เก็บภายหลัง
                   </div>
                 </div>
               )}
@@ -2370,6 +2455,7 @@ export default function BillsPage() {
     method: "cash" | "scan"; received: number; note: string; paymentDate: string;
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
+    settleOutstandingAdjustments: Record<string, OutstandingAdjustment>;
     sendReceipt: boolean;
   }) {
     if (payingIndex === null) return;
@@ -2425,7 +2511,10 @@ export default function BillsPage() {
     // ปิดยอดค้างชำระเดือนก่อนที่เลือกไว้ (ถ้ามี) — ตั้งสถานะบิลต้นทางเดือนนั้นเป็น "จ่ายแล้ว" ไปพร้อมกันเลย
     // ไม่งั้นยอดค้างนี้จะถูกคำนวณย้อนกลับมารวมในบิลเดือนถัดๆ ไปอีก ทั้งที่จริงถูกเก็บไปแล้วในยอดนี้
     if (payload.settleOutstandingMonths.length > 0) {
-      const closures = closeOutstandingBills(bills, target.roomId, target.tenantId, target.tenantName, payload.settleOutstandingMonths);
+      const closures = closeOutstandingBills(
+        bills, target.roomId, target.tenantId, target.tenantName,
+        payload.settleOutstandingMonths, payload.settleOutstandingAdjustments
+      );
       for (const { group, data } of closures) {
         if (!group.id) continue;
         const closedSaved = await billsApi.update(group.id, data, group.scheduledDate ?? "");
