@@ -50,6 +50,11 @@ export interface BillItem {
   isOverdue: boolean;
   overdueDays: number;
   total: number;
+  // ยอดรวมสุทธิ "ตอนสร้างบิลครั้งแรก" แช่แข็งไว้ถาวร ไม่ขยับตามการหักค่าปรับ/เพิ่มส่วนลดภายหลัง (ตอนบันทึกการ
+  // ชำระเงิน) ต่างจาก total ด้านบนที่เป็นยอดปัจจุบันหลังปรับแล้ว — ใช้โชว์เป็นยอดค้างชำระ/ยอดเรียกเก็บแบบตายตัว
+  // ในแดชบอร์ดสรุปยอดของหน้ารายการบิล (ดู recalcItem: ล็อกด้วยรูปแบบ ?? เหมือน waterDefaultFormula ด้านล่าง)
+  // undefined = บิลเก่าก่อนมีระบบนี้ (จะถูก backfill ด้วยค่า total ปัจจุบันครั้งแรกที่เปิด แล้วล็อกไว้ตั้งแต่นั้น)
+  originalTotal?: number;
   status: "unpaid" | "paid";
   // ยอดที่รับชำระสะสมแล้วสำหรับบิลนี้ (รองรับจ่ายไม่ครบยอด/จ่ายเป็นงวด) — ยอดคงเหลือที่ต้องชำระ = total - paidAmount
   // เมื่อ paidAmount >= total ถือว่าจ่ายครบ (status เปลี่ยนเป็น paid) ส่วนที่ยังขาดจะค้างไว้ให้จ่ายในครั้งถัดไป
@@ -348,6 +353,7 @@ export function recalcItem(
 
   calculateOverdueFine(item, overdueCfg, monthYear);
   item.total = calcItemTotal(item);
+  item.originalTotal = item.originalTotal ?? item.total;
   return item;
 }
 
@@ -546,6 +552,7 @@ export function normalizeBillItem(raw: any): BillItem {
     isOverdue: !!raw?.isOverdue,
     overdueDays: Number(raw?.overdueDays) || 0,
     total: Number(raw?.total) || 0,
+    originalTotal: raw?.originalTotal !== undefined ? Number(raw.originalTotal) : undefined,
     status: raw?.status === "paid" ? "paid" : "unpaid",
     paidAmount: raw?.paidAmount !== undefined
       ? Number(raw.paidAmount) || 0

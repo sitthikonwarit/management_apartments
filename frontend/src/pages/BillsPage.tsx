@@ -2489,6 +2489,10 @@ export default function BillsPage() {
     const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
     const unpaid = totalRooms - paid - overdue;
     const totalExpected = billData.reduce((s, i) => s + i.total, 0);
+    // ยอดเรียกเก็บทั้งหมดแบบตายตัว — ใช้ originalTotal (แช่แข็งไว้ตอนสร้างบิลครั้งแรก) ไม่ใช่ total ปัจจุบัน
+    // จึงไม่ลดลงตามการหักค่าปรับ/เพิ่มส่วนลดทีหลังตอนบันทึกการชำระเงิน ต่างจาก totalExpected ด้านบนที่เป็น
+    // "คาดการณ์รายรับ" ซึ่งตั้งใจให้ขยับตามการปรับจริงเสมอ
+    const totalFixed = billData.reduce((s, i) => s + (i.originalTotal ?? i.total), 0);
     const totalCollected = billData.filter((i) => i.status === "paid").reduce((s, i) => s + i.total, 0);
     const totalMissing = totalExpected - totalCollected;
     // แยกยอดตามประเภทค่าใช้จ่าย — "อื่นๆ" คือส่วนที่เหลือจากยอดรวม (ค่ารถ/แท็ก/รายการเพิ่มเติม/ค่าปรับ/
@@ -2501,7 +2505,7 @@ export default function BillsPage() {
     const electricUnits = billData.reduce((s, i) => s + (Number(i.meterElectric?.unit) || 0), 0);
     const collectRate = totalExpected > 0 ? (totalCollected / totalExpected) * 100 : 0;
     return {
-      totalRooms, paid, overdue, unpaid, totalExpected, totalCollected, totalMissing,
+      totalRooms, paid, overdue, unpaid, totalExpected, totalFixed, totalCollected, totalMissing,
       totalRent, totalWater, totalElectric, totalOther, waterUnits, electricUnits, collectRate,
     };
   }, [billData]);
@@ -2697,9 +2701,15 @@ export default function BillsPage() {
           )}
 
           <div className="row g-2 mb-2">
-            <div className="col-4"><div className="bill-stat-tile"><div className="val text-primary">{money(stats.totalExpected)}</div><div className="lbl">คาดการณ์รายรับ</div></div></div>
-            <div className="col-4"><div className="bill-stat-tile"><div className="val text-success">{money(stats.totalCollected)}</div><div className="lbl">รับแล้ว ({stats.collectRate.toFixed(0)}%)</div></div></div>
-            <div className="col-4"><div className="bill-stat-tile"><div className="val text-danger">{money(stats.totalMissing)}</div><div className="lbl">ขาดอีก</div></div></div>
+            <div className="col-6 col-md-3">
+              <div className="bill-stat-tile">
+                <div className="val" style={{ color: "var(--color-dark-variant)" }}><i className="fas fa-lock me-1" style={{ fontSize: 12 }} />{money(stats.totalFixed)}</div>
+                <div className="lbl">ยอดเรียกเก็บทั้งหมด (คงที่)</div>
+              </div>
+            </div>
+            <div className="col-6 col-md-3"><div className="bill-stat-tile"><div className="val text-primary">{money(stats.totalExpected)}</div><div className="lbl">คาดการณ์รายรับ</div></div></div>
+            <div className="col-6 col-md-3"><div className="bill-stat-tile"><div className="val text-success">{money(stats.totalCollected)}</div><div className="lbl">รับแล้ว ({stats.collectRate.toFixed(0)}%)</div></div></div>
+            <div className="col-6 col-md-3"><div className="bill-stat-tile"><div className="val text-danger">{money(stats.totalMissing)}</div><div className="lbl">ขาดอีก</div></div></div>
           </div>
           <div className="bill-progress mb-3">
             <div className="bill-progress-bar" style={{ width: `${Math.min(stats.collectRate, 100)}%` }} />
