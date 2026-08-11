@@ -14,7 +14,7 @@ import {
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
-  buildWaterElectricRows,
+  adjustedOutstandingAmount, buildWaterElectricRows,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -342,6 +342,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
     settleOutstandingAdjustments: Record<string, OutstandingAdjustment>;
+    includeCurrentMonth: boolean;
     sendReceipt: boolean;
   }) => Promise<void>;
   onCancelPayment: (p: any, reason: string) => Promise<void>;
@@ -361,6 +362,8 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   const [newDiscName, setNewDiscName] = useState("");
   const [newDiscPrice, setNewDiscPrice] = useState("");
   const [settleMonths, setSettleMonths] = useState<Set<string>>(() => new Set(item.outstandingItems.map((o) => o.monthYear)));
+  // ปิดได้ = จ่ายเฉพาะยอดค้างเดือนเก่าที่เลือกไว้ ไม่จำเป็นต้องปิดยอด/จ่ายเดือนนี้ไปด้วยพร้อมกัน
+  const [includeCurrentMonth, setIncludeCurrentMonth] = useState(true);
 
   // ยกเว้นค่าปรับ/เพิ่มส่วนลดของเดือนอื่นที่ค้างชำระ ก่อนกดปิดยอด — key เป็น monthYear ของเดือนนั้นๆ
   // (คนละอันกับ fineWaiveAmount/discountItems ด้านบนที่เป็นของเดือนปัจจุบันเท่านั้น)
@@ -374,11 +377,6 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   }
   function setAdjustment(my: string, updater: (a: OutstandingAdjustment) => OutstandingAdjustment) {
     setOutstandingAdjustments((prev) => ({ ...prev, [my]: updater(prev[my] ?? { fineWaiveAmount: 0, discountItems: [] }) }));
-  }
-  function adjustedOutstandingAmount(o: OutstandingItem): number {
-    const adj = getAdjustment(o.monthYear);
-    const discSum = adj.discountItems.reduce((s, d) => s + (Number(d.price) || 0), 0);
-    return Math.max(0, o.amount - adj.fineWaiveAmount - discSum);
   }
   function addMonthDiscount(my: string) {
     if (!monthDiscName.trim()) return;
@@ -399,12 +397,14 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   // ใช้ยอดหลังยกเว้นค่าปรับ/เพิ่มส่วนลดของเดือนนั้นๆ แล้ว (ถ้ามีปรับ) ไม่ใช่ o.amount ดิบ — ยอดที่ลดไปนี้จะ
   // หักออกจากยอดที่ต้องชำระวันนี้ไปด้วยผ่าน deferredOutstandingAmount ด้านล่างเหมือนกัน (รวมอยู่ในยอด
   // effectiveTotal ก้อนเดียว ไม่ได้แยกเรียกเก็บเป็นบิลของเดือนนั้นต่างหาก — ยอดขึ้นเป็นชำระของเดือนนี้เดือนเดียว)
-  const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + adjustedOutstandingAmount(o), 0);
+  const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + adjustedOutstandingAmount(o, outstandingAdjustments), 0);
   const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount);
 
   const totalAdjustment = fineWaiveAmount + discountDelta + deferredOutstandingAmount;
-  const effectiveTotal = Math.max(0, item.total - totalAdjustment);
-  const remainingDue = Math.max(0, effectiveTotal - (item.paidAmount || 0));
+  // ปิดสวิตช์ "รวมยอดเดือนนี้ด้วย" = จ่ายเฉพาะเดือนเก่าที่เลือกไว้เท่านั้น ไม่แตะยอด/สถานะของเดือนนี้เลย
+  // (ไม่หัก paidAmount เดิมของเดือนนี้ออกด้วย เพราะยอดเก่าที่ยกมาคำนวณสุทธิจาก getOutstandingBalance ไว้แล้ว)
+  const effectiveTotal = includeCurrentMonth ? Math.max(0, item.total - totalAdjustment) : includedOutstandingAmount;
+  const remainingDue = includeCurrentMonth ? Math.max(0, effectiveTotal - (item.paidAmount || 0)) : effectiveTotal;
 
   // ตัวอย่างบิล LINE ต้องเห็นค่าปรับ/ส่วนลด/ยอดค้างที่เลือกปิด/ยอดสุทธิที่ปรับแล้วสดๆ ตามที่กำลังแก้ในป็อปอัพนี้ทันที
   // ไม่ใช่ค่าเดิมของ item ก่อนปรับ — เดือนที่ยังไม่เลือกปิดจะไม่โผล่ในบิลเพราะยังไม่ได้เรียกเก็บวันนี้
@@ -461,7 +461,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
       await onConfirm({
         method, received, note, paymentDate, slipImage,
         fineWaiveAmount, discountItems, settleOutstandingMonths: Array.from(settleMonths),
-        settleOutstandingAdjustments, sendReceipt,
+        settleOutstandingAdjustments, includeCurrentMonth, sendReceipt,
       });
       toastSuccess("บันทึกการชำระเงินสำเร็จ");
     } catch (e: any) {
@@ -518,14 +518,19 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
               <span>ยอดที่ต้องชำระ{item.paidAmount > 0 ? " (คงเหลือ)" : ""}</span>
               <span className="payment-due-amount">{money(remainingDue)} ฿</span>
             </div>
-            {totalAdjustment > 0 && (
+            {includeCurrentMonth && totalAdjustment > 0 && (
               <div className="text-muted small mb-3 mt-n2">
                 ปรับลดจากยอดเต็ม {money(item.total)} ฿ รวม {money(totalAdjustment)} ฿
               </div>
             )}
+            {!includeCurrentMonth && (
+              <div className="text-muted small mb-3 mt-n2">
+                <i className="fas fa-circle-info me-1" />ไม่รวมยอดของ{monthYearLabel(monthYear)} — จ่ายเฉพาะเดือนเก่าที่เลือกด้านล่างเท่านั้น ยอด/สถานะของเดือนนี้จะไม่เปลี่ยน
+              </div>
+            )}
 
             <div className="payment-adjust-section mb-3">
-              {item.fineAmount > 0 && (
+              {includeCurrentMonth && item.fineAmount > 0 && (
                 <div className="payment-adjust-row">
                   <label className="form-label small fw-bold mb-1">
                     <i className="fas fa-exclamation-triangle me-1 text-danger" />ค่าปรับล่าช้า ({item.overdueDays} วัน)
@@ -545,33 +550,45 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
                 </div>
               )}
 
-              <div className={`payment-adjust-row${item.fineAmount > 0 ? " mt-2" : ""}`}>
-                <label className="form-label small fw-bold mb-1"><i className="fas fa-tag me-1 text-danger" />ส่วนลด</label>
-                {discountItems.map((d, i) => (
-                  <div key={d.id} className="bill-line-row">
-                    <span className="name"><i className="fas fa-tag me-1 text-danger" />{d.name}</span>
-                    <span className="price text-danger">-{money(d.price)}</span>
-                    <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => removeDiscount(i)}>
-                      <i className="fas fa-times" />
+              {includeCurrentMonth && (
+                <div className={`payment-adjust-row${item.fineAmount > 0 ? " mt-2" : ""}`}>
+                  <label className="form-label small fw-bold mb-1"><i className="fas fa-tag me-1 text-danger" />ส่วนลด</label>
+                  {discountItems.map((d, i) => (
+                    <div key={d.id} className="bill-line-row">
+                      <span className="name"><i className="fas fa-tag me-1 text-danger" />{d.name}</span>
+                      <span className="price text-danger">-{money(d.price)}</span>
+                      <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => removeDiscount(i)}>
+                        <i className="fas fa-times" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="d-flex gap-2 mt-1">
+                    <input className="form-control form-control-sm" placeholder="ชื่อส่วนลด" value={newDiscName} onChange={(e) => setNewDiscName(e.target.value)} />
+                    <input type="number" className="form-control form-control-sm text-end" style={{ maxWidth: 110 }} placeholder="จำนวนเงิน" value={newDiscPrice} onChange={(e) => setNewDiscPrice(e.target.value)} />
+                    <button type="button" className="btn btn-sm btn-outline-danger flex-shrink-0" onClick={addDiscount}>
+                      <i className="fas fa-plus" />
                     </button>
                   </div>
-                ))}
-                <div className="d-flex gap-2 mt-1">
-                  <input className="form-control form-control-sm" placeholder="ชื่อส่วนลด" value={newDiscName} onChange={(e) => setNewDiscName(e.target.value)} />
-                  <input type="number" className="form-control form-control-sm text-end" style={{ maxWidth: 110 }} placeholder="จำนวนเงิน" value={newDiscPrice} onChange={(e) => setNewDiscPrice(e.target.value)} />
-                  <button type="button" className="btn btn-sm btn-outline-danger flex-shrink-0" onClick={addDiscount}>
-                    <i className="fas fa-plus" />
-                  </button>
                 </div>
-              </div>
+              )}
 
               {item.outstandingItems.length > 0 && (
                 <div className="payment-adjust-row mt-2">
-                  <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />ปิดยอดค้างชำระเดือนก่อน (เลือกได้หลายเดือน)</label>
+                  <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />เลือกเดือนที่จะปิดยอดในการชำระครั้งนี้ (เลือกได้หลายเดือน)</label>
+                  <div className="d-flex justify-content-between align-items-center py-1 mb-1" style={{ borderBottom: "1px dashed var(--color-light)" }}>
+                    <span style={{ cursor: "pointer" }} onClick={() => setIncludeCurrentMonth((v) => !v)}>
+                      <input className="form-check-input me-2" type="checkbox" checked={includeCurrentMonth}
+                        onChange={(e) => setIncludeCurrentMonth(e.target.checked)} id="settle-current-month" />
+                      <span className="small fw-semibold">{monthYearLabel(monthYear)} (เดือนนี้)</span>
+                    </span>
+                    <span className="small text-danger fw-bold">
+                      {money(Math.max(0, item.total - item.outstandingAmount - fineWaiveAmount - discountDelta))} ฿
+                    </span>
+                  </div>
                   {item.outstandingItems.map((o) => {
                     const checked = settleMonths.has(o.monthYear);
                     const adj = getAdjustment(o.monthYear);
-                    const adjustedAmt = adjustedOutstandingAmount(o);
+                    const adjustedAmt = adjustedOutstandingAmount(o, outstandingAdjustments);
                     const hasAdjustment = adj.fineWaiveAmount > 0 || adj.discountItems.length > 0;
                     const expanded = expandedMonth === o.monthYear;
                     return (
@@ -629,8 +646,9 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
                     );
                   })}
                   <div className="text-muted small mt-1">
-                    เดือนที่ติ๊กเลือกจะถูกปิดเป็น "จ่ายแล้ว" ในบิลเดือนนั้นทันทีที่บันทึกยอดนี้ (กดไอคอน <i className="fas fa-sliders" /> เพื่อลดค่าปรับ/เพิ่มส่วนลดของเดือนนั้นก่อนปิดได้)
-                    และถูกรวมในยอดที่ต้องชำระวันนี้ด้วย ส่วนเดือนที่ไม่ติ๊กจะไม่ถูกบวกเข้ายอดวันนี้ และยังคงค้างต่อไปให้เก็บภายหลัง
+                    เดือนที่ติ๊กเลือกจะถูกปิดเป็น "จ่ายแล้ว" ทันทีที่บันทึกยอดนี้ (กดไอคอน <i className="fas fa-sliders" /> เพื่อลดค่าปรับ/เพิ่มส่วนลดของเดือนเก่าก่อนปิดได้)
+                    และถูกรวมในยอดที่ต้องชำระวันนี้ด้วย ส่วนเดือนที่ไม่ติ๊กจะไม่ถูกบวกเข้ายอดวันนี้ และยังคงค้างต่อไปให้เก็บภายหลัง —
+                    ปิดสวิตช์ "{monthYearLabel(monthYear)} (เดือนนี้)" ได้ถ้าต้องการเก็บเฉพาะยอดค้างเดือนเก่าอย่างเดียว
                   </div>
                 </div>
               )}
@@ -2456,24 +2474,38 @@ export default function BillsPage() {
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
     settleOutstandingAdjustments: Record<string, OutstandingAdjustment>;
+    includeCurrentMonth: boolean;
     sendReceipt: boolean;
   }) {
     if (payingIndex === null) return;
     const target = billData[payingIndex];
 
     // ปรับค่าปรับ/ส่วนลดตามที่เลือกในป็อปอัพก่อน แล้วคำนวณยอดรวมใหม่ ให้ยอดคงเหลือที่ใช้คิดเงินทอน/ยอดค้าง
-    // ตรงกับยอดที่แสดงในป็อปอัพจริง (ใช้ draft.total ที่ปรับแล้วแทน target.total เดิม)
+    // ตรงกับยอดที่แสดงในป็อปอัพจริง (ใช้ draft.total ที่ปรับแล้วแทน target.total เดิม) — ถ้าปิดสวิตช์
+    // "รวมยอดเดือนนี้ด้วย" ไว้ ไม่ต้องปรับอะไรกับเดือนนี้เลย (fineWaiveAmount/discountItems เป็นของเดือนนี้
+    // เท่านั้น ตัวป็อปอัพเองก็ซ่อน UI ปรับสองอย่างนี้ไปแล้วเมื่อปิดสวิตช์ ค่าที่ส่งมาจะเป็นค่าว่าง/เดิมอยู่แล้ว)
     const draft = JSON.parse(JSON.stringify(target)) as BillItem;
-    if (payload.fineWaiveAmount > 0) draft.fineWaived = (draft.fineWaived || 0) + payload.fineWaiveAmount;
-    draft.discountItems = payload.discountItems;
+    if (payload.includeCurrentMonth && payload.fineWaiveAmount > 0) draft.fineWaived = (draft.fineWaived || 0) + payload.fineWaiveAmount;
+    if (payload.includeCurrentMonth) draft.discountItems = payload.discountItems;
     recalcItem(draft, config, defaults, editingMonthYear);
 
+    // ยอดค้างของเดือนเก่าที่เลือกปิด (หลังหักค่าปรับ/ส่วนลดที่ปรับไว้แล้ว) — คำนวณด้วยสูตรเดียวกับที่ป็อปอัพ
+    // ใช้แสดงผล กันตัวเลขสองที่เพี้ยนไม่ตรงกัน
+    const oldMonthsDue = target.outstandingItems
+      .filter((o) => payload.settleOutstandingMonths.includes(o.monthYear))
+      .reduce((s, o) => s + adjustedOutstandingAmount(o, payload.settleOutstandingAdjustments), 0);
+    const currentRemainingDue = payload.includeCurrentMonth ? Math.max(0, draft.total - (draft.paidAmount || 0)) : 0;
+    const totalDueToday = currentRemainingDue + oldMonthsDue;
+
     // เงินที่รับมาอาจมากกว่ายอดที่ต้องจ่าย (มีเงินทอน) หรือน้อยกว่า (จ่ายไม่ครบ) — ยอดที่นับเป็น
-    // "จ่ายจริง" ของบิลนี้คือส่วนที่ไม่เกินยอดคงเหลือเท่านั้น ส่วนเกินคือเงินทอนคืนลูกค้า ไม่ใช่รายรับ
-    const remainingDue = Math.max(0, draft.total - (draft.paidAmount || 0));
-    const amountApplied = Math.min(payload.received, remainingDue);
-    const changeGiven = Math.max(0, payload.received - remainingDue);
-    const newPaidAmount = (draft.paidAmount || 0) + amountApplied;
+    // "จ่ายจริง" รวมคือส่วนที่ไม่เกินยอดที่ต้องจ่ายทั้งหมดวันนี้เท่านั้น ส่วนเกินคือเงินทอนคืนลูกค้า ไม่ใช่รายรับ
+    // ส่วนที่ไปลง "เดือนนี้" โดยเฉพาะต้องไม่เกิน currentRemainingDue กันเงินที่จริงๆ จ่ายให้เดือนเก่าไปโป่งยอด
+    // จ่ายของเดือนนี้ผิดตัว (เดือนเก่าถูกปิดยอดแยกเป็นอิสระด้านล่างอยู่แล้วผ่าน closeOutstandingBills เสมอ
+    // ไม่ว่าจะรวมเดือนนี้ด้วยหรือไม่ก็ตาม)
+    const amountApplied = Math.min(payload.received, totalDueToday);
+    const changeGiven = Math.max(0, payload.received - totalDueToday);
+    const amountForCurrent = payload.includeCurrentMonth ? Math.min(amountApplied, currentRemainingDue) : 0;
+    const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent;
     const fullySettled = newPaidAmount >= draft.total - 0.005; // เผื่อ floating point
 
     const paymentRow = await billsApi.createPayment({

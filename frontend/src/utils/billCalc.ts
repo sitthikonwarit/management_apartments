@@ -190,6 +190,16 @@ export function getOutstandingBalance(
 // ปัจจุบัน โดยไม่ต้องย้อนไปเปิดบิลเดือนนั้นแก้เอง) — key เป็น monthYear ของกลุ่มบิลที่จะปรับ
 export interface OutstandingAdjustment { fineWaiveAmount: number; discountItems: BillLineItem[] }
 
+// ยอดค้างของเดือนนั้นๆ หลังหักค่าปรับที่ยกเว้น/ส่วนลดที่เพิ่มไว้ (ถ้ามี adjustment ของเดือนนั้น) — ใช้ร่วมกันทั้ง
+// ในป็อปอัพบันทึกการชำระเงิน (คำนวณยอดที่ต้องเก็บวันนี้สดๆ) และตอนบันทึกจริง (คำนวณเงินทอน/ยอดที่นับเป็น
+// "จ่ายจริง" ให้ตรงกับที่ป็อปอัพแสดง) กันตรรกะสองที่เพี้ยนไม่ตรงกัน
+export function adjustedOutstandingAmount(o: OutstandingItem, adjustments?: Record<string, OutstandingAdjustment>): number {
+  const adj = adjustments?.[o.monthYear];
+  if (!adj) return o.amount;
+  const discSum = adj.discountItems.reduce((s, d) => s + (Number(d.price) || 0), 0);
+  return Math.max(0, o.amount - adj.fineWaiveAmount - discSum);
+}
+
 // ── ปิดยอดค้างชำระเดือนก่อน ────────────────────────────────────────────────────
 // ตั้งสถานะบิลเดือนเก่าที่เลือกเป็น "จ่ายแล้ว" ไปพร้อมกับการบันทึกชำระเงินของเดือนปัจจุบัน (ดูป็อปอัพ
 // บันทึกการชำระเงิน) เพราะปกติ outstandingAmount ที่ยกมารวมในบิลเดือนนี้ไม่เคยไปอัปเดตสถานะบิลต้นทาง
