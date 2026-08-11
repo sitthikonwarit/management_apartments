@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { chatApi, type ChatMessage, type OutstandingBillItem } from "../api/client";
+import { chatApi, type ChatConversationInfo, type ChatMessage, type OutstandingBillItem } from "../api/client";
 import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateTimeString } from "../utils/yearFormat";
-import { toastError } from "../utils/toast";
+import { toastError, toastSuccess } from "../utils/toast";
+import { AVATAR_URL } from "./TenantTableView";
 import ImageLightbox from "./ImageLightbox";
 
-export type ChatDetailTab = "bills" | "images" | "files" | "search";
+export type ChatDetailTab = "info" | "bills" | "images" | "files" | "search";
 
 const TABS: { key: ChatDetailTab; label: string; icon: string }[] = [
+  { key: "info", label: "ข้อมูล", icon: "fa-circle-info" },
   { key: "bills", label: "บิลค้าง", icon: "fa-file-invoice-dollar" },
   { key: "images", label: "รูปภาพ", icon: "fa-image" },
   { key: "files", label: "ไฟล์", icon: "fa-paperclip" },
@@ -20,13 +22,15 @@ function fmtMoney(n: number) {
 
 interface ChatDetailModalProps {
   lineUserId: string;
+  displayName: string;
+  pictureUrl: string | null;
   messages: ChatMessage[];
   initialTab: ChatDetailTab;
   onClose: () => void;
   onJumpToMessage: (messageId: string) => void;
 }
 
-export default function ChatDetailModal({ lineUserId, messages, initialTab, onClose, onJumpToMessage }: ChatDetailModalProps) {
+export default function ChatDetailModal({ lineUserId, displayName, pictureUrl, messages, initialTab, onClose, onJumpToMessage }: ChatDetailModalProps) {
   const [tab, setTab] = useState<ChatDetailTab>(initialTab);
 
   return (
@@ -56,6 +60,7 @@ export default function ChatDetailModal({ lineUserId, messages, initialTab, onCl
           ))}
         </div>
         <div className="import-modal-body" style={{ minHeight: 280, maxHeight: "60vh" }}>
+          {tab === "info" && <InfoTab lineUserId={lineUserId} displayName={displayName} pictureUrl={pictureUrl} />}
           {tab === "bills" && <BillsTab lineUserId={lineUserId} />}
           {tab === "images" && <ImagesTab messages={messages} />}
           {tab === "files" && <FilesTab messages={messages} />}
@@ -64,6 +69,82 @@ export default function ChatDetailModal({ lineUserId, messages, initialTab, onCl
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; displayName: string; pictureUrl: string | null }) {
+  const [loading, setLoading] = useState(true);
+  const [info, setInfo] = useState<ChatConversationInfo | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    chatApi.getConversationInfo(lineUserId)
+      .then((res) => { if (alive) setInfo(res); })
+      .catch(() => { if (alive) toastError("โหลดข้อมูลการสนทนาไม่สำเร็จ"); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [lineUserId]);
+
+  function copyUid() {
+    navigator.clipboard.writeText(lineUserId).then(() => toastSuccess("คัดลอก LINE UID แล้ว")).catch(() => toastError("คัดลอกไม่สำเร็จ"));
+  }
+
+  const picture = info?.pictureUrl || pictureUrl;
+  const name = info?.tenant?.fullName || info?.profileDisplayName || displayName;
+
+  return (
+    <div>
+      <div className="d-flex flex-column align-items-center text-center mb-3">
+        <img
+          src={picture || AVATAR_URL} alt="" referrerPolicy="no-referrer"
+          style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover" }}
+          onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
+        />
+        <strong className="mt-2">{name || "ไม่ทราบชื่อ"}</strong>
+        {info?.room?.number && <span className="text-muted small">ห้อง {info.room.number}</span>}
+      </div>
+
+      <div className="d-flex justify-content-between align-items-center py-2" style={{ borderTop: "1px solid var(--color-light)" }}>
+        <div>
+          <div className="text-muted" style={{ fontSize: 11 }}>LINE UID</div>
+          <div className="small text-truncate" style={{ maxWidth: 320 }}>{lineUserId}</div>
+        </div>
+        <button type="button" className="btn btn-sm btn-outline-secondary" title="คัดลอก UID" onClick={copyUid}>
+          <i className="fas fa-copy" />
+        </button>
+      </div>
+
+      {loading && (
+        <div className="text-center text-muted py-4"><span className="spinner-border spinner-border-sm me-2" />กำลังโหลด...</div>
+      )}
+
+      {!loading && info?.tenant && (
+        <div className="py-2" style={{ borderTop: "1px solid var(--color-light)" }}>
+          <div className="text-muted mb-1" style={{ fontSize: 11 }}>ผู้เช่า</div>
+          <div className="small">{info.tenant.fullName || "-"}</div>
+          {info.tenant.tel && <div className="small text-muted">โทร {info.tenant.tel}</div>}
+        </div>
+      )}
+
+      {!loading && info?.room && (
+        <div className="py-2" style={{ borderTop: "1px solid var(--color-light)" }}>
+          <div className="text-muted mb-1" style={{ fontSize: 11 }}>ห้องพัก</div>
+          <div className="small">
+            ห้อง {info.room.number}
+            {info.room.towerName ? ` · ตึก ${info.room.towerName}` : ""}
+            {info.room.floor ? ` · ชั้น ${info.room.floor}` : ""}
+          </div>
+          {info.room.price && <div className="small text-muted">ราคา {Number(info.room.price).toLocaleString("th-TH")} บาท/เดือน</div>}
+        </div>
+      )}
+
+      {!loading && !info?.tenant && (
+        <div className="text-center text-muted py-3" style={{ borderTop: "1px solid var(--color-light)" }}>
+          ยังไม่พบผู้เช่าที่ผูกกับบัญชี LINE นี้
+        </div>
+      )}
     </div>
   );
 }

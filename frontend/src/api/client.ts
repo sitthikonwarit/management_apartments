@@ -156,6 +156,27 @@ export interface ChatConversation {
   unreadCount: number;
 }
 
+export interface ChatConversationInfo {
+  lineUserId: string;
+  pictureUrl: string | null;
+  profileDisplayName: string | null;
+  tenant: {
+    id: string;
+    fullName: string;
+    tel: string;
+    checkInDate: string;
+    contractStartDate: string;
+    contractEndDate: string;
+  } | null;
+  room: {
+    number: string;
+    floor: string;
+    towerName: string;
+    price: string;
+    detail: string;
+  } | null;
+}
+
 export interface OutstandingBillItem {
   billId: string;
   monthYear: string;
@@ -202,6 +223,8 @@ export const chatApi = {
     api.patch(`/chat/conversations/${lineUserId}/read`).then((r) => r.data),
   refreshProfile: (lineUserId: string) =>
     api.post(`/chat/conversations/${lineUserId}/refresh-profile`).then((r) => r.data as { pictureUrl: string | null; displayName: string | null }),
+  getConversationInfo: (lineUserId: string) =>
+    api.get(`/chat/conversations/${lineUserId}/info`).then((r) => r.data as ChatConversationInfo),
   getOutstandingBills: (lineUserId: string) =>
     api.get(`/chat/conversations/${lineUserId}/outstanding-bills`).then((r) => r.data as OutstandingBills),
   confirmRepair: (lineUserId: string, messageId: string, data: {

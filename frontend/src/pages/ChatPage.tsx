@@ -273,7 +273,7 @@ export default function ChatPage() {
               </div>
               <button
                 type="button" className="btn btn-sm btn-outline-secondary" title="รายละเอียดการสนทนา"
-                onClick={() => setDetailTab("bills")}
+                onClick={() => setDetailTab("info")}
               >
                 <i className="fas fa-ellipsis-vertical" />
               </button>
@@ -428,6 +428,8 @@ export default function ChatPage() {
       {selected && detailTab && (
         <ChatDetailModal
           lineUserId={selected}
+          displayName={activeConversation?.displayName ?? "ไม่ทราบชื่อ"}
+          pictureUrl={activeConversation?.pictureUrl ?? null}
           messages={messages}
           initialTab={detailTab}
           onClose={() => setDetailTab(null)}

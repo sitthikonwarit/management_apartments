@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, lineProfiles, paymentIntents, rooms, tenants, users } from "../db/schema";
+import { chatMessages, lineProfiles, paymentIntents, rooms, tenants, towers, users } from "../db/schema";
 import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
   uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
@@ -312,6 +312,44 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const profile = await getLineProfile(settings.token, params.lineUserId);
     await cacheLineProfile(orgId, params.lineUserId, profile);
     return { pictureUrl: profile.pictureUrl || null, displayName: profile.displayName || null };
+  })
+  // ข้อมูลผู้ติดต่อ/ห้องของ conversation นี้ — LINE UID, รูปโปรไฟล์, ชื่อ-เบอร์ผู้เช่า, ห้อง/ตึกที่พัก
+  // ใช้แสดงในแท็บ "ข้อมูล" ของโมดัลรายละเอียดการสนทนา (ดู ChatDetailModal.tsx)
+  .get("/conversations/:lineUserId/info", async ({ authUser, params }) => {
+    const orgId = authUser!.orgId;
+    const lineUserId = params.lineUserId;
+    const [profileRow, tenant] = await Promise.all([
+      db.select().from(lineProfiles).where(and(eq(lineProfiles.lineUserId, lineUserId), eq(lineProfiles.orgId, orgId))).then((rows) => rows[0]),
+      findTenantByLineUserId(orgId, lineUserId),
+    ]);
+
+    let room: { number: string; floor: string; towerName: string; price: string; detail: string } | null = null;
+    if (tenant?.idRoom) {
+      const [roomRow] = await db.select().from(rooms).where(and(eq(rooms.id, tenant.idRoom), eq(rooms.orgId, orgId)));
+      if (roomRow) {
+        let towerName = "";
+        if (roomRow.towerId) {
+          const [towerRow] = await db.select().from(towers).where(and(eq(towers.id, roomRow.towerId), eq(towers.orgId, orgId)));
+          towerName = towerRow?.name || "";
+        }
+        room = { number: roomRow.number, floor: roomRow.floor, towerName, price: roomRow.price, detail: roomRow.detail };
+      }
+    }
+
+    return {
+      lineUserId,
+      pictureUrl: profileRow?.pictureUrl || null,
+      profileDisplayName: profileRow?.displayName || null,
+      tenant: tenant ? {
+        id: tenant.id,
+        fullName: `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim(),
+        tel: tenant.tel,
+        checkInDate: tenant.checkInDate,
+        contractStartDate: tenant.contractStartDate,
+        contractEndDate: tenant.contractEndDate,
+      } : null,
+      room,
+    };
   })
   // ยอดค้างชำระทั้งหมดของผู้เช่าที่ผูกกับ conversation นี้ (ทุกบิลที่ยังไม่จ่ายครบ ไม่จำกัดแค่เดือนก่อนหน้า)
   .get("/conversations/:lineUserId/outstanding-bills", async ({ authUser, params }) => {
