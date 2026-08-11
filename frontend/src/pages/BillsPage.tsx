@@ -341,6 +341,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
     method: "cash" | "scan"; received: number; note: string; paymentDate: string;
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
+    sendReceipt: boolean;
   }) => Promise<void>;
   onCancelPayment: (p: any, reason: string) => Promise<void>;
 }) {
@@ -348,6 +349,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   const [note, setNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [slipImage, setSlipImage] = useState<{ base64: string; name: string } | null>(null);
+  const [sendReceipt, setSendReceipt] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -423,6 +425,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
       await onConfirm({
         method, received, note, paymentDate, slipImage,
         fineWaiveAmount, discountItems, settleOutstandingMonths: Array.from(settleMonths),
+        sendReceipt,
       });
       toastSuccess("บันทึกการชำระเงินสำเร็จ");
     } catch (e: any) {
@@ -604,6 +607,14 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
 
             <label className="form-label small">หมายเหตุ (ถ้ามี)</label>
             <input className="form-control mb-3" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น จ่ายบางส่วน, โอนผิดบัญชี..." />
+
+            <div className="form-check form-switch mb-3">
+              <input className="form-check-input" type="checkbox" id="sendReceiptSwitch"
+                checked={sendReceipt} onChange={(e) => setSendReceipt(e.target.checked)} />
+              <label className="form-check-label small" htmlFor="sendReceiptSwitch">
+                <i className="fab fa-line me-1" style={{ color: "#06C755" }} />ส่งใบเสร็จเข้า LINE ให้ผู้เช่า
+              </label>
+            </div>
 
             {error && <div className="room-modal-error mb-3"><i className="fas fa-exclamation-circle me-2" />{error}</div>}
 
@@ -2359,6 +2370,7 @@ export default function BillsPage() {
     method: "cash" | "scan"; received: number; note: string; paymentDate: string;
     slipImage: { base64: string; name: string } | null;
     fineWaiveAmount: number; discountItems: BillLineItem[]; settleOutstandingMonths: string[];
+    sendReceipt: boolean;
   }) {
     if (payingIndex === null) return;
     const target = billData[payingIndex];
@@ -2394,6 +2406,7 @@ export default function BillsPage() {
       slipImage: payload.slipImage,
       billTotal: draft.total,
       paidTotal: newPaidAmount,
+      sendReceipt: payload.sendReceipt,
     });
     setPayments((prev) => [...prev, paymentRow]);
 

@@ -123,7 +123,7 @@ export const billsApi = {
     billId: string; roomId: string; roomNumber: string; tenantId: string | null; tenantName: string;
     monthYear: string; method: "cash" | "scan"; amount: number; received?: number; change?: number; note?: string;
     paymentDate: string; slipImage?: { base64: string; name: string } | null; operator?: string;
-    billTotal: number; paidTotal: number;
+    billTotal: number; paidTotal: number; sendReceipt?: boolean;
   }) => api.post("/bills/payments", payload).then((r) => r.data),
   cancelPayment: (id: string, reason: string) =>
     api.patch(`/bills/payments/${id}/cancel`, { reason }).then((r) => r.data),

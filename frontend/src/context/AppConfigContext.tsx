@@ -32,8 +32,6 @@ export interface AppConfig {
     enabled: boolean; channelAccessToken: string; channelSecret: string; autoSendEnabled: boolean;
     // ส่งบิลใบเดียวกันให้ "ผู้ร่วมพักอาศัย" ที่ผูก LINE User ID ไว้ด้วยพร้อมกับผู้ทำสัญญาหลัก
     sendBillToCoResidents: boolean;
-    // เปิด/ปิดการส่งใบเสร็จรับเงินทาง LINE อัตโนมัติหลังบันทึกยอดชำระ/ยืนยันสลิปสำเร็จ
-    sendReceiptEnabled: boolean;
   };
   // LINE Rich Menu (Guest/Member/Admin) — ตั้งค่า/สร้างได้จากหน้า Settings > LINE Rich Menu
   richMenu: {
@@ -91,7 +89,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   meterDigits: 5,
   yearFormat: "BE",
   sessionTimeoutMinutes: 30,
-  lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false, sendBillToCoResidents: true, sendReceiptEnabled: true },
+  lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false, sendBillToCoResidents: true },
   richMenu: {
     liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", liffRoomsUrl: "", liffBookingUrl: "", contactPhone: "",
     images: { guest: "", member: "", admin: "" },

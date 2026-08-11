@@ -378,9 +378,6 @@ export const appConfig = pgTable("app_config", {
   // ส่งบิลใบเดียวกันให้ "ผู้ร่วมพักอาศัย" ที่ผูก LINE User ID ไว้ด้วยพร้อมกับผู้ทำสัญญาหลักไหม (ดู
   // sendBillLineForRoom ใน services/line.ts) เปิดเป็นค่าเริ่มต้น ปิดได้ที่หน้า Settings ถ้าไม่ต้องการ
   lineSendBillToCoResidents: text("line_send_bill_to_co_residents").notNull().default("true"),
-  // เปิด/ปิดการส่งใบเสร็จรับเงินทาง LINE อัตโนมัติหลังบันทึกยอดชำระ/ยืนยันสลิปสำเร็จ (ดู
-  // sendPaymentReceiptLine ใน services/line.ts) เปิดเป็นค่าเริ่มต้น ปิดได้ที่หน้า Settings ถ้าไม่ต้องการ
-  lineSendReceiptEnabled: text("line_send_receipt_enabled").notNull().default("true"),
   // ── LINE Rich Menu (Guest/Member/Admin) — ตั้งค่า/สร้างได้จากหน้า Settings > LINE Rich Menu
   // (ดู services/richMenu.ts) รูปเก็บเป็น path สัมพัทธ์ใน uploads/richmenu/ เหมือน rooms.pictures ──
   liffLoginUrl: str("liff_login_url"),

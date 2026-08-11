@@ -60,7 +60,7 @@ export interface ConfirmedPaymentResult {
 export async function recordConfirmedPayment(
   orgId: string,
   intent: typeof paymentIntents.$inferSelect,
-  opts: { slipUrl: string; actor: string; note: string }
+  opts: { slipUrl: string; actor: string; note: string; sendReceipt?: boolean }
 ): Promise<ConfirmedPaymentResult> {
   const [billRow] = await db.select().from(bills).where(and(eq(bills.id, intent.billId), eq(bills.orgId, orgId)));
   if (!billRow) return { ok: false, message: "ไม่พบบิลของรายการรอชำระนี้" };
@@ -107,7 +107,7 @@ export async function recordConfirmedPayment(
       tenantId: intent.tenantId, roomNumber: intent.roomNumber || "", monthYear: intent.monthYear || "",
       method: "scan", amount: amountApplied, change: 0, note: "", paymentDate: ts,
       billTotal: Number(item.total) || 0, paidTotal: newPaidAmount, slipUrl: opts.slipUrl, actor: opts.actor,
-    });
+    }, opts.sendReceipt !== false);
   } catch (e) {
     console.error("[record-confirmed-payment][receipt]", e);
   }

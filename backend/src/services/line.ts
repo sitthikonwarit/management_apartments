@@ -262,7 +262,6 @@ export async function getLineSettings(orgId: string) {
     yearFormat: (row?.yearFormat === "CE" ? "CE" : "BE") as "BE" | "CE",
     splitRentByResidents: row?.splitRentByResidents === "true",
     sendBillToCoResidents: row?.lineSendBillToCoResidents !== "false",
-    sendReceiptEnabled: row?.lineSendReceiptEnabled !== "false",
     liffPaymentUrl: row?.liffPaymentUrl ?? "",
   };
 }
@@ -936,14 +935,16 @@ function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppe
 }
 
 // ส่งใบเสร็จรับเงินทาง LINE — เรียกจาก bills.ts ทันทีหลังบันทึกรายการชำระเงินสำเร็จ (best-effort ไม่บล็อกการ
-// บันทึกยอดถ้าส่งไม่สำเร็จ เช่น ผู้เช่ายังไม่ได้ผูก LINE User ID หรือปิดใช้งาน LINE Messaging ไว้)
-export async function sendPaymentReceiptLine(orgId: string, input: PaymentReceiptInput): Promise<SendLineResult> {
+// บันทึกยอดถ้าส่งไม่สำเร็จ เช่น ผู้เช่ายังไม่ได้ผูก LINE User ID หรือปิดใช้งาน LINE Messaging ไว้) sendReceipt
+// = false คือพนักงานเลือก "ไม่ส่งใบเสร็จ" ตอนบันทึกยอด (ถามทุกครั้งในป็อปอัพบันทึกการชำระเงิน แทนที่จะเป็น
+// ค่าตั้งค่ากลางถาวรในหน้า Settings) ค่าเริ่มต้นเป็น true ให้เส้นทางที่ไม่ได้ถาม (ตรวจสลิปอัตโนมัติ) ยังส่งตามปกติ
+export async function sendPaymentReceiptLine(orgId: string, input: PaymentReceiptInput, sendReceipt = true): Promise<SendLineResult> {
+  if (!sendReceipt) {
+    return { success: false, message: "พนักงานเลือกไม่ส่งใบเสร็จทาง LINE สำหรับรายการนี้" };
+  }
   const settings = await getLineSettings(orgId);
   if (!settings.enabled || !settings.token) {
     return { success: false, message: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
-  }
-  if (!settings.sendReceiptEnabled) {
-    return { success: false, message: "ปิดใช้งานการส่งใบเสร็จรับเงินทาง LINE ไว้ในหน้าตั้งค่าระบบ" };
   }
   if (!input.tenantId) {
     return { success: false, message: "ห้องนี้ไม่มีผู้เช่าผูกอยู่" };

@@ -119,7 +119,7 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
         paidTotal: Number(b.paidTotal) || 0,
         slipUrl,
         actor,
-      });
+      }, b.sendReceipt !== false);
     } catch (e) {
       console.error("[send-payment-receipt]", e);
     }
