@@ -252,6 +252,7 @@ export default function SettingsPage() {
   const [lineSecretVisible, setLineSecretVisible] = useState(false);
   const [lineAutoSendEnabled, setLineAutoSendEnabled] = useState(false);
   const [sendBillToCoResidents, setSendBillToCoResidents] = useState(true);
+  const [sendReceiptEnabled, setSendReceiptEnabled] = useState(true);
 
   // ── LINE Rich Menu ──
   const [liffLoginUrl, setLiffLoginUrl] = useState("");
@@ -368,6 +369,7 @@ export default function SettingsPage() {
     setLineSecret(config.lineMessaging.channelSecret);
     setLineAutoSendEnabled(config.lineMessaging.autoSendEnabled);
     setSendBillToCoResidents(config.lineMessaging.sendBillToCoResidents);
+    setSendReceiptEnabled(config.lineMessaging.sendReceiptEnabled);
     setLiffLoginUrl(config.richMenu.liffLoginUrl);
     setLiffPaymentUrl(config.richMenu.liffPaymentUrl);
     setLiffProfileUrl(config.richMenu.liffProfileUrl);
@@ -596,7 +598,7 @@ export default function SettingsPage() {
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
         lineMessaging: {
           enabled: lineEnabled, channelAccessToken: lineToken.trim(), channelSecret: lineSecret.trim(),
-          autoSendEnabled: lineAutoSendEnabled, sendBillToCoResidents,
+          autoSendEnabled: lineAutoSendEnabled, sendBillToCoResidents, sendReceiptEnabled,
         },
         richMenu: {
           ...DEFAULT_APP_CONFIG.richMenu,
@@ -1284,6 +1286,14 @@ export default function SettingsPage() {
                         checked={sendBillToCoResidents} onChange={(e) => setSendBillToCoResidents(e.target.checked)} />
                       <label className="form-check-label small" htmlFor="sendBillToCoResidentsSwitch">
                         ส่งบิลให้ "ผู้ร่วมพักอาศัย" ที่ผูก LINE User ID ไว้ด้วย (นอกเหนือจากผู้ทำสัญญาหลัก) — ทั้งตอนกดส่งเองและส่งอัตโนมัติ
+                      </label>
+                    </div>
+
+                    <div className="form-check form-switch mb-3">
+                      <input className="form-check-input" type="checkbox" id="sendReceiptEnabledSwitch"
+                        checked={sendReceiptEnabled} onChange={(e) => setSendReceiptEnabled(e.target.checked)} />
+                      <label className="form-check-label small" htmlFor="sendReceiptEnabledSwitch">
+                        ส่งใบเสร็จรับเงินทาง LINE อัตโนมัติทุกครั้งที่บันทึกยอดชำระ/ยืนยันสลิปสำเร็จ — ปิดถ้าไม่ต้องการให้ส่งใบเสร็จเข้าแชท
                       </label>
                     </div>
 

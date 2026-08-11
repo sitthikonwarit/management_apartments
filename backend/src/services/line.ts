@@ -262,6 +262,7 @@ export async function getLineSettings(orgId: string) {
     yearFormat: (row?.yearFormat === "CE" ? "CE" : "BE") as "BE" | "CE",
     splitRentByResidents: row?.splitRentByResidents === "true",
     sendBillToCoResidents: row?.lineSendBillToCoResidents !== "false",
+    sendReceiptEnabled: row?.lineSendReceiptEnabled !== "false",
     liffPaymentUrl: row?.liffPaymentUrl ?? "",
   };
 }
@@ -940,6 +941,9 @@ export async function sendPaymentReceiptLine(orgId: string, input: PaymentReceip
   const settings = await getLineSettings(orgId);
   if (!settings.enabled || !settings.token) {
     return { success: false, message: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
+  }
+  if (!settings.sendReceiptEnabled) {
+    return { success: false, message: "ปิดใช้งานการส่งใบเสร็จรับเงินทาง LINE ไว้ในหน้าตั้งค่าระบบ" };
   }
   if (!input.tenantId) {
     return { success: false, message: "ห้องนี้ไม่มีผู้เช่าผูกอยู่" };

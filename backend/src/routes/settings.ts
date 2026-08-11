@@ -65,6 +65,7 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       channelSecret: decryptField(r.lineChannelSecret || ""),
       autoSendEnabled: r.lineAutoSendEnabled === "true",
       sendBillToCoResidents: r.lineSendBillToCoResidents !== "false",
+      sendReceiptEnabled: r.lineSendReceiptEnabled !== "false",
     },
     richMenu: {
       liffLoginUrl: r.liffLoginUrl || "",
@@ -226,6 +227,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       lineChannelSecret: encryptField(String(b.lineMessaging?.channelSecret ?? "")),
       lineAutoSendEnabled: b.lineMessaging?.autoSendEnabled ? "true" : "false",
       lineSendBillToCoResidents: b.lineMessaging?.sendBillToCoResidents === false ? "false" : "true",
+      lineSendReceiptEnabled: b.lineMessaging?.sendReceiptEnabled === false ? "false" : "true",
       // รูปเมนู/ID ที่สร้างไว้ตั้งใจไม่ใส่ในนี้ — จัดการแยกผ่าน /richmenu/image และ /richmenu/create
       // ด้านล่าง เพราะเป็น action ที่มีผลข้างเคียง (อัปโหลดไฟล์/เรียก LINE API จริง) ไม่ใช่แค่บันทึกค่าฟอร์ม
       liffLoginUrl: String(b.richMenu?.liffLoginUrl ?? ""),
