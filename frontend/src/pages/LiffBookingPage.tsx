@@ -6,7 +6,7 @@
 // /liff/rooms/cancel ใน backend/src/routes/liff.ts)
 import { useEffect, useMemo, useState } from "react";
 import liff from "@line/liff";
-import { liffApi } from "../api/client";
+import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
 
@@ -60,6 +60,7 @@ export default function LiffBookingPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let stopPresence: (() => void) | null = null;
     (async () => {
       try {
         const cfg = await liffApi.getConfig(org);
@@ -75,7 +76,7 @@ export default function LiffBookingPage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
-        liffApi.notifyPresence(token, "booking", org);
+        if (!cancelled) stopPresence = startLiffPresenceHeartbeat(token, "booking", org);
 
         const bookings = await loadMyBookings(token);
         if (cancelled) return;
@@ -96,7 +97,7 @@ export default function LiffBookingPage() {
         setStatus("error");
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopPresence?.(); };
   }, []);
 
   const filteredBookings = useMemo(() => {

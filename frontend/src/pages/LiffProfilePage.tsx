@@ -4,7 +4,7 @@
 // การชำระเงินได้
 import { useEffect, useState } from "react";
 import liff from "@line/liff";
-import { liffApi } from "../api/client";
+import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateOnlyString } from "../utils/yearFormat";
@@ -93,6 +93,7 @@ export default function LiffProfilePage() {
 
   useEffect(() => {
     let cancelled = false;
+    let stopPresence: (() => void) | null = null;
     (async () => {
       try {
         const cfg = await liffApi.getConfig(org);
@@ -109,7 +110,7 @@ export default function LiffProfilePage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
-        liffApi.notifyPresence(token, "profile", org);
+        if (!cancelled) stopPresence = startLiffPresenceHeartbeat(token, "profile", org);
 
         const result = await liffApi.profile(token, org);
         if (cancelled) return;
@@ -127,7 +128,7 @@ export default function LiffProfilePage() {
         setStatus("error");
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopPresence?.(); };
   }, []);
 
   async function openDetail(bill: BillRow) {

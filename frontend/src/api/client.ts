@@ -350,12 +350,28 @@ export const liffApi = {
   }),
   cancelBooking: (accessToken: string, bookingId: string, org?: string) =>
     api.post("/liff/rooms/cancel", { accessToken, bookingId }, { params: { org } }).then((r) => r.data as { ok: boolean }),
-  // แจ้งเตือนชั่วคราว (ไม่บันทึก DB) ว่ากำลังเปิดหน้า LIFF หน้านี้อยู่ — ให้พนักงานเห็นในหน้าแชทของเว็บว่า
-  // "กำลังใช้งานหน้า ... ผ่าน web" เรียกครั้งเดียวตอนได้ access token มา (ดู Liff*Page.tsx) ยิงแบบ fire-and-
-  // forget เสมอ ไม่ throw ไม่บล็อกการโหลดหน้า LIFF ด้วยเหตุผลรอง
-  notifyPresence: (accessToken: string, page: "login" | "rooms" | "booking" | "payment" | "profile" | "repair", org?: string) =>
+  // แจ้งเตือนชั่วคราว (ไม่บันทึก DB) ว่ากำลังเปิดหน้า LIFF หน้านี้อยู่ — ให้พนักงานเห็นวงกลมสีเขียวขึ้นที่รูป
+  // โปรไฟล์ในหน้าแชทของเว็บ (ดู startLiffPresenceHeartbeat ด้านล่าง ที่เรียกฟังก์ชันนี้ซ้ำเป็นระยะ) ยิงแบบ
+  // fire-and-forget เสมอ ไม่ throw ไม่บล็อกการโหลดหน้า LIFF ด้วยเหตุผลรอง
+  notifyPresence: (accessToken: string, page: LiffPresencePage, org?: string) =>
     api.post("/liff/presence", { accessToken, page }, { params: { org } }).then((r) => r.data as { ok: boolean }).catch(() => ({ ok: false })),
 };
+
+export type LiffPresencePage = "login" | "rooms" | "booking" | "payment" | "profile" | "repair";
+
+// ทุก 20 วิ — ต้องสั้นกว่า PRESENCE_EXPIRE_MS ฝั่ง ChatPage.tsx (40 วิ) พอสมควร กันจังหวะเน็ตช้า/ping ตกไป
+// รอบเดียวแล้ววงกลมสีเขียวหายวับไปทั้งที่ยังเปิดหน้าอยู่จริง
+const PRESENCE_HEARTBEAT_MS = 20000;
+
+// เรียกจากทุกหน้า LIFF (Liff*Page.tsx) ตอนได้ access token มาแล้ว — ยิง notifyPresence ทันทีนัดหนึ่ง แล้วส่งซ้ำ
+// เป็นระยะทุก 20 วิไปเรื่อยๆ ตราบใดที่หน้ายังเปิด/mount อยู่ (เพราะปุ่ม Rich Menu แบบ uri แค่เปิดเบราว์เซอร์
+// เฉยๆ ไม่มีสัญญาณอะไรบอกได้เลยว่าผู้เช่า "เลิกใช้" หน้านี้แล้วเมื่อไหร่ — ใช้ heartbeat + timeout ฝั่งแสดงผล
+// แทนสัญญาณ "ออกจากหน้า" ตรงๆ ซึ่งเชื่อถือได้น้อยกว่าบนมือถือ) คืนฟังก์ชันไว้ให้เรียกตอน unmount เพื่อหยุด interval
+export function startLiffPresenceHeartbeat(accessToken: string, page: LiffPresencePage, org?: string): () => void {
+  liffApi.notifyPresence(accessToken, page, org);
+  const intervalId = setInterval(() => liffApi.notifyPresence(accessToken, page, org), PRESENCE_HEARTBEAT_MS);
+  return () => clearInterval(intervalId);
+}
 
 // ── หน้าควบคุมแพลตฟอร์ม (ดูรายชื่อองค์กรลูกค้าทั้งหมด/ระงับ/ลบองค์กร) — คนเดียว (คุณ) เท่านั้น ─────
 // เก็บโทเค็นแยก localStorage key จากบัญชีพนักงาน (TOKEN_STORAGE_KEY ด้านบน) เพราะเป็นคนละระบบสิทธิ์กัน

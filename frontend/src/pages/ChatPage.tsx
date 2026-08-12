@@ -14,6 +14,26 @@ import { ChatRepairMessage } from "../components/ChatRepairCard";
 import { ChatPaymentConfirmMessage } from "../components/ChatPaymentConfirmCard";
 import { ChatBookingMessage } from "../components/ChatBookingCard";
 
+// รูปโปรไฟล์ + วงกลมสีเขียวเล็กๆ มุมล่างขวา (แบบเดียวกับสถานะ "ออนไลน์" ของแอปแชททั่วไป) โผล่ตอนคนนี้กำลัง
+// เปิดหน้า LIFF อยู่ผ่าน web (ดู state `presence` ใน ChatPage — มาจาก event "chat:web-presence")
+function PresenceAvatar({ src, size, active, title }: { src: string; size: number; active: boolean; title?: string }) {
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }} title={title}>
+      <img
+        src={src} alt="" referrerPolicy="no-referrer"
+        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }}
+        onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
+      />
+      {active && (
+        <span style={{
+          position: "absolute", bottom: -1, right: -1, width: Math.max(10, size * 0.3), height: Math.max(10, size * 0.3),
+          borderRadius: "50%", background: "var(--color-success)", border: "2px solid var(--color-white)",
+        }} />
+      )}
+    </div>
+  );
+}
+
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,11 +69,43 @@ export default function ChatPage() {
   const location = useLocation();
   const handledDeepLinkRef = useRef(false);
 
+  // วงกลมสีเขียวเล็กๆ ที่รูปโปรไฟล์ — บอกว่าผู้เช่า/ผู้มาเยือนคนนี้กำลังเปิดหน้า LIFF หน้าไหนอยู่ผ่านปุ่ม
+  // Rich Menu (type: uri) ตอนนี้ (key = lineUserId, value = ชื่อหน้าที่กำลังเปิด) — สถานะชั่วคราวล้วนๆ อยู่
+  // แค่ในหน่วยความจำของแท็บนี้ ไม่ persist ข้ามการโหลดหน้าใหม่ ไม่มี DB รองรับ (ดู backend/src/lib/wsHub.ts
+  // broadcastWebPresence) หมดอายุเองถ้าไม่มี heartbeat ใหม่เข้ามาภายใน PRESENCE_EXPIRE_MS (ดูด้านล่าง)
+  const [presence, setPresence] = useState<Map<string, string>>(new Map());
+  const presenceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   function loadConversations() {
     chatApi.getConversations().then(setConversations).catch(() => {});
   }
 
   useEffect(() => { loadConversations(); }, []);
+
+  // ฟังอีเวนต์ "chat:web-presence" (ยิงจาก useLiveSync.ts ทุกครั้งที่ backend ยิง heartbeat "กำลังใช้งานหน้า
+  // ... ผ่าน web" มา — ดู startLiffPresenceHeartbeat ใน api/client.ts ที่ยิงซ้ำทุก 20 วิตราบใดที่ผู้เช่ายังเปิด
+  // หน้า LIFF หน้านั้นอยู่) รีเซ็ตตัวจับเวลาทุกครั้งที่มี heartbeat ใหม่เข้ามาของคนเดิม ถ้าไม่มี heartbeat ใหม่
+  // เข้ามาภายใน PRESENCE_EXPIRE_MS แปลว่าเลิกใช้แล้ว (ปิดแท็บ/หน้าเปลี่ยนไปแล้ว) ให้เอาวงกลมออก
+  useEffect(() => {
+    const PRESENCE_EXPIRE_MS = 40000;
+    function handleWebPresence(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.lineUserId) return;
+      setPresence((prev) => new Map(prev).set(detail.lineUserId, detail.pageLabel || ""));
+      const existing = presenceTimersRef.current.get(detail.lineUserId);
+      if (existing) clearTimeout(existing);
+      presenceTimersRef.current.set(detail.lineUserId, setTimeout(() => {
+        setPresence((prev) => { const next = new Map(prev); next.delete(detail.lineUserId); return next; });
+        presenceTimersRef.current.delete(detail.lineUserId);
+      }, PRESENCE_EXPIRE_MS));
+    }
+    window.addEventListener("chat:web-presence", handleWebPresence);
+    return () => {
+      window.removeEventListener("chat:web-presence", handleWebPresence);
+      presenceTimersRef.current.forEach((t) => clearTimeout(t));
+      presenceTimersRef.current.clear();
+    };
+  }, []);
 
   // เปิดตรงไปยังสนทนาที่ระบุ เมื่อมีคนนำทางมาจากหน้าอื่น (เช่น กดที่ป็อปอัพแจ้งเตือนข้อความแชทใหม่มุมขวาล่าง)
   // ผ่าน navigate("/chat", { state: { openLineUserId } }) — ดู ChatToastHost.tsx — ทำครั้งเดียวหลังโหลดรายชื่อสนทนาเสร็จ
@@ -221,10 +273,10 @@ export default function ChatPage() {
               display: "flex", gap: 10, alignItems: "flex-start",
             }}
           >
-            <img
-              src={c.pictureUrl || AVATAR_URL} alt="" referrerPolicy="no-referrer"
-              style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-              onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
+            <PresenceAvatar
+              src={c.pictureUrl || AVATAR_URL} size={40}
+              active={presence.has(c.lineUserId)}
+              title={presence.has(c.lineUserId) ? `กำลังใช้งานหน้า ${presence.get(c.lineUserId)} ผ่าน web` : undefined}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="d-flex justify-content-between align-items-center">
@@ -260,15 +312,23 @@ export default function ChatPage() {
               >
                 <i className="fas fa-arrow-left" />
               </button>
-              <img
-                src={activeConversation?.pictureUrl || AVATAR_URL} alt="" referrerPolicy="no-referrer"
-                style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", marginRight: 10, flexShrink: 0 }}
-                onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
-              />
+              <div style={{ marginRight: 10 }}>
+                <PresenceAvatar
+                  src={activeConversation?.pictureUrl || AVATAR_URL} size={36}
+                  active={!!selected && presence.has(selected)}
+                  title={selected && presence.has(selected) ? `กำลังใช้งานหน้า ${presence.get(selected)} ผ่าน web` : undefined}
+                />
+              </div>
               <div className="flex-grow-1" style={{ minWidth: 0 }}>
                 <strong>{activeConversation?.displayName ?? "ไม่ทราบชื่อ"}</strong>
                 {activeConversation?.roomNumber && (
                   <span className="text-muted small ms-2">ห้อง {activeConversation.roomNumber}</span>
+                )}
+                {selected && presence.has(selected) && (
+                  <span className="small ms-2" style={{ color: "var(--color-success)" }}>
+                    <i className="fas fa-circle me-1" style={{ fontSize: 6, verticalAlign: "middle" }} />
+                    กำลังใช้งานหน้า {presence.get(selected)} ผ่าน web
+                  </span>
                 )}
               </div>
               <button

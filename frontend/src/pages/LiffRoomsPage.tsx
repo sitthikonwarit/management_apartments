@@ -4,7 +4,7 @@
 // "จองห้อง" (LiffBookingPage.tsx — คนละ LIFF App) พร้อมระบุห้องที่เลือกไว้ผ่าน query "?roomId="
 import { useEffect, useMemo, useState } from "react";
 import liff from "@line/liff";
-import { liffApi } from "../api/client";
+import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
 
@@ -35,6 +35,7 @@ export default function LiffRoomsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let stopPresence: (() => void) | null = null;
     (async () => {
       try {
         const cfg = await liffApi.getConfig(org);
@@ -51,7 +52,7 @@ export default function LiffRoomsPage() {
         // หน้านี้สาธารณะ ไม่ต้องใช้ access token เรียก API อื่นเลย (ดู /liff/rooms ใน backend/src/routes/
         // liff.ts) แต่ยังขอมาเฉพาะแจ้ง presence ให้พนักงานเห็นว่ามีคนกำลังดูห้องว่างอยู่ผ่าน web เท่านั้น
         const presenceToken = liff.getAccessToken();
-        if (presenceToken) liffApi.notifyPresence(presenceToken, "rooms", org);
+        if (presenceToken && !cancelled) stopPresence = startLiffPresenceHeartbeat(presenceToken, "rooms", org);
 
         const availableRooms = await liffApi.availableRooms(org);
         if (cancelled) return;
@@ -63,7 +64,7 @@ export default function LiffRoomsPage() {
         setStatus("error");
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopPresence?.(); };
   }, []);
 
   const filteredRooms = useMemo(() => {
