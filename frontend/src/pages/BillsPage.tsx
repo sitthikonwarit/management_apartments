@@ -2600,7 +2600,7 @@ export default function BillsPage() {
       tenantName: target.tenantName,
       monthYear: editingMonthYear,
       method: payload.method,
-      amount: amountApplied,
+      amount: amountForCurrent,
       received: payload.received,
       change: changeGiven,
       note: payload.note,
