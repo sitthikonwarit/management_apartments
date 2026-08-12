@@ -32,7 +32,10 @@ function frontendUrl(): string {
 
 function redirectUri(): string {
   const base = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-  return `${base}/auth/line/callback`;
+  // ต้องมี /api นำหน้าเสมอ — reverse proxy (nginx จริง/vite dev proxy) พร็อกซีเฉพาะ path ที่ขึ้นต้นด้วย
+  // /api ไปหา backend เท่านั้น (ตัด /api ออกก่อนส่งต่อ) ถ้าไม่มี /api ตรงนี้ พอ LINE redirect กลับมาที่ URL
+  // นี้ จะไม่ถึง backend เลย ตกไปที่ SPA fallback แทน แล้วเด้งไปหน้า /login เงียบๆ โดยไม่มี error ใดๆ
+  return `${base}/api/auth/line/callback`;
 }
 
 // อ่านค่าคุกกี้ตัวเดียวแบบดิบๆ จาก header "cookie" — ไม่พึ่งปลั๊กอินคุกกี้ของ Elysia (ไม่ได้ติดตั้งไว้ในโปรเจกต์
