@@ -75,6 +75,7 @@ export default function LiffBookingPage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
+        liffApi.notifyPresence(token, "booking", org);
 
         const bookings = await loadMyBookings(token);
         if (cancelled) return;

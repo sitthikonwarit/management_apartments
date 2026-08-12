@@ -18,7 +18,7 @@ import {
 } from "../services/line";
 import { linkRichMenuToUser } from "../services/richMenu";
 import { generatePromptPayQr } from "../services/easyslip";
-import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
+import { broadcastChange, broadcastChatMessage, broadcastWebPresence } from "../lib/wsHub";
 import { resolveOrgIdBySlug, resolveOrgIdWithFallback } from "../lib/orgContext";
 import { decryptField, signUploadPath } from "../lib/encryption";
 
@@ -26,6 +26,18 @@ async function resolveOrgId(orgSlug: unknown): Promise<string | null> {
   const candidate = typeof orgSlug === "string" && orgSlug ? await resolveOrgIdBySlug(orgSlug) : null;
   return resolveOrgIdWithFallback(candidate);
 }
+
+// ป้ายชื่อหน้า LIFF ภาษาไทย ให้ตรงกับข้อความปุ่มบน Rich Menu (ดู services/richMenu.ts) — ใช้ประกอบข้อความ
+// แจ้งเตือน "กำลังใช้งานหน้า ... ผ่าน web" ใน POST /presence ด้านล่าง คีย์ (page) มาจากที่ frontend ส่งมาเอง
+// ต่อหน้า LIFF หนึ่งๆ (ดู Liff*Page.tsx)
+const LIFF_PAGE_LABELS: Record<string, string> = {
+  login: "เข้าสู่ระบบ",
+  rooms: "ดูห้องว่าง",
+  booking: "จองห้อง",
+  payment: "ชำระเงิน",
+  profile: "ข้อมูลผู้เช่า",
+  repair: "แจ้งซ่อม",
+};
 
 async function getConfigRow(orgId: string) {
   const [row] = await db.select().from(appConfig).where(eq(appConfig.id, orgId));
@@ -121,6 +133,34 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
         amount: Number(row?.overdueFineAmount) || 0,
       },
     };
+  })
+  // เรียกจากทุกหน้า LIFF (Liff*Page.tsx) ทันทีที่ได้ access token มา — แค่แจ้งเตือนชั่วคราวมุมขวาล่างของหน้า
+  // แชท (ไม่บันทึกลง DB เลย ดู broadcastWebPresence ใน lib/wsHub.ts) ว่าใครกำลังเปิดหน้า LIFF ไหนอยู่ผ่านปุ่ม
+  // Rich Menu ที่เป็น type: uri (ต่างจากปุ่ม type: message ที่มีข้อความจริงส่งเข้าแชทให้เห็นอยู่แล้วโดยอัตโนมัติ)
+  // best-effort ล้วนๆ ไม่ throw ไม่บล็อกการโหลดหน้า LIFF ด้วยเหตุผลรอง
+  .post("/presence", async ({ body, query }) => {
+    const { accessToken, page } = body as { accessToken?: string; page?: string };
+    const pageLabel = page ? LIFF_PAGE_LABELS[page] : undefined;
+    if (!accessToken || !pageLabel) return { ok: false };
+    const orgId = await resolveOrgId(query.org);
+    if (!orgId) return { ok: false };
+
+    const profile = await verifyLiffAccessToken(accessToken);
+    if (!profile) return { ok: false };
+
+    const tenant = await findTenantByLineUserId(orgId, profile.userId);
+    const displayName = tenant ? tenantDisplayName(tenant) : profile.displayName;
+    const roomNumber = tenant ? await tenantRoomNumber(tenant.idRoom) : "";
+
+    broadcastWebPresence(orgId, {
+      lineUserId: profile.userId,
+      displayName: displayName || "ไม่ทราบชื่อ",
+      roomNumber: roomNumber || null,
+      pictureUrl: profile.pictureUrl || null,
+      pageLabel,
+    });
+
+    return { ok: true };
   })
   // ปุ่ม "เข้าสู่ระบบ" บนเมนู Guest — ตรวจ access token กับ LINE แล้วหาว่าผูกกับผู้เช่าคนไหนไว้หรือยัง
   // ถ้าเจอ ผูก Rich Menu แบบ Member ให้อัตโนมัติ (สลับจาก Guest เป็น Member เฉพาะคนนี้)

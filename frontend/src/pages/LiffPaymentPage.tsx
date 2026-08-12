@@ -103,6 +103,7 @@ export default function LiffPaymentPage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
+        liffApi.notifyPresence(token, "payment", org);
 
         const result = await liffApi.payment(token, org);
         if (cancelled) return;

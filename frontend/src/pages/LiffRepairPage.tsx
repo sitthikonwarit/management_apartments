@@ -50,6 +50,7 @@ export default function LiffRepairPage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
+        liffApi.notifyPresence(token, "repair", org);
         setStatus("ready");
       } catch (e: any) {
         if (cancelled) return;

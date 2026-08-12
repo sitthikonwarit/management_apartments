@@ -57,6 +57,30 @@ export function broadcastChatMessage(orgId: string, notification: ChatMessageNot
   }
 }
 
+export interface WebPresenceNotification {
+  lineUserId: string;
+  displayName: string;
+  roomNumber: string | null;
+  pictureUrl: string | null;
+  pageLabel: string;
+}
+
+// เรียกจาก POST /liff/presence (routes/liff.ts) ทุกครั้งที่ผู้เช่า/ผู้มาเยือนเปิดหน้า LIFF หน้าใดหน้าหนึ่งผ่าน
+// ปุ่ม Rich Menu (type: uri) — ปุ่มพวกนี้แค่เปิดเบราว์เซอร์เฉยๆ ไม่มีข้อความส่งเข้า webhook แบบปุ่ม type:
+// message ตามปกติ เลยไม่มีอะไรขึ้นในหน้าแชทของเว็บให้พนักงานรู้ว่ากำลังใช้งานอยู่ ต่างจาก broadcastChatMessage
+// ตรงที่เป็นแค่การแจ้งเตือนชั่วคราว "กำลังใช้งาน" เฉยๆ ไม่บันทึกลง chatMessages/DB เลย (ไม่ใช่ข้อความจริง)
+export function broadcastWebPresence(orgId: string, notification: WebPresenceNotification) {
+  const payload = JSON.stringify({ type: "web-presence", ...notification, timestamp: new Date().toISOString() });
+  for (const [ws, info] of clients.entries()) {
+    if (info.orgId !== orgId) continue;
+    try {
+      ws.send(payload);
+    } catch {
+      clients.delete(ws);
+    }
+  }
+}
+
 // เรียกจาก /auth/login ตอนมีคน login ด้วยบัญชีเดียวกันซ้ำ (จากเครื่อง/แท็บอื่น) — ยิงหาทุก connection ของ
 // userId นี้ที่ยังต่ออยู่ (ปกติคือเครื่องเก่าที่เพิ่งถูกแทนที่) ให้ frontend บังคับออกจากระบบทันที ไม่ต้อง
 // รอให้ request ถัดไปโดน 401 เฉยๆ (การ์ดฝั่ง backend ก็ปฏิเสธ sid เก่าอยู่แล้วเป็นชั้นป้องกันจริง อันนี้แค่

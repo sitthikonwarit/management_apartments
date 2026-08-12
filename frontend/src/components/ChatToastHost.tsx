@@ -5,6 +5,7 @@ import { AVATAR_URL } from "./TenantTableView";
 
 interface ChatToast {
   id: string;
+  kind: "message" | "presence";
   lineUserId: string;
   displayName: string;
   roomNumber: string | null;
@@ -15,6 +16,7 @@ interface ChatToast {
 }
 
 const AUTO_DISMISS_MS = 6000;
+const PRESENCE_DISMISS_MS = 5000; // ป้าย "กำลังใช้งาน..." หายเร็วกว่าข้อความจริง แค่บอกสถานะชั่วคราวเฉยๆ
 const FADE_MS = 300;
 
 // ป็อปอัพแจ้งเตือนข้อความแชท LINE ใหม่ มุมขวาล่างของจอ — เมาท์ครั้งเดียวที่ระดับ shell (App.tsx) ให้เด้ง
@@ -50,12 +52,28 @@ export default function ChatToastHost() {
       if (!detail?.lineUserId) return;
       const id = `${detail.lineUserId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const toast: ChatToast = {
-        id, lineUserId: detail.lineUserId, displayName: detail.displayName || "ไม่ทราบชื่อ",
+        id, kind: "message", lineUserId: detail.lineUserId, displayName: detail.displayName || "ไม่ทราบชื่อ",
         roomNumber: detail.roomNumber || null, pictureUrl: detail.pictureUrl || null,
         preview: detail.preview || "", read: false, dismissing: false,
       };
       setToasts((prev) => [...prev, toast]);
       timersRef.current.set(id, setTimeout(() => removeToast(id), AUTO_DISMISS_MS));
+    }
+
+    // ผู้เช่า/ผู้มาเยือนเปิดหน้า LIFF หน้าใดหน้าหนึ่งอยู่ (ไม่ใช่ข้อความจริง ไม่บันทึกลง DB — ดู
+    // backend/src/lib/wsHub.ts broadcastWebPresence) เด้งเป็นป็อปอัพแบบเดียวกันแต่หน้าตาต่างกันเล็กน้อยและ
+    // หายเร็วกว่า (PRESENCE_DISMISS_MS) เพราะเป็นแค่สถานะชั่วคราว ไม่ใช่เรื่องที่ต้องรอให้พนักงานอ่าน
+    function handleWebPresence(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.lineUserId) return;
+      const id = `${detail.lineUserId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const toast: ChatToast = {
+        id, kind: "presence", lineUserId: detail.lineUserId, displayName: detail.displayName || "ไม่ทราบชื่อ",
+        roomNumber: detail.roomNumber || null, pictureUrl: detail.pictureUrl || null,
+        preview: `กำลังใช้งานหน้า ${detail.pageLabel || ""} ผ่าน web`, read: false, dismissing: false,
+      };
+      setToasts((prev) => [...prev, toast]);
+      timersRef.current.set(id, setTimeout(() => removeToast(id), PRESENCE_DISMISS_MS));
     }
 
     function handleChatChange(e: Event) {
@@ -71,9 +89,11 @@ export default function ChatToastHost() {
     }
 
     window.addEventListener("chat:new-message", handleNewMessage);
+    window.addEventListener("chat:web-presence", handleWebPresence);
     window.addEventListener("live:change", handleChatChange);
     return () => {
       window.removeEventListener("chat:new-message", handleNewMessage);
+      window.removeEventListener("chat:web-presence", handleWebPresence);
       window.removeEventListener("live:change", handleChatChange);
       timersRef.current.forEach((t) => clearTimeout(t));
     };
@@ -91,7 +111,9 @@ export default function ChatToastHost() {
           onClick={() => handleToastClick(t)}
           style={{
             background: "var(--color-white)", borderRadius: "var(--border-radius-1)", boxShadow: "var(--box-shadow)",
-            border: "1px solid var(--color-light)", padding: 12,
+            border: "1px solid var(--color-light)",
+            borderLeft: t.kind === "presence" ? "3px solid var(--color-info, #3b82f6)" : "1px solid var(--color-light)",
+            padding: 12,
             display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
             animation: "slideUp 0.3s ease", opacity: t.dismissing ? 0 : 1, transition: "opacity 0.3s ease",
           }}
@@ -113,7 +135,10 @@ export default function ChatToastHost() {
                 ×
               </button>
             </div>
-            <div className="text-muted small text-truncate">{t.preview}</div>
+            <div className="text-muted small text-truncate">
+              {t.kind === "presence" && <i className="fas fa-desktop me-1" />}
+              {t.preview}
+            </div>
             {t.read && (
               <div style={{ color: "var(--color-success)", fontSize: 11, marginTop: 3 }}>
                 <i className="fas fa-check-double me-1" />อ่านแล้ว

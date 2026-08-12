@@ -48,6 +48,11 @@ export default function LiffRoomsPage() {
         await liff.init({ liffId });
         if (!liff.isLoggedIn()) { liff.login(); return; }
 
+        // หน้านี้สาธารณะ ไม่ต้องใช้ access token เรียก API อื่นเลย (ดู /liff/rooms ใน backend/src/routes/
+        // liff.ts) แต่ยังขอมาเฉพาะแจ้ง presence ให้พนักงานเห็นว่ามีคนกำลังดูห้องว่างอยู่ผ่าน web เท่านั้น
+        const presenceToken = liff.getAccessToken();
+        if (presenceToken) liffApi.notifyPresence(presenceToken, "rooms", org);
+
         const availableRooms = await liffApi.availableRooms(org);
         if (cancelled) return;
         setRooms(availableRooms);

@@ -48,6 +48,7 @@ export default function LiffLoginPage() {
         const token = liff.getAccessToken();
         if (!token) { setErrorMsg("ไม่พบ Access Token จาก LINE กรุณาลองใหม่อีกครั้ง"); setStatus("error"); return; }
         setAccessToken(token);
+        liffApi.notifyPresence(token, "login", org);
 
         const result = await liffApi.login(token, org);
         if (cancelled) return;

@@ -350,6 +350,11 @@ export const liffApi = {
   }),
   cancelBooking: (accessToken: string, bookingId: string, org?: string) =>
     api.post("/liff/rooms/cancel", { accessToken, bookingId }, { params: { org } }).then((r) => r.data as { ok: boolean }),
+  // แจ้งเตือนชั่วคราว (ไม่บันทึก DB) ว่ากำลังเปิดหน้า LIFF หน้านี้อยู่ — ให้พนักงานเห็นในหน้าแชทของเว็บว่า
+  // "กำลังใช้งานหน้า ... ผ่าน web" เรียกครั้งเดียวตอนได้ access token มา (ดู Liff*Page.tsx) ยิงแบบ fire-and-
+  // forget เสมอ ไม่ throw ไม่บล็อกการโหลดหน้า LIFF ด้วยเหตุผลรอง
+  notifyPresence: (accessToken: string, page: "login" | "rooms" | "booking" | "payment" | "profile" | "repair", org?: string) =>
+    api.post("/liff/presence", { accessToken, page }, { params: { org } }).then((r) => r.data as { ok: boolean }).catch(() => ({ ok: false })),
 };
 
 // ── หน้าควบคุมแพลตฟอร์ม (ดูรายชื่อองค์กรลูกค้าทั้งหมด/ระงับ/ลบองค์กร) — คนเดียว (คุณ) เท่านั้น ─────
