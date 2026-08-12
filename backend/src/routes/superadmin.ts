@@ -381,6 +381,21 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
       return { error: "กรุณากรอก LIFF Login URL" };
     }
 
+    // ต้องเช็ค scheme ให้ผ่านก่อนเรียก createGuestRichMenu เสมอ (แม้ LINE จะปฏิเสธ uri ที่ผิดรูปแบบตอนสร้าง
+    // เมนูใหม่อยู่แล้วก็ตาม) เพราะ createGuestRichMenu ลบเมนูเก่าทิ้งไปก่อนสร้างเมนูใหม่เสมอ (best-effort, ไม่
+    // rollback ได้) ถ้าปล่อยให้ค่าที่ผิดรูปแบบหลุดไปถึงขั้นตอนนั้น แล้ว LINE ปฏิเสธการสร้างเมนูใหม่ จะเหลือ
+    // สถานะ "ไม่มีเมนู default เลย" ค้างไว้ (เมนูเก่าถูกลบไปแล้ว เมนูใหม่ก็สร้างไม่สำเร็จ)
+    const isHttpUrl = (v: string) => /^https?:\/\//i.test(v);
+    if (!isHttpUrl(liffLoginUrl)) {
+      set.status = 400;
+      return { error: "LIFF Login URL ต้องขึ้นต้นด้วย http:// หรือ https://" };
+    }
+    const contactUrl = String(b.contactUrl ?? "").trim();
+    if (contactUrl && !isHttpUrl(contactUrl)) {
+      set.status = 400;
+      return { error: "Contact URL ต้องขึ้นต้นด้วย http:// หรือ https:// (หรือเว้นว่างไว้ให้เป็นปุ่มข้อความแทน)" };
+    }
+
     function decodeImage(base64: unknown, label: string): RichMenuImageInput {
       const str = String(base64 ?? "");
       if (!str) throw new Error(`กรุณาอัปโหลดรูปเมนู ${label}`);
@@ -402,7 +417,7 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     try {
       const result = await createGuestRichMenu(token, {
         liffLoginUrl,
-        contactUrl: String(b.contactUrl ?? "").trim(),
+        contactUrl,
       }, image, previousGuestId);
 
       console.log(`[superadmin] created ad-hoc guest rich menu — guest=${result.id}`);
