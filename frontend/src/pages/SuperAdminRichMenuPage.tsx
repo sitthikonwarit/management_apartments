@@ -1,9 +1,11 @@
 // หน้าสร้าง Rich Menu ให้ LINE OA "อิสระ" ใดๆ — ไม่ผูกกับองค์กรไหนในระบบเลย (ต่างจากหมวด LINE Rich Menu ใน
 // SettingsPage.tsx ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่ล็อกอินอยู่เสมอ) ใช้ตอนอยากทำ Rich Menu
-// ให้ LINE OA อื่นที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ (เช่น บัญชีทดลอง/ของทีมงานเอง) กรอก token + รูปแล้ว
-// กดสร้างได้เลยในหน้าเดียว ไม่มีการบันทึกค่าอะไรไว้ถาวรฝั่งเรา (โหลดหน้าใหม่ = กรอกใหม่หมด) — ตัดเหลือแค่
-// เมนู Guest เดียว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) เพราะเครื่องมือนี้ใช้สำหรับตั้งค่า Guest menu เริ่มต้นให้ LINE
-// OA ใหม่เป็นหลัก ไม่ได้ใช้สร้างเมนู Member/Admin แบบเต็มระบบ
+// ให้ LINE OA อื่นที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ (เช่น บัญชีทดลอง/ของทีมงานเอง) — Channel Access Token มา
+// จาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env ฝั่ง backend เท่านั้น (ดู routes/superadmin.ts) ไม่มีช่องกรอก
+// token ในหน้านี้ กัน token หลุดผ่าน network tab/log ฝั่งเว็บ กรอก URL + รูปแล้วกดสร้างได้เลย ไม่มีการบันทึก
+// ค่าอะไรไว้ถาวรฝั่งเรา (โหลดหน้าใหม่ = กรอกใหม่หมด) — ตัดเหลือแค่เมนู Guest เดียว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง)
+// เพราะเครื่องมือนี้ใช้สำหรับตั้งค่า Guest menu เริ่มต้นให้ LINE OA ใหม่เป็นหลัก ไม่ได้ใช้สร้างเมนู Member/
+// Admin แบบเต็มระบบ
 import { useRef, useState } from "react";
 import { superAdminApi } from "../api/client";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -11,8 +13,13 @@ import { toastSuccess, toastError } from "../utils/toast";
 const RICHMENU_WIDTH = 2500;
 const RICHMENU_HEIGHT = 1686;
 
+// ลิงก์เข้าสู่ระบบเจ้าของแบบไม่ผ่าน Username/Password — endpoint เดียวกับปุ่ม "เข้าสู่ระบบด้วย LINE" ในหน้า
+// Login ปกติ (ดู LoginPage.tsx) ใช้ LINE Login channel เดียวกันทั้งระบบ (LINE_LOGIN_CHANNEL_ID/SECRET ใน
+// .env — คนละอย่างกับ Channel Access Token ของ LINE OA ที่จะสร้างเมนูให้) จับคู่องค์กรอัตโนมัติจาก lineUserId
+// ที่ล็อกอิน ไม่ต้องระบุองค์กรล่วงหน้า (ล็อกอินครั้งแรกของบัญชี LINE ที่ไม่เคยผูกไว้ = สร้างองค์กรใหม่ให้เอง)
+const OWNER_LOGIN_LINK = `${window.location.origin}/api/auth/line/authorize`;
+
 export default function SuperAdminRichMenuPage() {
-  const [token, setToken] = useState("");
   const [liffLoginUrl, setLiffLoginUrl] = useState("");
   const [contactUrl, setContactUrl] = useState("");
 
@@ -25,7 +32,18 @@ export default function SuperAdminRichMenuPage() {
   const [resultMsg, setResultMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [menuId, setMenuId] = useState("");
 
+  const [copiedField, setCopiedField] = useState("");
+
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // คัดลอกค่าในช่องกรอกไปคลิปบอร์ด — แพทเทิร์นเดียวกับ copyLiffField ใน SettingsPage.tsx
+  function copyField(field: string, label: string, value: string) {
+    if (!value.trim()) return;
+    navigator.clipboard.writeText(value.trim());
+    setCopiedField(field);
+    setTimeout(() => setCopiedField((cur) => (cur === field ? "" : cur)), 1500);
+    toastSuccess(`คัดลอก ${label} แล้ว`);
+  }
 
   // ตรวจขนาดรูปให้ตรง 2500x1686 พิกเซลเป๊ะก่อน (LINE ปฏิเสธรูปที่ขนาดไม่ตรงตอนสร้างเมนู) — เก็บเป็น
   // dataURL ไว้ในหน่วยความจำเฉยๆ ไม่มีการอัปโหลดแยกขั้นตอนแบบ SettingsPage.tsx (ส่งไปพร้อมกันตอนกด "สร้าง")
@@ -54,7 +72,6 @@ export default function SuperAdminRichMenuPage() {
     setResultMsg(null);
     try {
       const result = await superAdminApi.createRichMenuSet({
-        token: token.trim(),
         liffLoginUrl: liffLoginUrl.trim(),
         contactUrl: contactUrl.trim(),
         image,
@@ -76,7 +93,7 @@ export default function SuperAdminRichMenuPage() {
     }
   }
 
-  const canCreate = !creating && token.trim() && liffLoginUrl.trim() && image;
+  const canCreate = !creating && liffLoginUrl.trim() && image;
 
   return (
     <div className="detail-section custom-card">
@@ -86,27 +103,56 @@ export default function SuperAdminRichMenuPage() {
 
       <div className="p-3">
         <p className="text-muted small mb-3">
-          เครื่องมือนี้ไม่ผูกกับองค์กรไหนในระบบเลย — ใช้สร้างเมนู Guest ให้ LINE Official Account ใดก็ได้ที่
-          คุณมี Channel Access Token (เช่น บัญชีทดลอง/ของทีมงานเอง) ค่าที่กรอกในหน้านี้ไม่ถูกบันทึกไว้ที่ไหน —
-          ปิดหรือรีเฟรชหน้าแล้วต้องกรอกใหม่ทั้งหมด
+          เครื่องมือนี้สร้างเมนู Guest ให้ LINE Official Account ที่ตั้งค่า SUPERADMIN_RICHMENU_LINE_TOKEN
+          ไว้ใน .env ของ backend แล้ว (เช่น บัญชีทดลอง/ของทีมงานเอง — เป็นคนละ LINE OA กับที่ล็อกอินอยู่)
+          ปุ่มใหญ่บน ("เข้าเว็บหลัก") พาเจ้าของหอพักเข้าสู่ระบบด้วยบัญชี LINE ของตัวเองทันที ไม่ต้องกรอก
+          Username/Password ค่าที่กรอกในหน้านี้ไม่ถูกบันทึกไว้ที่ไหน — ปิดหรือรีเฟรชหน้าแล้วต้องกรอกใหม่ทั้งหมด
         </p>
 
-        <div className="mb-3">
-          <label className="form-label small fw-bold">LINE Channel Access Token</label>
-          <input type="password" className="form-control" placeholder="วาง Channel Access Token ของ LINE OA เป้าหมาย"
-            value={token} onChange={(e) => setToken(e.target.value)} />
+        <div className="detail-section mb-3" style={{ background: "var(--color-background)", border: "1px solid var(--color-light)" }}>
+          <label className="form-label small fw-bold mb-2">
+            <i className="fas fa-link me-1" />ลิงก์เข้าสู่ระบบเจ้าของ (ไม่ผ่าน Username/Password)
+          </label>
+          <div className="input-group input-group-sm">
+            <input type="text" className="form-control" readOnly value={OWNER_LOGIN_LINK} />
+            <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+              onClick={() => copyField("ownerLogin", "ลิงก์เข้าสู่ระบบเจ้าของ", OWNER_LOGIN_LINK)}>
+              <i className={`fas ${copiedField === "ownerLogin" ? "fa-check" : "fa-copy"}`} />
+            </button>
+            <button type="button" className="btn btn-outline-primary" onClick={() => setLiffLoginUrl(OWNER_LOGIN_LINK)}>
+              ใช้ลิงก์นี้
+            </button>
+          </div>
+          <div className="form-text small mt-2">
+            กด "ใช้ลิงก์นี้" เพื่อใส่ในช่อง LIFF Login URL ด้านล่างอัตโนมัติ — เมื่อเจ้าของหอพักกดปุ่มใหญ่บนเมนู
+            Guest จะพาเข้าสู่ระบบผ่านบัญชี LINE ของตัวเองทันที ระบบจับคู่องค์กรให้อัตโนมัติจากบัญชี LINE ที่ใช้
+            ล็อกอิน (ล็อกอินครั้งแรกของบัญชี LINE ที่ไม่เคยผูกไว้เลย = สร้างองค์กรใหม่ให้อัตโนมัติ) ไม่ต้องสร้าง
+            LIFF app หรือระบุองค์กรล่วงหน้า
+          </div>
         </div>
 
         <div className="row g-3 mb-3">
           <div className="col-md-6">
             <label className="form-label small fw-bold">LIFF Login URL <span className="text-muted fw-normal">(ปุ่มใหญ่บน — เข้าเว็บหลัก management ด้วย LINE Login)</span></label>
-            <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
-              value={liffLoginUrl} onChange={(e) => setLiffLoginUrl(e.target.value)} />
+            <div className="input-group">
+              <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                value={liffLoginUrl} onChange={(e) => setLiffLoginUrl(e.target.value)} />
+              <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                disabled={!liffLoginUrl.trim()} onClick={() => copyField("login", "LIFF Login URL", liffLoginUrl)}>
+                <i className={`fas ${copiedField === "login" ? "fa-check" : "fa-copy"}`} />
+              </button>
+            </div>
           </div>
           <div className="col-md-6">
             <label className="form-label small fw-bold">Contact URL <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ")</span></label>
-            <input type="text" className="form-control" placeholder="https://... หรือเว้นว่างไว้"
-              value={contactUrl} onChange={(e) => setContactUrl(e.target.value)} />
+            <div className="input-group">
+              <input type="text" className="form-control" placeholder="https://... หรือเว้นว่างไว้"
+                value={contactUrl} onChange={(e) => setContactUrl(e.target.value)} />
+              <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                disabled={!contactUrl.trim()} onClick={() => copyField("contact", "Contact URL", contactUrl)}>
+                <i className={`fas ${copiedField === "contact" ? "fa-check" : "fa-copy"}`} />
+              </button>
+            </div>
           </div>
           <div className="col-12">
             <div className="form-text small">
@@ -144,7 +190,13 @@ export default function SuperAdminRichMenuPage() {
           <label className="form-label small fw-bold mb-2">
             <i className="fas fa-recycle me-1" />ID เมนู Guest เดิมที่จะแทนที่ <span className="text-muted fw-normal">(ไม่บังคับ — กรอกถ้าเคยสร้างเมนูนี้ไว้แล้วและอยากลบของเดิมทิ้งก่อน)</span>
           </label>
-          <input className="form-control form-control-sm" placeholder="Guest richMenuId เดิม" value={prevGuestId} onChange={(e) => setPrevGuestId(e.target.value)} />
+          <div className="input-group input-group-sm">
+            <input className="form-control" placeholder="Guest richMenuId เดิม" value={prevGuestId} onChange={(e) => setPrevGuestId(e.target.value)} />
+            <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+              disabled={!prevGuestId.trim()} onClick={() => copyField("prevGuest", "Guest richMenuId เดิม", prevGuestId)}>
+              <i className={`fas ${copiedField === "prevGuest" ? "fa-check" : "fa-copy"}`} />
+            </button>
+          </div>
         </div>
 
         {resultMsg && (
@@ -160,8 +212,15 @@ export default function SuperAdminRichMenuPage() {
         </button>
 
         {menuId && (
-          <div className="mt-3 small text-muted">
-            <div><i className="fas fa-check-circle text-success me-1" />Guest ID: <code>{menuId}</code></div>
+          <div className="mt-3">
+            <label className="form-label small text-muted mb-1"><i className="fas fa-check-circle text-success me-1" />Guest ID</label>
+            <div className="input-group input-group-sm">
+              <input type="text" className="form-control" readOnly value={menuId} />
+              <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                onClick={() => copyField("menuId", "Guest ID", menuId)}>
+                <i className={`fas ${copiedField === "menuId" ? "fa-check" : "fa-copy"}`} />
+              </button>
+            </div>
           </div>
         )}
       </div>

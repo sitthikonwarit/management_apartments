@@ -444,9 +444,9 @@ export const superAdminApi = {
   resetOwnerPassword: (id: string) =>
     superAdminHttp.post(`/superadmin/organizations/${id}/reset-password`).then((r) => r.data as { username: string; password: string }),
   // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — ส่ง
-  // token/URL/รูปมาในคำขอเดียวจบ (ไม่มีที่เก็บถาวรฝั่ง backend ดู routes/superadmin.ts)
+  // URL/รูปมาในคำขอเดียวจบ ส่วน Channel Access Token อ่านจาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env ฝั่ง
+  // backend เอง ไม่รับจาก client (ไม่มีที่เก็บถาวรฝั่ง backend นอกจากนั้น ดู routes/superadmin.ts)
   createRichMenuSet: (data: {
-    token: string;
     liffLoginUrl: string;
     contactUrl?: string;
     image: string;

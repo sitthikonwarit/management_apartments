@@ -366,14 +366,15 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
   // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA "อิสระ" ใดๆ ก็ได้ ไม่ผูกกับองค์กรในระบบเลย
   // (ต่างจาก POST /richmenu/create ใน routes/settings.ts ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่
   // ล็อกอินอยู่เสมอ และยังสร้างครบ 3 เมนู Guest/Member/Admin) ใช้ตอนอยากทำ Rich Menu ให้ LINE OA อื่น เช่น
-  // บัญชีทดลอง/ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ รับ token + รูปมาในคำขอเดียวจบเลย ไม่มีที่เก็บ
-  // ถาวรฝั่งเรา (เก็บแค่ระหว่างเรียก LINE API เท่านั้น) ไฟล์รูปเลยไม่ต้องเขียนลงดิสก์เหมือนของ routes/settings.ts
-  // — ถอด base64 เป็น Buffer ในหน่วยความจำตรงๆ
+  // บัญชีทดลอง/ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ Channel Access Token มาจาก
+  // SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env เท่านั้น (ไม่รับจาก request body — กันไม่ให้ token หลุดผ่าน log/
+  // network tab ของฝั่งเว็บ) ไม่มีที่เก็บถาวรฝั่งเรานอกจากนั้น (เก็บแค่ระหว่างเรียก LINE API เท่านั้น) ไฟล์รูปเลย
+  // ไม่ต้องเขียนลงดิสก์เหมือนของ routes/settings.ts — ถอด base64 เป็น Buffer ในหน่วยความจำตรงๆ
   .post("/richmenu/create", async ({ body, set }) => {
-    const b = body as any;
-    const token = String(b.token ?? "").trim();
-    if (!token) { set.status = 400; return { error: "กรุณากรอก LINE Channel Access Token" }; }
+    const token = process.env.SUPERADMIN_RICHMENU_LINE_TOKEN || "";
+    if (!token) { set.status = 503; return { error: "ยังไม่ได้ตั้งค่า SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env" }; }
 
+    const b = body as any;
     const liffLoginUrl = String(b.liffLoginUrl ?? "").trim();
     if (!liffLoginUrl) {
       set.status = 400;
