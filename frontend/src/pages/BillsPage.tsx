@@ -2896,37 +2896,37 @@ export default function BillsPage() {
           </div>
 
           <div className="row g-2 mb-2">
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(108,155,207,0.14)", color: "var(--color-primary)" }}><i className="fas fa-home" /></div>
                 <div className="bill-stat-body"><div className="val text-primary">{money(stats.totalRent)}</div><div className="lbl">ค่าเช่า</div></div>
               </div>
             </div>
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(13,202,240,0.14)", color: "#0dcaf0" }}><i className="fas fa-tint" /></div>
                 <div className="bill-stat-body"><div className="val" style={{ color: "#0dcaf0" }}>{money(stats.totalWater)}</div><div className="lbl">ค่าน้ำ ({stats.waterUnits.toLocaleString()} น.)</div></div>
               </div>
             </div>
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(253,126,20,0.14)", color: "#fd7e14" }}><i className="fas fa-bolt" /></div>
                 <div className="bill-stat-body"><div className="val" style={{ color: "#fd7e14" }}>{money(stats.totalElectric)}</div><div className="lbl">ค่าไฟ ({stats.electricUnits.toLocaleString()} น.)</div></div>
               </div>
             </div>
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(111,66,193,0.14)", color: "var(--color-import)" }}><i className="fas fa-receipt" /></div>
                 <div className="bill-stat-body"><div className="val" style={{ color: "var(--color-import)" }}>{money(stats.totalOther)}</div><div className="lbl">อื่นๆ</div></div>
               </div>
             </div>
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(220,53,69,0.14)", color: "#dc3545" }}><i className="fas fa-exclamation-circle" /></div>
                 <div className="bill-stat-body"><div className="val" style={{ color: "#dc3545" }}>{money(stats.totalFine)}</div><div className="lbl">ค่าปรับ</div></div>
               </div>
             </div>
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile bill-stat-tile-icon">
                 <div className="bill-stat-icon" style={{ background: "rgba(232,62,140,0.14)", color: "#e83e8c" }}><i className="fas fa-history" /></div>
                 <div className="bill-stat-body"><div className="val" style={{ color: "#e83e8c" }}>{money(stats.totalOutstandingCarried)}</div><div className="lbl">ค้างชำระยกมา</div></div>
@@ -2956,30 +2956,35 @@ export default function BillsPage() {
           )}
 
           <div className="row g-2 mb-2">
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-md-4">
               <div className="bill-stat-tile">
                 <div className="val" style={{ color: "var(--color-dark-variant)" }}><i className="fas fa-lock me-1" style={{ fontSize: 12 }} />{money(stats.totalFixed)}</div>
                 <div className="lbl">ยอดเรียกเก็บทั้งหมด (คงที่)</div>
               </div>
             </div>
-            <div className="col-6 col-md-2"><div className="bill-stat-tile"><div className="val text-primary">{money(stats.totalExpected)}</div><div className="lbl">คาดการณ์รายรับ</div></div></div>
-            <div className="col-6 col-md-2"><div className="bill-stat-tile"><div className="val text-success">{money(stats.receivedThisMonth)}</div><div className="lbl">รับแล้วเดือนนี้ ({stats.collectRate.toFixed(0)}%)</div></div></div>
-            <div className="col-6 col-md-2">
-              <div className="bill-stat-tile">
-                <div className="val" style={{ color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)}</div>
-                <div className="lbl">รับแล้ว (เดือนเก่าที่ปิดในเดือนนี้)</div>
+            <div className="col-6 col-md-4"><div className="bill-stat-tile"><div className="val text-primary">{money(stats.totalExpected)}</div><div className="lbl">คาดการณ์รายรับ</div></div></div>
+            <div className="col-6 col-md-4"><div className="bill-stat-tile"><div className="val text-danger">{money(stats.totalMissing)}</div><div className="lbl">ขาดอีก</div></div></div>
+          </div>
+          <div className="bill-progress mb-2">
+            <div className="bill-progress-bar" style={{ width: `${Math.min(stats.collectRate, 100)}%` }} />
+          </div>
+
+          <div className="bill-received-panel mb-3">
+            <div className="bill-received-panel-title"><i className="fas fa-hand-holding-usd me-2" />เงินที่ได้รับแล้ว</div>
+            <div className="bill-received-panel-grid">
+              <div className="bill-received-item">
+                <div className="val text-success">{money(stats.receivedThisMonth)}</div>
+                <div className="lbl">รับแล้วเดือนนี้ ({stats.collectRate.toFixed(0)}%)</div>
               </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div className="bill-stat-tile" style={{ background: "rgba(25,135,84,0.08)" }}>
+              <div className="bill-received-item">
+                <div className="val" style={{ color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)}</div>
+                <div className="lbl">เดือนเก่าที่ปิดในเดือนนี้</div>
+              </div>
+              <div className="bill-received-item bill-received-item-net">
                 <div className="val fw-bold" style={{ color: "#198754" }}>{money(stats.netReceived)}</div>
                 <div className="lbl">ยอดรับแล้วสุทธิ</div>
               </div>
             </div>
-            <div className="col-6 col-md-2"><div className="bill-stat-tile"><div className="val text-danger">{money(stats.totalMissing)}</div><div className="lbl">ขาดอีก</div></div></div>
-          </div>
-          <div className="bill-progress mb-3">
-            <div className="bill-progress-bar" style={{ width: `${Math.min(stats.collectRate, 100)}%` }} />
           </div>
 
           <div className="row g-2 mb-3 align-items-center">
