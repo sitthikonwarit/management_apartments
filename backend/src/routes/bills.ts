@@ -92,6 +92,18 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
         change: Number(b.change) || 0,
         note: String(b.note ?? ""),
         slipUrl,
+        // เดือนที่ยกมาปิดยอดพร้อมกัน (ถ้ามี) — เก็บ id ของรายการชำระของแต่ละเดือนเก่าที่ถูกปิดไปพร้อมกับ
+        // รายการนี้ไว้ ให้ยกเลิกรายการนี้แล้วย้อนยอดเดือนเก่ากลับเป็นค้างชำระเหมือนเดิมได้ด้วย (ดู
+        // PATCH /bills/payments/:id/cancel และ handleCancelPayment ใน BillsPage.tsx)
+        linkedOldMonthPayments: Array.isArray(b.linkedOldMonthPayments)
+          ? b.linkedOldMonthPayments.map((l: any) => ({
+              id: String(l?.id ?? ""), monthYear: String(l?.monthYear ?? ""), amount: Number(l?.amount) || 0,
+            }))
+          : [],
+        // ตรงข้ามกับด้านบน — รายการชำระของเดือนเก่าที่ถูกปิดยอดไปพร้อมกับการชำระของเดือนอื่น (เก็บไว้แค่
+        // แสดงผล "ชำระจากเดือน ..." ในประวัติ ไม่ได้ใช้ผูก logic ยกเลิกย้อนกลับ เพราะฝั่งนั้นยกเลิกจาก
+        // รายการเดือนที่ปิดยอด (ตัวพาเรนต์) แทน)
+        settledViaMonthYear: String(b.settledViaMonthYear ?? ""),
       }),
       operator: String(b.operator ?? ""),
       action: "pay",

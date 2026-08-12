@@ -255,6 +255,8 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
       <div className="payment-history-list nicescrollbar">
         {history.map((p, i) => {
           const cancelled = !!p.data?.cancelled;
+          const linkedOld: { id: string; monthYear: string; amount: number }[] = Array.isArray(p.data?.linkedOldMonthPayments) ? p.data.linkedOldMonthPayments : [];
+          const settledVia: string = p.data?.settledViaMonthYear || "";
           return (
             <div key={p.id} className={`payment-history-item${cancelled ? " cancelled" : ""}`}>
               <div className="phi-top">
@@ -281,6 +283,16 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
                   </button>
                 )}
               </div>
+              {settledVia && (
+                <div className="text-muted" style={{ fontSize: 11 }}>
+                  <i className="fas fa-link me-1" />ชำระจากเดือน {monthYearLabel(settledVia)}
+                </div>
+              )}
+              {linkedOld.length > 0 && (
+                <div className="text-muted" style={{ fontSize: 11 }}>
+                  <i className="fas fa-link me-1" />ปิดยอดของเดือน {linkedOld.map((l) => monthYearLabel(l.monthYear)).join(", ")} ไปด้วย
+                </div>
+              )}
               {cancelled && (
                 <div className="phi-cancel-note">
                   <i className="fas fa-comment-dots me-1" />
@@ -2508,6 +2520,50 @@ export default function BillsPage() {
     const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent;
     const fullySettled = newPaidAmount >= draft.total - 0.005; // เผื่อ floating point
 
+    // ปิดยอดค้างชำระเดือนก่อนที่เลือกไว้ (ถ้ามี) — ตั้งสถานะบิลต้นทางเดือนนั้นเป็น "จ่ายแล้ว" ไปพร้อมกันเลย
+    // ไม่งั้นยอดค้างนี้จะถูกคำนวณย้อนกลับมารวมในบิลเดือนถัดๆ ไปอีก ทั้งที่จริงถูกเก็บไปแล้วในยอดนี้ — สร้างรายการ
+    // "ประวัติการชำระ" ของบิลเดือนนั้นเองด้วย (ไม่งั้นเปิดไปดูบิลเดือนเก่าจะไม่เห็นว่าใครจ่าย/จ่ายเมื่อไหร่ ทั้งที่
+    // จริงๆ ปิดยอดไปแล้ว) ทำก่อนสร้างรายการชำระของเดือนนี้ เพื่อเอา id ของแต่ละรายการมาผูก (linkedOldMonthPayments)
+    // กับรายการชำระของเดือนนี้ — ยกเลิกรายการของเดือนนี้แล้วจะย้อนยอดที่ปิดไปของเดือนเก่ากลับมาค้างชำระเหมือนเดิม
+    // ได้ด้วย (ดู handleCancelPayment)
+    const linkedOldMonthPayments: { id: string; monthYear: string; amount: number }[] = [];
+    if (payload.settleOutstandingMonths.length > 0) {
+      const closures = closeOutstandingBills(
+        bills, target.roomId, target.tenantId, target.tenantName,
+        payload.settleOutstandingMonths, payload.settleOutstandingAdjustments
+      );
+      for (const { group, data } of closures) {
+        if (!group.id) continue;
+        const closedRoom = data.find((r) => r.roomId === target.roomId);
+        const outstandingRow = target.outstandingItems.find((o) => o.monthYear === group.monthYear);
+        const closedAmount = outstandingRow ? adjustedOutstandingAmount(outstandingRow, payload.settleOutstandingAdjustments) : 0;
+        if (closedAmount > 0) {
+          const oldPaymentRow = await billsApi.createPayment({
+            billId: group.id,
+            roomId: target.roomId,
+            roomNumber: target.roomNumber,
+            tenantId: target.tenantId,
+            tenantName: target.tenantName,
+            monthYear: group.monthYear,
+            method: payload.method,
+            amount: closedAmount,
+            received: closedAmount,
+            change: 0,
+            note: `ปิดยอดพร้อมกับชำระเดือน ${monthYearLabel(editingMonthYear)}`,
+            paymentDate: payload.paymentDate,
+            billTotal: closedRoom?.total ?? closedAmount,
+            paidTotal: closedRoom?.paidAmount ?? closedAmount,
+            settledViaMonthYear: editingMonthYear,
+            sendReceipt: false,
+          });
+          linkedOldMonthPayments.push({ id: oldPaymentRow.id, monthYear: group.monthYear, amount: closedAmount });
+          setPayments((prev) => [...prev, oldPaymentRow]);
+        }
+        const closedSaved = await billsApi.update(group.id, data, group.scheduledDate ?? "");
+        setBills((prev) => prev.map((b) => (b.id === group.id ? closedSaved : b)));
+      }
+    }
+
     const paymentRow = await billsApi.createPayment({
       billId: editingId ?? "",
       roomId: target.roomId,
@@ -2524,6 +2580,7 @@ export default function BillsPage() {
       slipImage: payload.slipImage,
       billTotal: draft.total,
       paidTotal: newPaidAmount,
+      linkedOldMonthPayments,
       sendReceipt: payload.sendReceipt,
     });
     setPayments((prev) => [...prev, paymentRow]);
@@ -2540,20 +2597,6 @@ export default function BillsPage() {
     if (!editingId) setEditingId(saved.id);
     setBills((prev) => (editingId ? prev.map((b) => (b.id === editingId ? saved : b)) : [...prev, saved]));
 
-    // ปิดยอดค้างชำระเดือนก่อนที่เลือกไว้ (ถ้ามี) — ตั้งสถานะบิลต้นทางเดือนนั้นเป็น "จ่ายแล้ว" ไปพร้อมกันเลย
-    // ไม่งั้นยอดค้างนี้จะถูกคำนวณย้อนกลับมารวมในบิลเดือนถัดๆ ไปอีก ทั้งที่จริงถูกเก็บไปแล้วในยอดนี้
-    if (payload.settleOutstandingMonths.length > 0) {
-      const closures = closeOutstandingBills(
-        bills, target.roomId, target.tenantId, target.tenantName,
-        payload.settleOutstandingMonths, payload.settleOutstandingAdjustments
-      );
-      for (const { group, data } of closures) {
-        if (!group.id) continue;
-        const closedSaved = await billsApi.update(group.id, data, group.scheduledDate ?? "");
-        setBills((prev) => prev.map((b) => (b.id === group.id ? closedSaved : b)));
-      }
-    }
-
     setDirty(false);
     setPayingIndex(null);
   }
@@ -2563,20 +2606,21 @@ export default function BillsPage() {
   // (soft-cancel — ไม่ลบทิ้งจริง เพื่อให้ยังเห็นในประวัติเป็นหลักฐานได้)
   async function handleCancelPayment(payment: any, reason: string) {
     if (payment?.data?.cancelled) return; // กันยกเลิกซ้ำ
-    const roomId = payment?.data?.roomId;
-    const monthYear = payment?.data?.monthYear;
-    const applied = Number(payment?.data?.amount) || 0;
 
-    if (monthYear === editingMonthYear) {
-      const idx = billData.findIndex((it) => it.roomId === roomId);
-      if (idx !== -1) {
-        const target = billData[idx];
-        const draft = JSON.parse(JSON.stringify(target)) as BillItem;
-        draft.paidAmount = Math.max(0, (draft.paidAmount || 0) - applied);
+    // ย้อน paidAmount ของบิลห้อง/เดือนหนึ่งลงตามจำนวนที่ยกเลิก แล้วบันทึก — เดือนที่กำลังเปิดดูอยู่แก้ผ่าน
+    // billData/setBillData ให้เห็นผลทันทีไม่ต้องปิดเปิดหน้าใหม่ ส่วนเดือนอื่น (เช่นเดือนเก่าที่เคยถูกปิดยอดไปพร้อม
+    // กับรายการนี้ — ดู linkedOldMonthPayments ด้านล่าง) แก้ผ่าน bills state ตรงๆ ไม่ผ่าน recalcItem เพราะเป็นบิล
+    // ที่ปิดไปแล้ว ต้องคงค่าปรับ/ส่วนลด/สูตรเดิมไว้ ไม่คำนวณใหม่ด้วยบริบท (config/เดือน) ปัจจุบัน
+    async function revertBillAmount(targetMonthYear: string, roomId: string, amount: number) {
+      if (!roomId || amount <= 0) return;
+      if (targetMonthYear === editingMonthYear) {
+        const idx = billData.findIndex((it) => it.roomId === roomId);
+        if (idx === -1) return;
+        const draft = JSON.parse(JSON.stringify(billData[idx])) as BillItem;
+        draft.paidAmount = Math.max(0, (draft.paidAmount || 0) - amount);
         draft.status = draft.paidAmount >= draft.total - 0.005 ? "paid" : "unpaid";
         recalcItem(draft, config, defaults, editingMonthYear);
         const nextBillData = billData.map((it, i) => (i === idx ? draft : it));
-
         const saved = editingId
           ? await billsApi.update(editingId, nextBillData, editingScheduledDate)
           : await billsApi.create(editingMonthYear, nextBillData, editingScheduledDate);
@@ -2584,6 +2628,37 @@ export default function BillsPage() {
         if (!editingId) setEditingId(saved.id);
         setBills((prev) => (editingId ? prev.map((b) => (b.id === editingId ? saved : b)) : [...prev, saved]));
         setDirty(false);
+      } else {
+        const group = bills.find((b) => b.monthYear === targetMonthYear);
+        if (!group || !group.id) return;
+        const data = (group.data ?? []).map(normalizeBillItem);
+        const idx = data.findIndex((r) => r.roomId === roomId);
+        if (idx === -1) return;
+        const draft = JSON.parse(JSON.stringify(data[idx])) as BillItem;
+        draft.paidAmount = Math.max(0, (draft.paidAmount || 0) - amount);
+        draft.status = draft.paidAmount >= draft.total - 0.005 ? "paid" : "unpaid";
+        const nextData = data.map((r, i) => (i === idx ? draft : r));
+        const closedSaved = await billsApi.update(group.id, nextData, group.scheduledDate ?? "");
+        setBills((prev) => prev.map((b) => (b.id === group.id ? closedSaved : b)));
+      }
+    }
+
+    const roomId = payment?.data?.roomId;
+    const monthYear = payment?.data?.monthYear;
+    const applied = Number(payment?.data?.amount) || 0;
+    await revertBillAmount(monthYear, roomId, applied);
+
+    // รายการนี้เคยปิดยอดค้างของเดือนอื่นไปพร้อมกันตอนบันทึกด้วยไหม (linkedOldMonthPayments — ดู
+    // handleConfirmPayment) ถ้ามี ต้องย้อนยอดของเดือนเหล่านั้นกลับมาค้างชำระเหมือนเดิม พร้อมยกเลิกรายการชำระ
+    // ของเดือนนั้นๆ ไปด้วย ไม่งั้นเดือนเก่าจะค้างเป็น "จ่ายแล้ว" ตลอดไปทั้งที่เงินก้อนที่จ่ายจริงถูกยกเลิกไปแล้ว
+    const linked: { id: string; monthYear: string; amount: number }[] = Array.isArray(payment?.data?.linkedOldMonthPayments)
+      ? payment.data.linkedOldMonthPayments
+      : [];
+    for (const l of linked) {
+      await revertBillAmount(l.monthYear, roomId, l.amount);
+      if (l.id) {
+        const updated = await billsApi.cancelPayment(l.id, reason || `ยกเลิกอัตโนมัติตามรายการชำระของ${monthYearLabel(monthYear)}`);
+        setPayments((prev) => prev.map((p) => (p.id === l.id ? updated : p)));
       }
     }
 
