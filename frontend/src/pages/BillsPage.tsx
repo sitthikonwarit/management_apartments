@@ -2133,6 +2133,10 @@ export default function BillsPage() {
   const [printConfigNonce, setPrintConfigNonce] = useState(0);
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<BillGroup | null>(null);
   const [deletingGroup, setDeletingGroup] = useState(false);
+  // ลบ "ประวัติการชำระที่ผ่านมา" ของบิลเดือนนี้ไปด้วยไหม — เลือกได้อิสระตอนกดลบบิล (ค่าเริ่มต้นไม่ลบ เผื่อ
+  // ต้องเก็บไว้เป็นหลักฐานทางการเงิน) ไม่งั้นลบเฉพาะตัวบิลแล้วประวัติเดิมจะยังค้างอยู่ (จับคู่แสดงผลได้ต่อเพราะ
+  // getPaymentHistory จับคู่ด้วย roomId+monthYear ที่ฝังอยู่ใน data เอง ไม่ได้อิง billId ที่ถูกลบไปแล้ว)
+  const [deletePaymentHistory, setDeletePaymentHistory] = useState(false);
   const [confirmBack, setConfirmBack] = useState(false);
 
   // ลงทะเบียน/ยกเลิกกับตัวดักการออกจากหน้าที่แก้ไขค้าง (unsavedGuard) ทุกครั้งที่ dirty เปลี่ยน — ใช้ให้
@@ -2455,9 +2459,13 @@ export default function BillsPage() {
     if (!confirmDeleteGroup) return;
     setDeletingGroup(true);
     try {
-      if (confirmDeleteGroup.id) await billsApi.delete(confirmDeleteGroup.id);
+      if (confirmDeleteGroup.id) await billsApi.delete(confirmDeleteGroup.id, deletePaymentHistory);
       setBills((prev) => prev.filter((b) => b.id !== confirmDeleteGroup.id));
+      if (deletePaymentHistory) {
+        setPayments((prev) => prev.filter((p) => p.billId !== confirmDeleteGroup.id));
+      }
       setConfirmDeleteGroup(null);
+      setDeletePaymentHistory(false);
       if (editingId === confirmDeleteGroup.id) backToList();
       toastSuccess("ลบบิลสำเร็จ");
     } finally {
@@ -3198,7 +3206,7 @@ export default function BillsPage() {
       )}
 
       {confirmDeleteGroup && (
-        <div className="confirm-overlay" onClick={() => !deletingGroup && setConfirmDeleteGroup(null)}>
+        <div className="confirm-overlay" onClick={() => { if (!deletingGroup) { setConfirmDeleteGroup(null); setDeletePaymentHistory(false); } }}>
           <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="confirm-icon confirm-icon--danger"><i className="fas fa-trash-alt" /></div>
             <h6 className="confirm-title">ยืนยันการลบบิล?</h6>
@@ -3206,8 +3214,16 @@ export default function BillsPage() {
               ลบบิลเดือน <strong>{monthYearLabel(confirmDeleteGroup.monthYear)}</strong> ทั้งหมด ({confirmDeleteGroup.data.length} ห้อง) ใช่หรือไม่?
               <br /><small className="text-danger">คำเตือน: ข้อมูลจะถูกลบถาวร ไม่สามารถกู้คืนได้</small>
             </p>
+            <label className="d-flex align-items-start gap-2 text-start mb-0" style={{ cursor: "pointer" }}>
+              <input className="form-check-input mt-1" type="checkbox" checked={deletePaymentHistory}
+                onChange={(e) => setDeletePaymentHistory(e.target.checked)} />
+              <span className="small">
+                ลบ "ประวัติการชำระที่ผ่านมา" ของบิลเดือนนี้ด้วย
+                <br /><span className="text-muted">ไม่ติ๊ก = ลบเฉพาะตัวบิล ประวัติการชำระเดิมยังอยู่เหมือนเดิม (ไปดูได้ในหน้าประวัติการชำระ)</span>
+              </span>
+            </label>
             <div className="confirm-actions">
-              <button className="btn btn-outline-secondary" onClick={() => setConfirmDeleteGroup(null)} disabled={deletingGroup}>ยกเลิก</button>
+              <button className="btn btn-outline-secondary" onClick={() => { setConfirmDeleteGroup(null); setDeletePaymentHistory(false); }} disabled={deletingGroup}>ยกเลิก</button>
               <button className="btn btn-danger" onClick={handleDeleteGroup} disabled={deletingGroup}>
                 {deletingGroup ? <><span className="spinner-border spinner-border-sm me-2" />กำลังลบ...</> : <><i className="fas fa-trash-alt me-1" />ใช่, ลบข้อมูล</>}
               </button>

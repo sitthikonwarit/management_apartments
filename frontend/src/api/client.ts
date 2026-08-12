@@ -118,7 +118,8 @@ export const billsApi = {
     api.post("/bills", { monthYear, data, scheduledDate }).then((r) => r.data),
   update: (id: string, data: any[], scheduledDate?: string) =>
     api.put(`/bills/${id}`, { data, scheduledDate }).then((r) => r.data),
-  delete: (id: string) => api.delete(`/bills/${id}`).then((r) => r.data),
+  delete: (id: string, deletePayments?: boolean) =>
+    api.delete(`/bills/${id}`, { params: deletePayments ? { deletePayments: "true" } : undefined }).then((r) => r.data),
   createPayment: (payload: {
     billId: string; roomId: string; roomNumber: string; tenantId: string | null; tenantName: string;
     monthYear: string; method: "cash" | "scan"; amount: number; received?: number; change?: number; note?: string;

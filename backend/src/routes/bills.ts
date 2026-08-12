@@ -184,9 +184,17 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
     const [row] = await db.select().from(bills).where(eq(bills.id, id));
     return parseBill(row);
   })
-  .delete("/:id", async ({ authUser, params, set }) => {
-    const [existing] = await db.select().from(bills).where(and(eq(bills.id, params.id), eq(bills.orgId, authUser!.orgId)));
+  // ลบบิลทั้งเดือน — ?deletePayments=true ให้ลบ "ประวัติการชำระ" (payments) ของบิลนี้ทิ้งไปด้วย (ไม่ผูกกัน
+  // อัตโนมัติทาง DB เพราะบางออฟฟิศต้องการเก็บประวัติการเงินไว้เป็นหลักฐาน แม้ลบบิลต้นทางไปแล้ว) ไม่ระบุ/false =
+  // ลบเฉพาะตัวบิล ประวัติการชำระเดิมยังอยู่ (ยังจับคู่แสดงผลได้ต่อ เพราะ getPaymentHistory จับคู่ด้วย
+  // roomId+monthYear ที่ฝังอยู่ใน payments.data เอง ไม่ได้อิง billId ที่ถูกลบไปแล้ว — ดู BillsPage.tsx)
+  .delete("/:id", async ({ authUser, params, query, set }) => {
+    const orgId = authUser!.orgId;
+    const [existing] = await db.select().from(bills).where(and(eq(bills.id, params.id), eq(bills.orgId, orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบบิล" }; }
+    if (String((query as any)?.deletePayments) === "true") {
+      await db.delete(payments).where(and(eq(payments.billId, params.id), eq(payments.orgId, orgId)));
+    }
     await db.delete(bills).where(eq(bills.id, params.id));
     return { deleted: params.id };
   })
