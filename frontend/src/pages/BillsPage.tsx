@@ -363,7 +363,9 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   const [note, setNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [slipImage, setSlipImage] = useState<{ base64: string; name: string } | null>(null);
-  const [sendReceipt, setSendReceipt] = useState(true);
+  // กดปุ่ม "ยืนยันการชำระ" แล้วถามก่อนว่าจะส่งใบเสร็จเข้า LINE ให้ผู้เช่าด้วยไหม (แทนที่จะเป็นสวิตช์ติ๊กไว้ล่วงหน้า
+  // ในฟอร์ม) — ป็อปอัพนี้เปิดขึ้นมาก่อน submit() จริงจะยังไม่ทำงานจนกว่าจะเลือกตัวเลือกใดตัวเลือกหนึ่ง
+  const [showReceiptChoice, setShowReceiptChoice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -461,7 +463,8 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
     reader.readAsDataURL(f);
   }
 
-  async function submit() {
+  async function submit(sendReceipt: boolean) {
+    setShowReceiptChoice(false);
     setSubmitting(true);
     setError("");
     try {
@@ -723,19 +726,11 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
             <label className="form-label small">หมายเหตุ (ถ้ามี)</label>
             <input className="form-control mb-3" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น จ่ายบางส่วน, โอนผิดบัญชี..." />
 
-            <div className="form-check form-switch mb-3">
-              <input className="form-check-input" type="checkbox" id="sendReceiptSwitch"
-                checked={sendReceipt} onChange={(e) => setSendReceipt(e.target.checked)} />
-              <label className="form-check-label small" htmlFor="sendReceiptSwitch">
-                <i className="fab fa-line me-1" style={{ color: "#06C755" }} />ส่งใบเสร็จเข้า LINE ให้ผู้เช่า
-              </label>
-            </div>
-
             {error && <div className="room-modal-error mb-3"><i className="fas fa-exclamation-circle me-2" />{error}</div>}
 
             <div className="confirm-actions">
               <button className="btn btn-outline-secondary" onClick={onClose} disabled={submitting}>ยกเลิก</button>
-              <button className="btn btn-success" onClick={submit} disabled={submitting || received <= 0}>
+              <button className="btn btn-success" onClick={() => setShowReceiptChoice(true)} disabled={submitting || received <= 0}>
                 {submitting
                   ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</>
                   : willFullySettle
@@ -746,6 +741,31 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
           </div>
         </div>
       </div>
+
+      {showReceiptChoice && (
+        <div className="confirm-overlay" style={{ zIndex: 1200 }}
+          onClick={(e) => { e.stopPropagation(); if (!submitting) setShowReceiptChoice(false); }}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon confirm-icon--primary"><i className="fab fa-line" /></div>
+            <h6 className="confirm-title">ส่งใบเสร็จเข้า LINE ให้ผู้เช่าด้วยไหม?</h6>
+            <p className="confirm-message">
+              บันทึกยอด {money(received)} ฿ — เลือกว่าจะส่งใบเสร็จรับเงินเข้าแชท LINE ของผู้เช่าไปด้วยหรือไม่
+            </p>
+            <div className="confirm-actions" style={{ flexWrap: "wrap" }}>
+              <button className="btn btn-outline-secondary" onClick={() => setShowReceiptChoice(false)} disabled={submitting}>
+                ยกเลิก
+              </button>
+              <button className="btn btn-outline-success" onClick={() => submit(false)} disabled={submitting}>
+                {submitting ? <span className="spinner-border spinner-border-sm" /> : <>ไม่ส่งใบเสร็จ</>}
+              </button>
+              <button className="btn btn-success" onClick={() => submit(true)} disabled={submitting}>
+                {submitting ? <span className="spinner-border spinner-border-sm me-2" /> : <i className="fab fa-line me-1" />}
+                ส่งพร้อมใบเสร็จ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
