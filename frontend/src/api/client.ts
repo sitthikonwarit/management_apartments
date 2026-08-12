@@ -443,13 +443,26 @@ export const superAdminApi = {
   // รีเซ็ตรหัสผ่านบัญชีเจ้าของ — คืนรหัสผ่านใหม่แบบ plaintext ครั้งเดียว (backend ไม่เก็บไว้ดูย้อนหลังได้อีก)
   resetOwnerPassword: (id: string) =>
     superAdminHttp.post(`/superadmin/organizations/${id}/reset-password`).then((r) => r.data as { username: string; password: string }),
-  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — ส่ง
-  // URL/รูปมาในคำขอเดียวจบ ส่วน Channel Access Token อ่านจาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env ฝั่ง
-  // backend เอง ไม่รับจาก client (ไม่มีที่เก็บถาวรฝั่ง backend นอกจากนั้น ดู routes/superadmin.ts)
+  // ค่าที่บันทึกไว้ล่าสุดของเครื่องมือสร้าง Rich Menu ให้ LINE OA อื่น (LIFF Login URL/Contact URL/รูป/
+  // Guest ID ล่าสุด) — บันทึกไว้ใน superadmin_richmenu_config ฝั่ง backend เหมือนหน้า Settings ปกติของ
+  // องค์กร (ดู routes/superadmin.ts) โหลดตอนเปิดหน้าเพื่อเติมค่าฟอร์มให้อัตโนมัติ
+  getRichMenuConfig: () =>
+    superAdminHttp.get("/superadmin/richmenu/config").then((r) => r.data as {
+      liffLoginUrl: string;
+      contactUrl: string;
+      image: string;
+      richMenuGuestId: string;
+    }),
+  // อัปโหลดรูปเมนู Guest — บันทึกไฟล์ลงดิสก์ฝั่ง backend ทันที (แพทเทิร์นเดียวกับ uploadRoomImage/รูปเมนูของ
+  // องค์กร) คืน URL ที่เซ็นลายเซ็นแล้วไว้แสดง preview
+  uploadRichMenuImage: (base64: string) =>
+    superAdminHttp.post("/superadmin/richmenu/image", { base64 }).then((r) => r.data as { url: string }),
+  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA อิสระใดๆ ไม่ผูกกับองค์กรในระบบ — อ่านรูปที่
+  // อัปโหลดไว้แล้ว (uploadRichMenuImage ด้านบน) จากดิสก์ฝั่ง backend เอง ไม่ต้องส่งรูปมาซ้ำในคำขอนี้ ส่วน
+  // Channel Access Token อ่านจาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env ฝั่ง backend เอง ไม่รับจาก client
   createRichMenuSet: (data: {
     liffLoginUrl: string;
     contactUrl?: string;
-    image: string;
     previousGuestId?: string;
   }) =>
     superAdminHttp.post("/superadmin/richmenu/create", data).then((r) => r.data as {

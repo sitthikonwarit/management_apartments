@@ -2,11 +2,12 @@
 // SettingsPage.tsx ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่ล็อกอินอยู่เสมอ) ใช้ตอนอยากทำ Rich Menu
 // ให้ LINE OA อื่นที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ (เช่น บัญชีทดลอง/ของทีมงานเอง) — Channel Access Token มา
 // จาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env ฝั่ง backend เท่านั้น (ดู routes/superadmin.ts) ไม่มีช่องกรอก
-// token ในหน้านี้ กัน token หลุดผ่าน network tab/log ฝั่งเว็บ กรอก URL + รูปแล้วกดสร้างได้เลย ไม่มีการบันทึก
-// ค่าอะไรไว้ถาวรฝั่งเรา (โหลดหน้าใหม่ = กรอกใหม่หมด) — ตัดเหลือแค่เมนู Guest เดียว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง)
-// เพราะเครื่องมือนี้ใช้สำหรับตั้งค่า Guest menu เริ่มต้นให้ LINE OA ใหม่เป็นหลัก ไม่ได้ใช้สร้างเมนู Member/
-// Admin แบบเต็มระบบ
-import { useRef, useState } from "react";
+// token ในหน้านี้ กัน token หลุดผ่าน network tab/log ฝั่งเว็บ ส่วนค่าอื่น (LIFF Login URL/Contact URL/รูป/
+// Guest ID ล่าสุด) บันทึกไว้ถาวรฝั่ง backend เหมือนหน้า Settings ปกติขององค์กร (superadmin_richmenu_config —
+// ดู routes/superadmin.ts) โหลดหน้าใหม่แล้วยังเห็นค่าที่กรอก/รูปที่อัปโหลดไว้ล่าสุดอยู่ ไม่ต้องกรอกซ้ำ — ตัด
+// เหลือแค่เมนู Guest เดียว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) เพราะเครื่องมือนี้ใช้สำหรับตั้งค่า Guest menu เริ่มต้น
+// ให้ LINE OA ใหม่เป็นหลัก ไม่ได้ใช้สร้างเมนู Member/Admin แบบเต็มระบบ
+import { useEffect, useRef, useState } from "react";
 import { superAdminApi } from "../api/client";
 import { toastSuccess, toastError } from "../utils/toast";
 
@@ -20,11 +21,13 @@ const RICHMENU_HEIGHT = 1686;
 const OWNER_LOGIN_LINK = `${window.location.origin}/api/auth/line/authorize`;
 
 export default function SuperAdminRichMenuPage() {
+  const [loaded, setLoaded] = useState(false);
   const [liffLoginUrl, setLiffLoginUrl] = useState("");
   const [contactUrl, setContactUrl] = useState("");
 
   const [image, setImage] = useState("");
   const [validating, setValidating] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [prevGuestId, setPrevGuestId] = useState("");
 
@@ -36,6 +39,20 @@ export default function SuperAdminRichMenuPage() {
 
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // โหลดค่าที่บันทึกไว้ล่าสุดตอนเปิดหน้า (LIFF Login URL/Contact URL/รูป/Guest ID ล่าสุด) — เติมช่อง "ID เมนู
+  // Guest เดิมที่จะแทนที่" อัตโนมัติด้วย Guest ID ล่าสุดที่เคยสร้างไว้ (ยังแก้ไข/ลบทิ้งได้ตามปกติ)
+  useEffect(() => {
+    superAdminApi.getRichMenuConfig()
+      .then((cfg) => {
+        setLiffLoginUrl(cfg.liffLoginUrl);
+        setContactUrl(cfg.contactUrl);
+        setImage(cfg.image);
+        setPrevGuestId(cfg.richMenuGuestId);
+      })
+      .catch(() => toastError("โหลดค่าที่บันทึกไว้ไม่สำเร็จ"))
+      .finally(() => setLoaded(true));
+  }, []);
+
   // คัดลอกค่าในช่องกรอกไปคลิปบอร์ด — แพทเทิร์นเดียวกับ copyLiffField ใน SettingsPage.tsx
   function copyField(field: string, label: string, value: string) {
     if (!value.trim()) return;
@@ -45,22 +62,32 @@ export default function SuperAdminRichMenuPage() {
     toastSuccess(`คัดลอก ${label} แล้ว`);
   }
 
-  // ตรวจขนาดรูปให้ตรง 2500x1686 พิกเซลเป๊ะก่อน (LINE ปฏิเสธรูปที่ขนาดไม่ตรงตอนสร้างเมนู) — เก็บเป็น
-  // dataURL ไว้ในหน่วยความจำเฉยๆ ไม่มีการอัปโหลดแยกขั้นตอนแบบ SettingsPage.tsx (ส่งไปพร้อมกันตอนกด "สร้าง")
+  // ตรวจขนาดรูปให้ตรง 2500x1686 พิกเซลเป๊ะก่อน (LINE ปฏิเสธรูปที่ขนาดไม่ตรงตอนสร้างเมนู) แล้วอัปโหลดขึ้น
+  // backend ทันที (แพทเทิร์นเดียวกับ POST /richmenu/image ของหน้า Settings ปกติ) — บันทึกไฟล์ถาวรไว้ ไม่ต้อง
+  // รอกด "สร้าง"
   function handleFile(file: File) {
     setValidating(true);
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         if (img.width !== RICHMENU_WIDTH || img.height !== RICHMENU_HEIGHT) {
           toastError(`รูปต้องมีขนาด ${RICHMENU_WIDTH}x${RICHMENU_HEIGHT} พิกเซลเป๊ะ (รูปนี้ ${img.width}x${img.height})`);
           setValidating(false);
           return;
         }
-        setImage(dataUrl);
         setValidating(false);
+        setUploading(true);
+        try {
+          const { url } = await superAdminApi.uploadRichMenuImage(dataUrl);
+          setImage(url);
+          toastSuccess("บันทึกรูปเมนูแล้ว");
+        } catch {
+          toastError("อัปโหลดรูปเมนูไม่สำเร็จ");
+        } finally {
+          setUploading(false);
+        }
       };
       img.src = dataUrl;
     };
@@ -74,10 +101,10 @@ export default function SuperAdminRichMenuPage() {
       const result = await superAdminApi.createRichMenuSet({
         liffLoginUrl: liffLoginUrl.trim(),
         contactUrl: contactUrl.trim(),
-        image,
         previousGuestId: prevGuestId.trim(),
       });
       setMenuId(result.menuId);
+      setPrevGuestId(result.menuId);
       if (result.defaultSet) {
         setResultMsg({ type: "success", text: "สร้างเมนู Guest สำเร็จ และตั้งเป็นค่าเริ่มต้นของผู้ใช้ทุกคนแล้ว" });
         toastSuccess("สร้าง Rich Menu สำเร็จ");
@@ -93,7 +120,7 @@ export default function SuperAdminRichMenuPage() {
     }
   }
 
-  const canCreate = !creating && liffLoginUrl.trim() && image;
+  const canCreate = loaded && !creating && !uploading && liffLoginUrl.trim() && image;
 
   return (
     <div className="detail-section custom-card">
@@ -106,7 +133,8 @@ export default function SuperAdminRichMenuPage() {
           เครื่องมือนี้สร้างเมนู Guest ให้ LINE Official Account ที่ตั้งค่า SUPERADMIN_RICHMENU_LINE_TOKEN
           ไว้ใน .env ของ backend แล้ว (เช่น บัญชีทดลอง/ของทีมงานเอง — เป็นคนละ LINE OA กับที่ล็อกอินอยู่)
           ปุ่มใหญ่บน ("เข้าเว็บหลัก") พาเจ้าของหอพักเข้าสู่ระบบด้วยบัญชี LINE ของตัวเองทันที ไม่ต้องกรอก
-          Username/Password ค่าที่กรอกในหน้านี้ไม่ถูกบันทึกไว้ที่ไหน — ปิดหรือรีเฟรชหน้าแล้วต้องกรอกใหม่ทั้งหมด
+          Username/Password ค่าที่กรอก/รูปที่อัปโหลดในหน้านี้บันทึกไว้ถาวรฝั่งเซิร์ฟเวอร์ — ปิดหรือรีเฟรชหน้า
+          แล้วค่าเดิมยังอยู่
         </p>
 
         <div className="detail-section mb-3" style={{ background: "var(--color-background)", border: "1px solid var(--color-light)" }}>
@@ -174,10 +202,12 @@ export default function SuperAdminRichMenuPage() {
                   : <span className="text-muted small"><i className="fas fa-image me-1" />ยังไม่มีรูป</span>}
               </div>
               <div className="text-muted small mt-1 mb-2">1 ปุ่มใหญ่บน (เข้าเว็บหลัก) + 3 ปุ่มล่าง (ติดต่อ/แจ้งปัญหา/เพิ่มเติม) — ขนาด {RICHMENU_WIDTH}x{RICHMENU_HEIGHT} พิกเซล</div>
-              <button className="btn btn-sm btn-outline-secondary w-100" type="button" disabled={validating}
+              <button className="btn btn-sm btn-outline-secondary w-100" type="button" disabled={validating || uploading}
                 onClick={() => fileRef.current?.click()}>
                 {validating
                   ? <><span className="spinner-border spinner-border-sm me-1" />กำลังตรวจสอบ...</>
+                  : uploading
+                  ? <><span className="spinner-border spinner-border-sm me-1" />กำลังบันทึกรูป...</>
                   : <><i className="fas fa-upload me-1" />{image ? "เปลี่ยนรูป" : "เลือกรูป"}</>}
               </button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg" style={{ display: "none" }}

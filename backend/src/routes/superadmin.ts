@@ -7,10 +7,11 @@
 import { Elysia } from "elysia";
 import { and, eq, sql } from "drizzle-orm";
 import { rm } from "fs/promises";
+import { mkdirSync, writeFileSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { randomBytes, timingSafeEqual } from "crypto";
 import { db } from "../db";
-import { organizations, appConfig, rooms, tenants, users } from "../db/schema";
+import { organizations, appConfig, rooms, tenants, users, superadminRichMenuConfig } from "../db/schema";
 import { ORG_SCOPED_TABLES } from "../db/orgScopedTables";
 import { signToken } from "../lib/jwt";
 import { superAdminDerive } from "../lib/superAdminDerive";
@@ -19,7 +20,19 @@ import { generateSlug } from "../lib/orgContext";
 import { getOrgStorageBytes, getUnattributedStorageBytes, UPLOAD_SUBDIRS } from "../lib/storageUsage";
 import { getOrgRequestRate, getGlobalRequestRate, getApiHealth } from "../lib/apiUsageTracker";
 import { getServerHealth, checkDatabaseHealth } from "../lib/serverHealth";
+import { signUploadPath } from "../lib/encryption";
 import { createGuestRichMenu, type RichMenuImageInput } from "../services/richMenu";
+
+// id แถว singleton ของ superadmin_richmenu_config เสมอ (ดูคอมเมนต์ที่ schema.ts) — โหลด/สร้างแบบ lazy
+// เหมือน getOrCreateConfig(orgId) ใน routes/settings.ts แต่ไม่มีพารามิเตอร์ orgId เพราะมีแถวเดียวทั้งระบบ
+const SUPERADMIN_RICHMENU_CONFIG_ID = "default";
+async function getOrCreateSuperadminRichMenuConfig() {
+  const [existing] = await db.select().from(superadminRichMenuConfig).where(eq(superadminRichMenuConfig.id, SUPERADMIN_RICHMENU_CONFIG_ID));
+  if (existing) return existing;
+  await db.insert(superadminRichMenuConfig).values({ id: SUPERADMIN_RICHMENU_CONFIG_ID, updatedAt: new Date().toISOString() });
+  const [row] = await db.select().from(superadminRichMenuConfig).where(eq(superadminRichMenuConfig.id, SUPERADMIN_RICHMENU_CONFIG_ID));
+  return row;
+}
 
 // ตัดทุกอย่างที่ไม่ใช่ตัวเลขออก (เว้นวรรค/ขีด/+66 ที่ลูกค้าอาจพิมพ์ปนมา) ให้เหลือแค่ตัวเลขล้วนๆ ไว้เทียบกับ
 // ที่เก็บใน users.phone — ใช้ตัวเดียวกันทั้งตอนสร้างองค์กร (ที่นี่) และตอนกรอกเบอร์เชื่อม LINE ครั้งแรก (ดู
@@ -366,13 +379,51 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     console.error(`[superadmin] DELETED org=${params.id} (${org.name}) — all data removed`);
     return { deleted: params.id };
   })
-  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) ให้ LINE OA "อิสระ" ใดๆ ก็ได้ ไม่ผูกกับองค์กรในระบบเลย
-  // (ต่างจาก POST /richmenu/create ใน routes/settings.ts ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่
-  // ล็อกอินอยู่เสมอ และยังสร้างครบ 3 เมนู Guest/Member/Admin) ใช้ตอนอยากทำ Rich Menu ให้ LINE OA อื่น เช่น
-  // บัญชีทดลอง/ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ Channel Access Token มาจาก
-  // SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env เท่านั้น (ไม่รับจาก request body — กันไม่ให้ token หลุดผ่าน log/
-  // network tab ของฝั่งเว็บ) ไม่มีที่เก็บถาวรฝั่งเรานอกจากนั้น (เก็บแค่ระหว่างเรียก LINE API เท่านั้น) ไฟล์รูปเลย
-  // ไม่ต้องเขียนลงดิสก์เหมือนของ routes/settings.ts — ถอด base64 เป็น Buffer ในหน่วยความจำตรงๆ
+  // ── เครื่องมือสร้าง Rich Menu ให้ LINE OA "อิสระ" ใดๆ ก็ได้ ไม่ผูกกับองค์กรในระบบเลย (ต่างจาก
+  // POST /richmenu/create ใน routes/settings.ts ที่อ่าน token/URL/รูปจาก app_config ขององค์กรที่ล็อกอินอยู่
+  // เสมอ และยังสร้างครบ 3 เมนู Guest/Member/Admin) ใช้ตอนอยากทำ Rich Menu ให้ LINE OA อื่น เช่น บัญชีทดลอง/
+  // ของทีมงานเอง ที่ไม่ได้อยู่ในระบบหลายองค์กรนี้ Channel Access Token มาจาก SUPERADMIN_RICHMENU_LINE_TOKEN
+  // ใน .env เท่านั้น (ไม่รับจาก request body — กันไม่ให้ token หลุดผ่าน log/network tab ของฝั่งเว็บ) ส่วนค่า
+  // อื่น (URL/รูป/ID เมนูล่าสุด) บันทึกไว้ใน superadmin_richmenu_config เหมือนหน้า Settings ปกติขององค์กร (ดู
+  // comment ที่ schema.ts) — โหลดหน้าใหม่แล้วยังเห็นค่าที่กรอกไว้ล่าสุดอยู่ ไม่ต้องกรอกซ้ำทุกครั้ง
+
+  // โหลดค่าที่บันทึกไว้ล่าสุด — แพทเทิร์นเดียวกับ GET /settings/config ขององค์กร ต่างกันตรงนี้เป็น singleton
+  // แถวเดียว ไม่มี orgId
+  .get("/richmenu/config", async () => {
+    const row = await getOrCreateSuperadminRichMenuConfig();
+    return {
+      liffLoginUrl: row.liffLoginUrl || "",
+      contactUrl: row.contactUrl || "",
+      image: signUploadPath(row.image || ""),
+      richMenuGuestId: row.richMenuGuestId || "",
+    };
+  })
+  // อัปโหลดรูปเมนู Guest เก็บไฟล์จริงลงดิสก์ทันที (แพทเทิร์นเดียวกับ POST /settings/richmenu/image ขององค์กร)
+  // ไม่รอปุ่ม "สร้าง" เพราะไฟล์ต้องมีอยู่จริงตอนกดสร้าง — แยกโฟลเดอร์ "_superadmin" ต่างหาก ไม่ปนกับโฟลเดอร์
+  // ตาม orgId ขององค์กรในระบบ (เครื่องมือนี้ไม่มี orgId)
+  .post("/richmenu/image", async ({ body, set }) => {
+    const base64 = String((body as any)?.base64 ?? "");
+    if (!base64) { set.status = 400; return { error: "ไม่พบไฟล์รูป" }; }
+
+    const mimeType = base64.match(/data:([^;]+);/)?.[1] ?? "image/png";
+    const ext = (mimeType.split("/")[1] || "png").replace("jpeg", "jpg");
+    const uploadDir = resolve(process.cwd(), "uploads", "richmenu", "_superadmin");
+    mkdirSync(uploadDir, { recursive: true });
+    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+    const buffer = Buffer.from(raw, "base64");
+    const fileName = `guest_${Date.now()}.${ext}`;
+    writeFileSync(resolve(uploadDir, fileName), buffer);
+    const url = `/uploads/richmenu/_superadmin/${fileName}`;
+
+    await getOrCreateSuperadminRichMenuConfig();
+    await db.update(superadminRichMenuConfig).set({ image: url, updatedAt: new Date().toISOString() }).where(eq(superadminRichMenuConfig.id, SUPERADMIN_RICHMENU_CONFIG_ID));
+
+    return { url: signUploadPath(url) };
+  })
+  // สร้างเมนู Guest เดี่ยว (1 ปุ่มใหญ่บน + 3 ปุ่มล่าง) จริงผ่าน LINE API โดยอ่านรูปที่อัปโหลดไว้แล้วจากดิสก์
+  // (ผ่าน POST /richmenu/image ด้านบน) — บันทึก LIFF Login URL/Contact URL ที่กรอกไว้ลง config ทันทีก่อนเรียก
+  // LINE API เสมอ (กันข้อมูลหายถ้า LINE API ล่มระหว่างสร้าง) และบันทึก Guest ID ที่สร้างได้กลับไว้ใช้เป็นค่า
+  // เริ่มต้นของ "ID เมนูเดิมที่จะแทนที่" ในการสร้างครั้งถัดไปอัตโนมัติ
   .post("/richmenu/create", async ({ body, set }) => {
     const token = process.env.SUPERADMIN_RICHMENU_LINE_TOKEN || "";
     if (!token) { set.status = 503; return { error: "ยังไม่ได้ตั้งค่า SUPERADMIN_RICHMENU_LINE_TOKEN ใน .env" }; }
@@ -399,29 +450,33 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
       return { error: "Contact URL ต้องขึ้นต้นด้วย http:// หรือ https:// (หรือเว้นว่างไว้ให้เป็นปุ่มข้อความแทน)" };
     }
 
-    function decodeImage(base64: unknown, label: string): RichMenuImageInput {
-      const str = String(base64 ?? "");
-      if (!str) throw new Error(`กรุณาอัปโหลดรูปเมนู ${label}`);
-      const mimeType = str.match(/data:([^;]+);/)?.[1] ?? "image/png";
-      const raw = str.includes(",") ? str.split(",")[1] : str;
-      return { buffer: Buffer.from(raw, "base64"), mimeType };
-    }
+    const config = await getOrCreateSuperadminRichMenuConfig();
+    await db.update(superadminRichMenuConfig).set({ liffLoginUrl, contactUrl, updatedAt: new Date().toISOString() }).where(eq(superadminRichMenuConfig.id, SUPERADMIN_RICHMENU_CONFIG_ID));
+
+    const imagePath = config.image || "";
+    if (!imagePath) { set.status = 400; return { error: "กรุณาอัปโหลดรูปเมนู Guest ก่อน" }; }
 
     let image: RichMenuImageInput;
     try {
-      image = decodeImage(b.image, "Guest");
-    } catch (e: any) {
+      const filePath = resolve(process.cwd(), imagePath.replace(/^\//, ""));
+      const buffer = readFileSync(filePath);
+      const ext = imagePath.split(".").pop()?.toLowerCase();
+      const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+      image = { buffer, mimeType };
+    } catch {
       set.status = 400;
-      return { error: e?.message ?? "รูปเมนูไม่ถูกต้อง" };
+      return { error: "ไม่พบไฟล์รูปเมนูบนเซิร์ฟเวอร์ กรุณาอัปโหลดรูปใหม่อีกครั้ง" };
     }
 
-    const previousGuestId = String(b.previousGuestId ?? "").trim() || undefined;
+    const previousGuestId = String(b.previousGuestId ?? "").trim() || config.richMenuGuestId || undefined;
 
     try {
       const result = await createGuestRichMenu(token, {
         liffLoginUrl,
         contactUrl,
       }, image, previousGuestId);
+
+      await db.update(superadminRichMenuConfig).set({ richMenuGuestId: result.id, updatedAt: new Date().toISOString() }).where(eq(superadminRichMenuConfig.id, SUPERADMIN_RICHMENU_CONFIG_ID));
 
       console.log(`[superadmin] created ad-hoc guest rich menu — guest=${result.id}`);
       return { menuId: result.id, defaultSet: result.defaultSet, warning: result.defaultSet ? undefined : result.defaultError };

@@ -420,3 +420,18 @@ export const appConfig = pgTable("app_config", {
   setupCompleted: text("setup_completed").notNull().default("false"),
   updatedAt: str("updated_at"),
 });
+
+// ── ค่าคอนฟิกของเครื่องมือ "สร้าง Rich Menu สำหรับ LINE OA อื่น" ในหน้าควบคุมแพลตฟอร์ม
+// (SuperAdminRichMenuPage.tsx, routes/superadmin.ts) — singleton แถวเดียว (id = "default" เสมอ) เก็บค่าที่
+// กรอกไว้ล่าสุด (LIFF Login URL/Contact URL/รูป/Guest ID ที่สร้างล่าสุด) กันต้องกรอกใหม่ทุกครั้งที่โหลดหน้า —
+// แพทเทิร์นเดียวกับ appConfig ของแต่ละองค์กร แต่ไม่มี orgId เพราะเครื่องมือนี้ไม่ผูกกับองค์กรไหนในระบบเลย (ดู
+// คอมเมนต์หัวไฟล์ routes/superadmin.ts) Channel Access Token ยังคงอ่านจาก SUPERADMIN_RICHMENU_LINE_TOKEN ใน
+// .env เท่านั้น ไม่เก็บในตารางนี้ — และไม่อยู่ใน ORG_SCOPED_TABLES เพราะไม่ผูกกับองค์กรไหนให้ลบตามเลย
+export const superadminRichMenuConfig = pgTable("superadmin_richmenu_config", {
+  id: text("id").primaryKey(),
+  liffLoginUrl: str("liff_login_url"),
+  contactUrl: str("contact_url"),
+  image: str("image"), // path สัมพัทธ์ใน uploads/richmenu/_superadmin/ เหมือน richMenuGuestImage ใน appConfig
+  richMenuGuestId: str("rich_menu_guest_id"),
+  updatedAt: str("updated_at"),
+});
