@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import liff from "@line/liff";
 import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
+import LiffThemeToggle from "../components/LiffThemeToggle";
 
 type Status = "loading" | "ready" | "error" | "submitted";
 
@@ -91,6 +92,7 @@ export default function LiffRepairPage() {
   if (status !== "ready") {
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
@@ -121,6 +123,7 @@ export default function LiffRepairPage() {
 
   return (
     <div className="login-page-wrap">
+      <LiffThemeToggle />
       <div className="login-card custom-card" style={{ maxWidth: 420, textAlign: "left" }}>
         <div className="text-center mb-3">
           {branding.logoUrl

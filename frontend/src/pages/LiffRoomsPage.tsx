@@ -7,6 +7,7 @@ import liff from "@line/liff";
 import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
+import LiffThemeToggle from "../components/LiffThemeToggle";
 
 type Status = "loading" | "ready" | "error";
 
@@ -86,6 +87,7 @@ export default function LiffRoomsPage() {
   if (status !== "ready") {
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
@@ -110,6 +112,7 @@ export default function LiffRoomsPage() {
     const pics = detailRoom.pictures;
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card" style={{ maxWidth: 440, textAlign: "left" }}>
           <button type="button" className="btn btn-link btn-sm p-0 mb-2" onClick={() => setDetailRoom(null)}>
             <i className="fas fa-arrow-left me-1" />กลับไปรายการห้อง
@@ -167,6 +170,7 @@ export default function LiffRoomsPage() {
   // ─── รายการห้องว่าง + ช่องค้นหา ───────────────────────────────────────────
   return (
     <div className="login-page-wrap">
+      <LiffThemeToggle />
       <div className="login-card custom-card" style={{ maxWidth: 440 }}>
         <div className="text-center mb-3">
           {branding.logoUrl

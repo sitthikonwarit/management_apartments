@@ -10,6 +10,7 @@ import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateOnlyString } from "../utils/yearFormat";
 import { BillLinePreview, type BillLinePreviewConfig } from "../components/BillLinePreviewCard";
 import ImageLightbox from "../components/ImageLightbox";
+import LiffThemeToggle from "../components/LiffThemeToggle";
 
 const AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
@@ -162,6 +163,7 @@ export default function LiffProfilePage() {
   if (status === "loading" || status === "error" || status === "unlinked") {
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
@@ -188,6 +190,7 @@ export default function LiffProfilePage() {
 
   return (
     <div className="login-page-wrap">
+      <LiffThemeToggle />
       <div className="login-card custom-card" style={{ maxWidth: 440 }}>
         <div className="text-center mb-3">
           {branding.logoUrl

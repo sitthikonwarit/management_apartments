@@ -12,6 +12,7 @@ import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import { monthYearLabel } from "../utils/billCalc";
 import { BillLinePreview, type BillLinePreviewConfig } from "../components/BillLinePreviewCard";
+import LiffThemeToggle from "../components/LiffThemeToggle";
 
 type Status = "loading" | "linked" | "unlinked" | "error";
 
@@ -274,6 +275,7 @@ export default function LiffPaymentPage() {
   if (status === "loading" || status === "error" || status === "unlinked") {
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
@@ -302,6 +304,7 @@ export default function LiffPaymentPage() {
 
   return (
     <div className="login-page-wrap">
+      <LiffThemeToggle />
       <div className="login-card custom-card" style={{ maxWidth: 440 }}>
         <div className="text-center mb-3">
           {branding.logoUrl

@@ -9,6 +9,7 @@ import liff from "@line/liff";
 import { liffApi, startLiffPresenceHeartbeat } from "../api/client";
 import { extractLiffId } from "../utils/liffHelpers";
 import ImageLightbox from "../components/ImageLightbox";
+import LiffThemeToggle from "../components/LiffThemeToggle";
 
 type Status = "loading" | "ready" | "error";
 
@@ -155,6 +156,7 @@ export default function LiffBookingPage() {
   if (status !== "ready") {
     return (
       <div className="login-page-wrap">
+        <LiffThemeToggle />
         <div className="login-card custom-card text-center">
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: "50%", margin: "0 auto", display: "block" }} />
@@ -176,6 +178,7 @@ export default function LiffBookingPage() {
 
   return (
     <div className="login-page-wrap">
+      <LiffThemeToggle />
       <div className="login-card custom-card" style={{ maxWidth: 440, textAlign: "left" }}>
 
         {/* ─── ฟอร์มยืนยันจอง (มาจากทางลัดในหน้า "ดูห้องว่าง") ─── */}
