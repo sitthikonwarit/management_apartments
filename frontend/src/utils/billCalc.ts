@@ -623,13 +623,18 @@ export function normalizeBillItem(raw: any): BillItem {
   };
 }
 
-// ── รีเฟรชยอดค้างชำระ + ค่าปรับ + รวม ของบิลที่โหลดมาแก้ไข ─────────────────────
+// ── รีเฟรชค่าปรับ + ยอดรวม ของบิลที่โหลดมาแก้ไข (ไม่แตะยอดค้างชำระยกมา) ─────────
+// ยอดค้างชำระยกมา (outstandingAmount/outstandingItems) ต้องคงค่าเดิมที่ล็อกไว้ตอนสร้าง/บันทึกบิลนั้นเสมอ ห้าม
+// คำนวณใหม่จาก getOutstandingBalance ทุกครั้งที่เปิดบิลซ้ำ เพราะถ้าบิลเดือนก่อนหน้าที่เป็นต้นตอของยอดค้างถูกปิด
+// ยอดไปแล้ว (เช่น ผ่านการชำระเงินพร้อมติ๊กปิดยอดเดือนเก่า — ดู closeOutstandingBills) getOutstandingBalance จะไม่
+// นับเป็นค้างอีกต่อไป ทำให้ยอดค้างที่เคยรวมอยู่ในยอดรวมสุทธิของบิลนี้ (ที่ออกใบแจ้งหนี้และเก็บเงินไปแล้ว) หายไป
+// ตอนเปิดบิลซ้ำ/รีเฟรชหน้า ทำให้ยอดรวมสุทธิหดลงทั้งที่รับเงินเต็มจำนวนไปแล้ว (บั๊กเดิม) ยอดค้างของบิลนี้จะเปลี่ยน
+// ได้ก็ต่อเมื่อผู้ใช้กดชำระเงิน/ปิดยอดผ่านป็อปอัพบันทึกการชำระเงินเท่านั้น (ดู handleConfirmPayment) หรือกด
+// "ซิงค์ผู้เช่า" เมื่อเปลี่ยนผู้เช่าห้อง (ดู syncTenantForItem) ซึ่งทั้งคู่ตั้งค่า outstandingAmount/outstandingItems
+// ของบิลนี้ตรงๆ อยู่แล้ว ไม่ผ่านฟังก์ชันนี้
 export function refreshDerivedFields(items: BillItem[], monthYear: string, ctx: GenCtx) {
   const defaults = resolveDefaultFormulas(ctx.formulas);
   items.forEach((item) => {
-    const outstanding = getOutstandingBalance(ctx.allBills, item.roomId, monthYear, item.tenantId, item.tenantName);
-    item.outstandingAmount = outstanding.amount;
-    item.outstandingItems = outstanding.items;
     const tenant = item.tenantId ? ctx.tenants.find((t) => String(t.id) === String(item.tenantId)) : undefined;
     recalcItem(item, ctx.config, defaults, monthYear, tenant);
   });
