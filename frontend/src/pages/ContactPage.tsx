@@ -5,13 +5,17 @@ import { useEffect, useState } from "react";
 import { liffApi } from "../api/client";
 
 export default function ContactPage() {
+  // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — เหมือนหน้า Liff*Page.tsx อื่นๆ (ดู
+  // LiffLoginPage.tsx) เผื่อองค์กรต้องการสร้าง LIFF app จริงให้ปุ่ม "ติดต่อ" (เปิดในเบราว์เซอร์ในตัวของ LINE
+  // แทนเบราว์เซอร์นอก) แล้วเอา liff.line.me URL ที่ได้ไปกรอกในช่อง "LIFF เบอร์ติดต่อ" ที่หน้า Settings
+  const org = new URLSearchParams(window.location.search).get("org") || undefined;
   const [phone, setPhone] = useState("");
   const [branding, setBranding] = useState({ logoUrl: "", nameText: "" });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    liffApi.getConfig()
+    liffApi.getConfig(org)
       .then((cfg) => {
         setPhone(cfg.contactPhone);
         setBranding({ logoUrl: cfg.appIdentity.logoUrl, nameText: cfg.appIdentity.nameText });

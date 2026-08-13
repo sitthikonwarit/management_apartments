@@ -1268,7 +1268,7 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-muted small mb-3">
                       ใช้เฉพาะระบบที่มีมากกว่า 1 องค์กรใช้งานร่วมกัน — ตอนสร้าง LIFF app แต่ละอัน (Login/Payment/
-                      Profile/แจ้งซ่อม/ดูห้องว่าง/จองห้อง) ใน LINE Developers Console ให้ตั้ง Endpoint URL เป็นหน้า
+                      Profile/แจ้งซ่อม/ดูห้องว่าง/จองห้อง/ติดต่อ) ใน LINE Developers Console ให้ตั้ง Endpoint URL เป็นหน้า
                       LIFF ของระบบนี้ต่อท้ายด้วย <code>?org={config.orgSlug || "รหัสองค์กร"}</code> เช่น{" "}
                       <code>{window.location.origin}/liff/login?org={config.orgSlug || "รหัสองค์กร"}</code> แล้วค่อยเอา
                       URL แบบสั้น (liff.line.me/...) ที่ได้มาใส่ในช่อง LIFF URL ด้านล่างตามปกติ
@@ -1358,6 +1358,7 @@ export default function SettingsPage() {
                           { label: "LIFF Repair (แจ้งซ่อม)", path: "/liff/repair", required: false },
                           { label: "LIFF Rooms (ดูห้องว่าง)", path: "/liff/rooms", required: false },
                           { label: "LIFF Booking (จองห้อง)", path: "/liff/booking", required: false },
+                          { label: "LIFF Contact (ติดต่อ)", path: "/contact", required: false },
                         ]).map((l) => {
                           const endpointUrl = `${window.location.origin}${l.path}?org=${config.orgSlug}`;
                           const isCopied = copiedEndpoint === l.path;
