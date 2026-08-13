@@ -14,7 +14,7 @@ import {
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
-  adjustedOutstandingAmount, buildWaterElectricRows,
+  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -2530,35 +2530,54 @@ export default function BillsPage() {
     recalcItem(draft, config, defaults, editingMonthYear);
 
     // ยอดค้างของเดือนเก่าที่เลือกปิด (หลังหักค่าปรับ/ส่วนลดที่ปรับไว้แล้ว) — คำนวณด้วยสูตรเดียวกับที่ป็อปอัพ
-    // ใช้แสดงผล กันตัวเลขสองที่เพี้ยนไม่ตรงกัน
-    const oldMonthsDue = target.outstandingItems
+    // ใช้แสดงผล กันตัวเลขสองที่เพี้ยนไม่ตรงกัน — เก็บเรียงลำดับเดิมของ outstandingItems (เก่าสุดก่อน) ไว้ใช้
+    // จัดสรรเงินที่รับจริงด้านล่าง
+    const oldMonthsList = target.outstandingItems
       .filter((o) => payload.settleOutstandingMonths.includes(o.monthYear))
-      .reduce((s, o) => s + adjustedOutstandingAmount(o, payload.settleOutstandingAdjustments), 0);
+      .map((o) => ({ monthYear: o.monthYear, due: adjustedOutstandingAmount(o, payload.settleOutstandingAdjustments) }));
+    const oldMonthsDue = oldMonthsList.reduce((s, o) => s + o.due, 0);
     const currentRemainingDue = payload.includeCurrentMonth ? Math.max(0, draft.total - (draft.paidAmount || 0)) : 0;
     const totalDueToday = currentRemainingDue + oldMonthsDue;
 
     // เงินที่รับมาอาจมากกว่ายอดที่ต้องจ่าย (มีเงินทอน) หรือน้อยกว่า (จ่ายไม่ครบ) — ยอดที่นับเป็น
     // "จ่ายจริง" รวมคือส่วนที่ไม่เกินยอดที่ต้องจ่ายทั้งหมดวันนี้เท่านั้น ส่วนเกินคือเงินทอนคืนลูกค้า ไม่ใช่รายรับ
-    // ส่วนที่ไปลง "เดือนนี้" โดยเฉพาะต้องไม่เกิน currentRemainingDue กันเงินที่จริงๆ จ่ายให้เดือนเก่าไปโป่งยอด
-    // จ่ายของเดือนนี้ผิดตัว (เดือนเก่าถูกปิดยอดแยกเป็นอิสระด้านล่างอยู่แล้วผ่าน closeOutstandingBills เสมอ
-    // ไม่ว่าจะรวมเดือนนี้ด้วยหรือไม่ก็ตาม)
+    // จัดสรรเงินที่รับจริงให้เดือนเก่าที่เลือกปิดก่อน (เก่าสุดก่อน) แล้วเดือนนี้ได้รับส่วนที่เหลือ — กันปิดยอดเดือนเก่า
+    // เต็มจำนวน/ตั้งสถานะ "จ่ายแล้ว" ทั้งที่เงินที่รับจริงไม่พอ (บั๊กเดิม: closeOutstandingBills ถูกเรียกปิดยอดเต็ม
+    // เสมอไม่สนว่าจ่ายครบไหม ทำให้ตัวเลข "เดือนเก่าที่ปิดในเดือนนี้"/"รับแล้วสุทธิ" บวมเกินเงินที่รับจริง) เดือนที่
+    // เงินไม่พอปิดเต็มจะถูกกันไว้เป็นยอดชำระบางส่วน (partial) ไม่ปิดสถานะ ส่วนเดือนที่ไม่มีเงินเหลือถึงเลยจะยังคง
+    // ค้างชำระเหมือนเดิมทุกประการ (แม้จะติ๊กเลือกไว้ก็ตาม)
     const amountApplied = Math.min(payload.received, totalDueToday);
     const changeGiven = Math.max(0, payload.received - totalDueToday);
-    const amountForCurrent = payload.includeCurrentMonth ? Math.min(amountApplied, currentRemainingDue) : 0;
+
+    let remainingForOld = amountApplied;
+    const fullyCoveredOldMonths: string[] = [];
+    let partialOldMonth: { monthYear: string; amount: number } | null = null;
+    for (const o of oldMonthsList) {
+      if (remainingForOld <= 0.005) break;
+      if (o.due <= 0) { fullyCoveredOldMonths.push(o.monthYear); continue; }
+      if (remainingForOld >= o.due - 0.005) {
+        fullyCoveredOldMonths.push(o.monthYear);
+        remainingForOld -= o.due;
+      } else {
+        partialOldMonth = { monthYear: o.monthYear, amount: remainingForOld };
+        remainingForOld = 0;
+      }
+    }
+    const amountForCurrent = payload.includeCurrentMonth ? Math.min(remainingForOld, currentRemainingDue) : 0;
     const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent;
     const fullySettled = newPaidAmount >= draft.total - 0.005; // เผื่อ floating point
 
-    // ปิดยอดค้างชำระเดือนก่อนที่เลือกไว้ (ถ้ามี) — ตั้งสถานะบิลต้นทางเดือนนั้นเป็น "จ่ายแล้ว" ไปพร้อมกันเลย
-    // ไม่งั้นยอดค้างนี้จะถูกคำนวณย้อนกลับมารวมในบิลเดือนถัดๆ ไปอีก ทั้งที่จริงถูกเก็บไปแล้วในยอดนี้ — สร้างรายการ
-    // "ประวัติการชำระ" ของบิลเดือนนั้นเองด้วย (ไม่งั้นเปิดไปดูบิลเดือนเก่าจะไม่เห็นว่าใครจ่าย/จ่ายเมื่อไหร่ ทั้งที่
-    // จริงๆ ปิดยอดไปแล้ว) ทำก่อนสร้างรายการชำระของเดือนนี้ เพื่อเอา id ของแต่ละรายการมาผูก (linkedOldMonthPayments)
-    // กับรายการชำระของเดือนนี้ — ยกเลิกรายการของเดือนนี้แล้วจะย้อนยอดที่ปิดไปของเดือนเก่ากลับมาค้างชำระเหมือนเดิม
-    // ได้ด้วย (ดู handleCancelPayment)
+    // ปิดยอดค้างชำระเดือนก่อนที่มีเงินพอปิดเต็มจำนวนจริงเท่านั้น (fullyCoveredOldMonths) — ตั้งสถานะบิลต้นทาง
+    // เดือนนั้นเป็น "จ่ายแล้ว" ไปพร้อมกันเลย ไม่งั้นยอดค้างนี้จะถูกคำนวณย้อนกลับมารวมในบิลเดือนถัดๆ ไปอีก ทั้งที่จริง
+    // ถูกเก็บไปแล้วในยอดนี้ — สร้างรายการ "ประวัติการชำระ" ของบิลเดือนนั้นเองด้วย (ไม่งั้นเปิดไปดูบิลเดือนเก่าจะไม่เห็นว่า
+    // ใครจ่าย/จ่ายเมื่อไหร่ ทั้งที่จริงๆ ปิดยอดไปแล้ว) ทำก่อนสร้างรายการชำระของเดือนนี้ เพื่อเอา id ของแต่ละรายการมาผูก
+    // (linkedOldMonthPayments) กับรายการชำระของเดือนนี้ — ยกเลิกรายการของเดือนนี้แล้วจะย้อนยอดที่ปิดไปของเดือนเก่า
+    // กลับมาค้างชำระเหมือนเดิมได้ด้วย (ดู handleCancelPayment)
     const linkedOldMonthPayments: { id: string; monthYear: string; amount: number }[] = [];
-    if (payload.settleOutstandingMonths.length > 0) {
+    if (fullyCoveredOldMonths.length > 0) {
       const closures = closeOutstandingBills(
         bills, target.roomId, target.tenantId, target.tenantName,
-        payload.settleOutstandingMonths, payload.settleOutstandingAdjustments
+        fullyCoveredOldMonths, payload.settleOutstandingAdjustments
       );
       for (const { group, data } of closures) {
         if (!group.id) continue;
@@ -2589,6 +2608,40 @@ export default function BillsPage() {
         }
         const closedSaved = await billsApi.update(group.id, data, group.scheduledDate ?? "");
         setBills((prev) => prev.map((b) => (b.id === group.id ? closedSaved : b)));
+      }
+    }
+
+    // เดือนที่เงินไม่พอปิดเต็มจำนวน — บันทึกเป็นยอดชำระบางส่วนของเดือนนั้นแทน (เพิ่ม paidAmount ค้างสถานะเดิมไว้
+    // ไม่ยกเว้นค่าปรับ/เพิ่มส่วนลดเพราะยังไม่ปิดยอดจริง) กันเงินที่ยังไม่ได้รับจริงถูกนับเป็นปิดยอดไปด้วย
+    if (partialOldMonth) {
+      const group = bills.find((b) => b.monthYear === partialOldMonth.monthYear);
+      const applied = applyPartialOutstandingPayment(
+        bills, target.roomId, target.tenantId, target.tenantName, partialOldMonth.monthYear, partialOldMonth.amount
+      );
+      if (group?.id && applied) {
+        const partialSaved = await billsApi.update(group.id, applied.data, group.scheduledDate ?? "");
+        setBills((prev) => prev.map((b) => (b.id === group.id ? partialSaved : b)));
+        const partialRow = applied.data.find((r) => r.roomId === target.roomId);
+        const oldPaymentRow = await billsApi.createPayment({
+          billId: group.id,
+          roomId: target.roomId,
+          roomNumber: target.roomNumber,
+          tenantId: target.tenantId,
+          tenantName: target.tenantName,
+          monthYear: partialOldMonth.monthYear,
+          method: payload.method,
+          amount: partialOldMonth.amount,
+          received: partialOldMonth.amount,
+          change: 0,
+          note: `จ่ายบางส่วนของเดือน ${monthYearLabel(partialOldMonth.monthYear)} พร้อมกับชำระเดือน ${monthYearLabel(editingMonthYear)}`,
+          paymentDate: payload.paymentDate,
+          billTotal: partialRow?.total ?? partialOldMonth.amount,
+          paidTotal: partialRow?.paidAmount ?? partialOldMonth.amount,
+          settledViaMonthYear: editingMonthYear,
+          sendReceipt: false,
+        });
+        linkedOldMonthPayments.push({ id: oldPaymentRow.id, monthYear: partialOldMonth.monthYear, amount: partialOldMonth.amount });
+        setPayments((prev) => [...prev, oldPaymentRow]);
       }
     }
 

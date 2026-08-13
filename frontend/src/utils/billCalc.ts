@@ -241,6 +241,25 @@ export function closeOutstandingBills(
   return result;
 }
 
+// ── ชำระยอดค้างเดือนก่อนแบบบางส่วน ──────────────────────────────────────────────
+// ใช้เมื่อเงินที่รับจริงไม่พอปิดยอดค้างเดือนนั้นเต็มจำนวน — ต่างจาก closeOutstandingBills ตรงที่แค่เพิ่ม
+// paidAmount ของบิลต้นทางเดือนนั้น ไม่ตั้งสถานะเป็น "จ่ายแล้ว" และไม่ยกเว้นค่าปรับ/เพิ่มส่วนลด (เพราะยังไม่ปิดยอดจริง
+// ยอดที่เหลือยังต้องคำนวณเป็นค้างชำระต่อไปตามปกติผ่าน getOutstandingBalance ซึ่งหัก paidAmount ออกจาก total อยู่แล้ว)
+export function applyPartialOutstandingPayment(
+  allBills: BillGroup[], roomId: string, tenantId: string | null, tenantName: string,
+  monthYear: string, amount: number
+): { group: BillGroup; data: BillItem[] } | null {
+  const group = allBills.find((b) => b.monthYear === monthYear);
+  if (!group) return null;
+  const data = group.data || [];
+  const idx = data.findIndex((r) =>
+    String(r.roomId) === String(roomId) && r.status !== "paid" && sameOutstandingTenant(r, tenantId, tenantName)
+  );
+  if (idx === -1) return null;
+  const nextData = data.map((r, i) => (i === idx ? { ...r, paidAmount: (Number(r.paidAmount) || 0) + amount } : r));
+  return { group, data: nextData };
+}
+
 // ── ค่าปรับล่าช้าเฉพาะบุคคล ────────────────────────────────────────────────────
 // ผู้เช่าแต่ละคนตั้งค่าเกินกำหนดของตัวเองได้ (ผ่านหน้ารายละเอียดผู้เช่า) หรือจะไม่ตั้งก็ได้ — ถ้าไม่ตั้ง
 // (tenant.overdue.override = false/ไม่มี) ให้ใช้ค่ากลางจากหน้า Settings ตามปกติ
