@@ -261,6 +261,7 @@ export default function SettingsPage() {
   const [liffRoomsUrl, setLiffRoomsUrl] = useState("");
   const [liffBookingUrl, setLiffBookingUrl] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [contactUrl, setContactUrl] = useState("");
   const [richMenuImages, setRichMenuImages] = useState({ guest: "", member: "", admin: "" });
   const [richMenuIds, setRichMenuIds] = useState({ guest: "", member: "", admin: "" });
   const [uploadingRichMenu, setUploadingRichMenu] = useState({ guest: false, member: false, admin: false });
@@ -375,6 +376,7 @@ export default function SettingsPage() {
     setLiffRoomsUrl(config.richMenu.liffRoomsUrl);
     setLiffBookingUrl(config.richMenu.liffBookingUrl);
     setContactPhone(config.richMenu.contactPhone);
+    setContactUrl(config.richMenu.contactUrl);
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
     setPaymentBankName(config.payment.bankName);
@@ -605,6 +607,7 @@ export default function SettingsPage() {
           liffRoomsUrl: liffRoomsUrl.trim(),
           liffBookingUrl: liffBookingUrl.trim(),
           contactPhone: contactPhone.trim(),
+          contactUrl: contactUrl.trim(),
         },
         payment: {
           bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
@@ -1452,9 +1455,20 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label small fw-bold">เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ" บนเมนู Guest/Member)</span></label>
+                    <label className="form-label small fw-bold">เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — แสดงในหน้า /contact ถ้าไม่ได้ตั้ง LIFF เบอร์ติดต่อด้านล่าง)</span></label>
                     <input type="text" className="form-control" placeholder="081-234-5678"
                       value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-bold">LIFF เบอร์ติดต่อ <span className="text-muted fw-normal">(ไม่บังคับ — ปุ่ม "ติดต่อ" บนเมนู Guest/Member เปิดลิงก์นี้โดยตรง ถ้าเว้นว่างจะพาไปหน้า /contact แทน)</span></label>
+                    <div className="input-group">
+                      <input type="text" className="form-control" placeholder="https://liff.line.me/xxxxxxxxxx-xxxxxxxx"
+                        value={contactUrl} onChange={(e) => setContactUrl(e.target.value)} />
+                      <button type="button" className="btn btn-outline-secondary" title="คัดลอก"
+                        disabled={!contactUrl.trim()} onClick={() => copyLiffField("contact", "LIFF เบอร์ติดต่อ", contactUrl)}>
+                        <i className={`fas ${copiedLiffField === "contact" ? "fa-check" : "fa-copy"}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="col-12">
                     <div className="form-text small">แก้ไขค่าด้านบนแล้วต้องกด "บันทึกการตั้งค่าทั้งหมด" ที่ด้านบนสุดของหน้านี้ก่อน ถึงจะมีผลตอนกดสร้าง Rich Menu ด้านล่าง — ช่องที่ไม่บังคับถ้าเว้นว่างไว้ ปุ่มนั้นจะยังส่งข้อความเข้าแชทแบบเดิม</div>

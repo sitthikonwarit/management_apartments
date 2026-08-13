@@ -394,6 +394,10 @@ export const appConfig = pgTable("app_config", {
   liffBookingUrl: str("liff_booking_url"),
   // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู) — ไม่ต้องใช้ LIFF เพราะไม่ต้องรู้ตัวตนผู้เช่า
   contactPhone: str("contact_phone"),
+  // ลิงก์ (LIFF หรือ URL ปกติ) ที่ปุ่ม "ติดต่อ" บนเมนูจะเปิดโดยตรง — ถ้าเว้นว่างไว้ ปุ่มจะพาไปหน้า /contact
+  // ของระบบเอง (ต้องตั้ง PUBLIC_BASE_URL ใน .env ด้วยไม่งั้นปุ่มจะกลายเป็นข้อความส่งเข้าแชทแทน ดู
+  // toPublicUrl ใน services/line.ts) ดู services/richMenu.ts และ POST /richmenu/create ด้านล่าง
+  contactUrl: str("contact_url"),
   richMenuGuestImage: str("rich_menu_guest_image"),
   richMenuMemberImage: str("rich_menu_member_image"),
   richMenuAdminImage: str("rich_menu_admin_image"),

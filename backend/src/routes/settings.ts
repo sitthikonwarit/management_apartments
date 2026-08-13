@@ -74,6 +74,7 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       liffRoomsUrl: r.liffRoomsUrl || "",
       liffBookingUrl: r.liffBookingUrl || "",
       contactPhone: r.contactPhone || "",
+      contactUrl: r.contactUrl || "",
       // path เก็บดิบๆ ไม่มีลายเซ็นในฐานข้อมูล (ดู lib/encryption.ts) — เซ็นตอนส่งออกให้หน้า Settings แสดง
       // preview ตรงนี้เท่านั้น (ไม่กระทบตอนสร้าง Rich Menu จริงกับ LINE — จุดนั้นอ่านไฟล์จากดิสก์ตรงๆ ไม่ผ่าน
       // /uploads/* เลย ดู loadImage() ใน POST /richmenu/create ด้านล่าง)
@@ -235,6 +236,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       liffRoomsUrl: String(b.richMenu?.liffRoomsUrl ?? ""),
       liffBookingUrl: String(b.richMenu?.liffBookingUrl ?? ""),
       contactPhone: String(b.richMenu?.contactPhone ?? ""),
+      contactUrl: String(b.richMenu?.contactUrl ?? ""),
       paymentBankName: String(b.payment?.bankName ?? ""),
       paymentAccountName: String(b.payment?.accountName ?? ""),
       paymentAccountNumber: String(b.payment?.accountNumber ?? ""),
@@ -327,7 +329,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
         liffRepairUrl: row.liffRepairUrl || "",
         liffRoomsUrl: row.liffRoomsUrl || "",
         liffBookingUrl: row.liffBookingUrl || "",
-        contactUrl: toPublicUrl("/contact"),
+        contactUrl: row.contactUrl || toPublicUrl("/contact"),
       }, images, {
         guest: row.richMenuGuestId || undefined,
         member: row.richMenuMemberId || undefined,

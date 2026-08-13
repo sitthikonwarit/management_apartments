@@ -47,6 +47,8 @@ export interface AppConfig {
     liffBookingUrl: string;
     // เบอร์ติดต่อที่แสดงในหน้า /contact (ปุ่ม "ติดต่อ" บนเมนู)
     contactPhone: string;
+    // ลิงก์ที่ปุ่ม "ติดต่อ" เปิดโดยตรง — ว่าง = ใช้หน้า /contact ของระบบเองแทน
+    contactUrl: string;
     images: { guest: string; member: string; admin: string };
     menuIds: { guest: string; member: string; admin: string };
   };
@@ -91,7 +93,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   sessionTimeoutMinutes: 30,
   lineMessaging: { enabled: false, channelAccessToken: "", channelSecret: "", autoSendEnabled: false, sendBillToCoResidents: true },
   richMenu: {
-    liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", liffRoomsUrl: "", liffBookingUrl: "", contactPhone: "",
+    liffLoginUrl: "", liffPaymentUrl: "", liffProfileUrl: "", liffRepairUrl: "", liffRoomsUrl: "", liffBookingUrl: "", contactPhone: "", contactUrl: "",
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },
