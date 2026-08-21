@@ -68,6 +68,12 @@ export interface BillItem {
   electricDefaultFormula?: string;
   overdueConfig?: AppConfig["overdue"];
   serviceFeeConfig?: AppConfig["serviceFee"];
+  // ── ปัดเศษยอดบิลลง (ก่อนถึงวันครบกำหนดชำระเท่านั้น) — ล็อกไว้กับบิลเหมือน overdueConfig/serviceFeeConfig
+  // ด้านบน เพื่อไม่ให้การแก้ "ค่าเริ่มต้น" ในหน้าตั้งค่าภายหลัง ย้อนไปเปลี่ยนยอดบิลเก่าที่ปิดไปแล้ว
+  roundingConfig?: AppConfig["rounding"];
+  // ผู้ใช้เคยลบรายการ "ปัดเศษ" (อัตโนมัติ) ออกจากรายการส่วนลดของบิลใบนี้เองหรือไม่ — ถ้าเคยลบ ห้าม
+  // คำนวณแล้วเพิ่มรายการปัดเศษกลับเข้ามาใหม่อีก (ดู applyBillRounding ด้านล่าง)
+  roundingDismissed?: boolean;
   // ประวัติการส่งบิลทาง LINE ของห้องนี้ (ใหม่สุดอยู่หน้าสุด) — backend เป็นคนเขียนให้ตอนส่งสำเร็จ/ไม่สำเร็จ
   sendLogs?: BillSendLog[];
 }
@@ -275,6 +281,23 @@ export function resolveOverdueConfig(tenant: any, config: AppConfig): AppConfig[
   return config.overdue;
 }
 
+// ── วันครบกำหนดชำระของงวดบิล (ใช้ร่วมกันทั้งค่าปรับล่าช้าและระบบปัดเศษด้านล่าง) ─────────────────
+// day === 0 หมายถึง "ทุกสิ้นเดือน" (ดูสวิตช์ "ทุกสิ้นเดือน" ในหน้า Settings)
+export function computeDueDate(monthYear: string, day: number): Date {
+  const [mStr, yStr] = monthYear.split("/");
+  const yearAD = normalizeYearToCE(parseInt(yStr, 10)); // รองรับทั้งปี พ.ศ. และ ค.ศ.
+  const monthIndex = parseInt(mStr, 10) - 1;
+  const dueDate = day === 0 ? new Date(yearAD, monthIndex + 1, 0) : new Date(yearAD, monthIndex + 1, day);
+  dueDate.setHours(23, 59, 59, 999);
+  return dueDate;
+}
+
+function isPastDueDate(monthYear: string, day: number): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today > computeDueDate(monthYear, day);
+}
+
 // ── ค่าปรับล่าช้า ──────────────────────────────────────────────────────────────
 export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue"] | undefined, monthYear: string) {
   item.fineAmount = 0;
@@ -283,14 +306,7 @@ export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue
   if (item.status === "paid") return;
   if (!overdue?.enabled) return;
 
-  const [mStr, yStr] = monthYear.split("/");
-  const yearAD = normalizeYearToCE(parseInt(yStr, 10)); // รองรับทั้งปี พ.ศ. และ ค.ศ.
-  const monthIndex = parseInt(mStr, 10) - 1;
-  const dueDate = overdue.day === 0
-    ? new Date(yearAD, monthIndex + 1, 0)
-    : new Date(yearAD, monthIndex + 1, overdue.day);
-  dueDate.setHours(23, 59, 59, 999);
-
+  const dueDate = computeDueDate(monthYear, overdue.day);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -301,6 +317,32 @@ export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue
     const rawFine = overdue.type === "fixed" ? (Number(overdue.amount) || 0) : diffDays * (Number(overdue.amount) || 0);
     item.fineAmount = Math.max(0, rawFine - (Number(item.fineWaived) || 0));
   }
+}
+
+// ── ปัดเศษยอดบิลลง ────────────────────────────────────────────────────────────
+// ปัดยอดสุทธิลงให้ลงท้ายด้วยหลักที่ตั้งไว้ (เช่น หลัก 5 บาท: 4127 -> 4125) เฉพาะตอนที่ "ยังไม่เลยวันครบกำหนด
+// ชำระ" ของงวดนั้น (ใช้วันครบกำหนดเดียวกับค่าปรับล่าช้า — ดู computeDueDate ด้านบน) และบิลยังไม่ได้จ่ายแล้ว
+// แสดงผลเป็นรายการ "ส่วนลด" ปกติ (id คงที่ = ROUNDING_DISCOUNT_ID) เพื่อให้ลบออกได้จากหน้าแก้ไขบิลเหมือน
+// ส่วนลดทั่วไป — ถ้าผู้ใช้ลบเอง (ดู BillsPage.tsx) จะตั้ง roundingDismissed ไว้กันไม่ให้คำนวณรอบถัดไปเพิ่ม
+// รายการปัดเศษกลับเข้ามาใหม่ในบิลใบเดิม
+export const ROUNDING_DISCOUNT_ID = "auto-rounding";
+
+export function applyBillRounding(item: BillItem, monthYear: string) {
+  // บิลที่จ่ายแล้ว: คงรายการเดิมไว้ตามที่ปิดยอดจริง ไม่คำนวณ/แก้ไขส่วนลดปัดเศษซ้ำอีก
+  if (item.status === "paid") return;
+
+  const others = (item.discountItems || []).filter((d) => d.id !== ROUNDING_DISCOUNT_ID);
+  const cfg = item.roundingConfig;
+  const unit = Math.max(1, Number(cfg?.unit) || 5);
+  const dueDay = Number(item.overdueConfig?.day) || 0;
+  const eligible = !!cfg?.enabled && !item.roundingDismissed && !isPastDueDate(monthYear, dueDay);
+
+  const rawTotal = calcItemTotal({ ...item, discountItems: others });
+  const remainder = eligible ? rawTotal % unit : 0;
+
+  item.discountItems = remainder > 0
+    ? [...others, { id: ROUNDING_DISCOUNT_ID, name: "ปัดเศษ", price: remainder }]
+    : others;
 }
 
 // ── ยอดรวมสุทธิ ────────────────────────────────────────────────────────────────
@@ -396,6 +438,13 @@ export function recalcItem(
   };
   item.serviceFeeConfig = svcCfg;
 
+  // ล็อกค่าปัดเศษ (เปิด/ปิด, ปัดลงทีละกี่บาท) ไว้กับตัวบิลเหมือนค่าปรับล่าช้า/ค่าบริการต่อหน่วยด้านบน
+  const roundingCfg = item.roundingConfig ?? {
+    enabled: !!config.rounding?.enabled,
+    unit: Math.max(1, Number(config.rounding?.unit) || 5),
+  };
+  item.roundingConfig = roundingCfg;
+
   const wf = item.waterFormula || waterDefault;
   const ef = item.electricFormula || electricDefault;
   item.waterServiceFee = item.waterActive && svcCfg.enabled ? item.meterWater.unit * svcCfg.waterRate : 0;
@@ -405,6 +454,7 @@ export function recalcItem(
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);
 
   calculateOverdueFine(item, overdueCfg, monthYear);
+  applyBillRounding(item, monthYear);
   item.total = calcItemTotal(item);
   item.originalTotal = item.originalTotal ?? item.total;
   return item;
@@ -497,6 +547,11 @@ export function generateBillForMonth(monthYear: string, ctx: GenCtx): BillItem[]
       waterDefaultFormula: defaults.water,
       electricDefaultFormula: defaults.electric,
       overdueConfig: resolveOverdueConfig(tenant, ctx.config),
+      roundingConfig: {
+        enabled: !!ctx.config.rounding?.enabled,
+        unit: Math.max(1, Number(ctx.config.rounding?.unit) || 5),
+      },
+      roundingDismissed: false,
       waterActive: room.meterWaterActive !== false,
       electricActive: room.meterElectricActive !== false,
       meterWater: { prev: waterPrev, curr: waterCurr, unit: 0 },
@@ -619,6 +674,11 @@ export function normalizeBillItem(raw: any): BillItem {
     serviceFeeConfig: raw?.serviceFeeConfig
       ? { ...raw.serviceFeeConfig }
       : { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },
+    // บิลเก่าก่อนมีระบบ "ปัดเศษ" (ไม่เคยมีฟิลด์นี้เก็บไว้เลย) ต้องล็อกเป็น "ปิดใช้งาน" ถาวรตรงนี้ ห้ามปล่อย
+    // เป็น undefined เหมือนสูตร/ค่าปรับด้านบน เพราะ recalcItem จะ backfill ด้วยค่าปัจจุบันจาก Settings ทันที
+    // ที่เปิดบิลเก่ามาแก้/รีเฟรช ทำให้บิลเก่าโดนปัดเศษย้อนหลังทั้งที่ตอนออกบิลจริงยังไม่มีระบบนี้
+    roundingConfig: raw?.roundingConfig ? { ...raw.roundingConfig } : { enabled: false, unit: 5 },
+    roundingDismissed: !!raw?.roundingDismissed,
     sendLogs: Array.isArray(raw?.sendLogs) ? raw.sendLogs : [],
   };
 }

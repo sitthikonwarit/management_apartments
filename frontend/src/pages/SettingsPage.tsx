@@ -240,6 +240,8 @@ export default function SettingsPage() {
   const [dueDay, setDueDay] = useState(5);
   const [fineType, setFineType] = useState<"fixed" | "daily">("fixed");
   const [fineAmount, setFineAmount] = useState(0);
+  const [roundingEnabled, setRoundingEnabled] = useState(false);
+  const [roundingUnit, setRoundingUnit] = useState(5);
   const [liveMeterEnabled, setLiveMeterEnabled] = useState(true);
   const [splitRentByResidents, setSplitRentByResidents] = useState(false);
   const [meterDigits, setMeterDigits] = useState(5);
@@ -359,6 +361,8 @@ export default function SettingsPage() {
     setDueDay(config.overdue.day || 5);
     setFineType(config.overdue.type);
     setFineAmount(config.overdue.amount);
+    setRoundingEnabled(config.rounding.enabled);
+    setRoundingUnit(config.rounding.unit || 5);
     setLiveMeterEnabled(config.features.liveMeterEnabled);
     setSplitRentByResidents(config.features.splitRentByResidents);
     setMeterDigits(config.meterDigits);
@@ -587,6 +591,10 @@ export default function SettingsPage() {
           day: dueEom ? 0 : Math.min(31, Math.max(1, Number(dueDay) || 1)),
           type: fineType,
           amount: Number(fineAmount) || 0,
+        },
+        rounding: {
+          enabled: roundingEnabled,
+          unit: Math.max(1, Number(roundingUnit) || 5),
         },
         appIdentity: {
           logoUrl, logoBg: { enabled: logoBgEnabled, color: logoBgColor },
@@ -952,6 +960,36 @@ export default function SettingsPage() {
                             </small>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  </Searchable>
+                </div>
+
+                <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                  <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid var(--color-primary)", paddingBottom: 8 }}>
+                    <h6 className="mb-0" style={{ fontWeight: 700, color: "var(--color-primary)", border: "none", padding: 0, margin: 0 }}><i className="fas fa-coins me-2" />ปัดเศษยอดบิล</h6>
+                    <div className="form-check form-switch mb-0">
+                      <input className="form-check-input" type="checkbox" id="roundingEnable"
+                        checked={roundingEnabled} onChange={(e) => setRoundingEnabled(e.target.checked)} />
+                      <label className="form-check-label fw-bold" htmlFor="roundingEnable">เปิดใช้งาน</label>
+                    </div>
+                  </div>
+                  <Searchable query={q} keywords="ปัดเศษ ปัดลง เศษเงิน rounding">
+                    <div className="row g-3" style={{ opacity: roundingEnabled ? 1 : 0.5, pointerEvents: roundingEnabled ? "auto" : "none" }}>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-bold">ปัดยอดรวมลงทีละ</label>
+                        <div className="input-group">
+                          <input type="number" className="form-control fw-bold" min={1}
+                            value={roundingUnit} onChange={(e) => setRoundingUnit(Math.max(1, Number(e.target.value) || 1))} />
+                          <span className="input-group-text">บาท</span>
+                        </div>
+                      </div>
+                      <div className="col-md-8 d-flex align-items-end">
+                        <small className="text-muted">
+                          ตัวอย่าง: ยอดรวม 4,127 บาท จะปัดเหลือ {(4127 - (4127 % Math.max(1, Number(roundingUnit) || 1))).toLocaleString()} บาท —
+                          ใช้เฉพาะบิลที่ยังไม่เลยวันครบกำหนดชำระ (ตามวันที่ตั้งไว้ในหมวด "ค่าปรับล่าช้า" ด้านบน) และไม่มีผลย้อนหลังกับบิลเดือนเก่าที่ออกไปแล้ว
+                          แสดงเป็นรายการส่วนลดในบิล ลบออกเฉพาะใบได้จากหน้าแก้ไขบิล
+                        </small>
                       </div>
                     </div>
                   </Searchable>

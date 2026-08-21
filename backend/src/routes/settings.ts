@@ -42,6 +42,10 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       type: r.overdueFineType || "fixed",
       amount: Number(r.overdueFineAmount) || 0,
     },
+    rounding: {
+      enabled: r.roundingEnabled === "true",
+      unit: Math.max(1, Number(r.roundingUnit) || 5),
+    },
     appIdentity: {
       logoUrl: r.logoUrl,
       logoBg: { enabled: r.logoBgEnabled === "true", color: r.logoBgColor || "#ffffff" },
@@ -212,6 +216,8 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       overdueDay: String(Number(b.overdue?.day) || 0),
       overdueFineType: String(b.overdue?.type ?? "fixed"),
       overdueFineAmount: String(Number(b.overdue?.amount) || 0),
+      roundingEnabled: b.rounding?.enabled ? "true" : "false",
+      roundingUnit: String(Math.max(1, Number(b.rounding?.unit) || 5)),
       logoUrl: String(b.appIdentity?.logoUrl ?? ""),
       logoBgEnabled: b.appIdentity?.logoBg?.enabled ? "true" : "false",
       logoBgColor: String(b.appIdentity?.logoBg?.color ?? "#ffffff"),

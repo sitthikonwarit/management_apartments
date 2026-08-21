@@ -352,6 +352,10 @@ export const appConfig = pgTable("app_config", {
   overdueDay: str("overdue_day"),
   overdueFineType: str("overdue_fine_type"),
   overdueFineAmount: str("overdue_fine_amount"),
+  // ── ปัดเศษยอดบิลลงเป็นหลัก N บาท เฉพาะบิลที่ยังไม่เลยวันครบกำหนดชำระ (ใช้วันครบกำหนดร่วมกับ overdueDay
+  // ด้านบนเสมอ ไม่ว่า overdueEnabled จะเปิดอยู่หรือไม่) — ดู applyBillRounding ใน frontend/src/utils/billCalc.ts
+  roundingEnabled: text("rounding_enabled").notNull().default("false"),
+  roundingUnit: str("rounding_unit"),
   logoUrl: str("logo_url"),
   logoBgEnabled: text("logo_bg_enabled").notNull().default("false"),
   logoBgColor: str("logo_bg_color"),

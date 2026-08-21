@@ -14,7 +14,7 @@ import {
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
-  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows,
+  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -1032,9 +1032,15 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                 </div>
                 {item.discountItems.map((c, i) => (
                   <div key={c.id} className="bill-line-row">
-                    <span className="name"><i className="fas fa-tag me-1 text-danger" />{c.name}</span>
+                    <span className="name">
+                      <i className={`fas ${c.id === ROUNDING_DISCOUNT_ID ? "fa-coins" : "fa-tag"} me-1 text-danger`} />
+                      {c.name}{c.id === ROUNDING_DISCOUNT_ID ? " (อัตโนมัติ)" : ""}
+                    </span>
                     <span className="price text-danger">-{money(c.price)}</span>
-                    <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => onUpdate((d) => { d.discountItems.splice(i, 1); })}>
+                    <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => onUpdate((d) => {
+                      d.discountItems.splice(i, 1);
+                      if (c.id === ROUNDING_DISCOUNT_ID) d.roundingDismissed = true;
+                    })}>
                       <i className="fas fa-times" />
                     </button>
                   </div>
