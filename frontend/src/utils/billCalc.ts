@@ -182,8 +182,14 @@ export function getOutstandingBalance(
     if (!roomBill || roomBill.status === "paid") continue;
     if (!sameOutstandingTenant(roomBill, tenantId, tenantName)) continue;
 
-    // หักยอดที่จ่ายมาแล้วบางส่วนออกก่อน (ถ้ามี) ไม่งั้นเดือนถัดไปจะเรียกเก็บซ้ำเต็มจำนวน
-    const amt = (Number(roomBill.total) || 0) - (Number(roomBill.paidAmount) || 0);
+    // total ของบิลเดือนนั้นๆ มักรวมยอดค้างที่ยกมาจากเดือนก่อนหน้ามันเองไว้แล้ว (ผ่าน outstandingAmount ที่ล็อก
+    // ไว้ตอนสร้างบิลเดือนนั้น — ดู recalcItem/calcItemTotal) ต้องหัก outstandingAmount ของมันเองออกก่อน เอาเฉพาะ
+    // ส่วนที่ "เพิ่มขึ้นใหม่" จริงๆ ของเดือนนั้นมานับ ไม่งั้นถ้ามีหลายเดือนติดกันค้างพร้อมกัน (เช่น มิ.ย.+ก.ค.
+    // ยังไม่จ่ายทั้งคู่) ยอดของ มิ.ย. จะถูกนับซ้ำอีกรอบตอนบวกกับยอดของ ก.ค. (ที่มี มิ.ย. ฝังอยู่ในตัวเองอยู่แล้ว)
+    // ทำให้ยอดรวมพองขึ้นเป็นสองเท่า (บั๊กเดิม) จากนั้นค่อยหักยอดที่จ่ายมาแล้วบางส่วนออก (ถ้ามี) ไม่งั้นเดือนถัดไป
+    // จะเรียกเก็บซ้ำเต็มจำนวน
+    const ownAmount = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
+    const amt = Math.max(0, ownAmount - (Number(roomBill.paidAmount) || 0));
     if (amt > 0) {
       amount += amt;
       items.push({ monthYear: group.monthYear, amount: amt, fineAmount: Number(roomBill.fineAmount) || 0 });
