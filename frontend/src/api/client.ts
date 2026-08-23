@@ -126,6 +126,7 @@ export const billsApi = {
     paymentDate: string; slipImage?: { base64: string; name: string } | null; operator?: string;
     billTotal: number; paidTotal: number; sendReceipt?: boolean;
     linkedOldMonthPayments?: { id: string; monthYear: string; amount: number }[];
+    linkedOldMonthsCreditedAmount?: number;
     settledViaMonthYear?: string;
   }) => api.post("/bills/payments", payload).then((r) => r.data),
   cancelPayment: (id: string, reason: string) =>

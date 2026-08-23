@@ -100,6 +100,10 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
               id: String(l?.id ?? ""), monthYear: String(l?.monthYear ?? ""), amount: Number(l?.amount) || 0,
             }))
           : [],
+        // ยอดรวมของ linkedOldMonthPayments ด้านบนที่ถูกบวกเข้า paidAmount ของบิลนี้เอง (เดือนปัจจุบัน) ไปด้วยจริง
+        // ตอนบันทึก (ดู handleConfirmPayment ใน BillsPage.tsx) — ต้องเก็บแยกไว้ใช้ตอนยกเลิกรายการนี้ ย้อน paidAmount
+        // ของเดือนปัจจุบันกลับให้ครบ ไม่งั้นส่วนนี้จะค้างบวกอยู่ถาวรหลังยกเลิก (ยกเลิกไม่ครบ)
+        linkedOldMonthsCreditedAmount: Number(b.linkedOldMonthsCreditedAmount) || 0,
         // ตรงข้ามกับด้านบน — รายการชำระของเดือนเก่าที่ถูกปิดยอดไปพร้อมกับการชำระของเดือนอื่น (เก็บไว้แค่
         // แสดงผล "ชำระจากเดือน ..." ในประวัติ ไม่ได้ใช้ผูก logic ยกเลิกย้อนกลับ เพราะฝั่งนั้นยกเลิกจาก
         // รายการเดือนที่ปิดยอด (ตัวพาเรนต์) แทน)

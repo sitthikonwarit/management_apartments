@@ -2542,8 +2542,16 @@ export default function BillsPage() {
       .filter((o) => payload.settleOutstandingMonths.includes(o.monthYear))
       .map((o) => ({ monthYear: o.monthYear, due: adjustedOutstandingAmount(o, payload.settleOutstandingAdjustments) }));
     const oldMonthsDue = oldMonthsList.reduce((s, o) => s + o.due, 0);
-    const currentRemainingDue = payload.includeCurrentMonth ? Math.max(0, draft.total - (draft.paidAmount || 0)) : 0;
-    const totalDueToday = currentRemainingDue + oldMonthsDue;
+    // ยอดค้างยกมาทั้งหมด (draft.outstandingAmount) ถูกรวมเป็นส่วนหนึ่งของ draft.total อยู่แล้ว (ดู calcItemTotal
+    // ใน billCalc.ts) เดือนเก่าที่ "ติ๊กเลือกปิด" (oldMonthsDue) จึงไม่ใช่ยอดเพิ่มนอก draft.total แต่เป็นส่วนหนึ่ง
+    // ที่ซ้อนอยู่ในนั้นอยู่แล้ว — ต้องคิดยอดที่ต้องเก็บวันนี้จาก "ค่าใช้จ่ายของเดือนนี้เองล้วนๆ" (ownRemainingDue ไม่รวม
+    // ยอดค้างยกมาเลย) บวกเฉพาะเดือนเก่าที่เลือกปิดเท่านั้น ส่วนเดือนที่ไม่เลือก (deferred) จะไม่ถูกเรียกเก็บวันนี้ (บั๊กเดิม:
+    // เอา currentRemainingDue ที่มียอดค้างยกมาเต็มจำนวนฝังอยู่แล้ว ไปบวกกับ oldMonthsDue ที่เลือกปิดซ้ำอีกที ทำให้ต้อง
+    // จ่ายเกินยอดจริงเกือบเท่าตัวถึงจะปิดบิลเดือนนี้ได้ครบ — เดือนนี้เลยค้างสถานะ "ยังไม่จ่าย" ตลอดแม้จ่ายครบยอดที่แสดงจริง)
+    const ownRemainingDue = payload.includeCurrentMonth
+      ? Math.max(0, (draft.total - (draft.outstandingAmount || 0)) - (draft.paidAmount || 0))
+      : 0;
+    const totalDueToday = ownRemainingDue + oldMonthsDue;
 
     // เงินที่รับมาอาจมากกว่ายอดที่ต้องจ่าย (มีเงินทอน) หรือน้อยกว่า (จ่ายไม่ครบ) — ยอดที่นับเป็น
     // "จ่ายจริง" รวมคือส่วนที่ไม่เกินยอดที่ต้องจ่ายทั้งหมดวันนี้เท่านั้น ส่วนเกินคือเงินทอนคืนลูกค้า ไม่ใช่รายรับ
@@ -2569,8 +2577,14 @@ export default function BillsPage() {
         remainingForOld = 0;
       }
     }
-    const amountForCurrent = payload.includeCurrentMonth ? Math.min(remainingForOld, currentRemainingDue) : 0;
-    const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent;
+    // เงินที่จัดสรรไปปิด/จ่ายบางส่วนของเดือนเก่าที่เลือกไว้ (oldMonthsCollected) เป็น "เงินก้อนเดียวกัน" กับที่จ่ายยอด
+    // ค้างยกมาซึ่งฝังอยู่ใน draft.total ของเดือนนี้อยู่แล้ว ต้องเอามารวมเข้า paidAmount ของเดือนนี้ด้วย (เฉพาะตอนที่
+    // รวมยอดเดือนนี้ด้วย — ปิดสวิตช์ไว้แปลว่าไม่แตะยอด/สถานะของเดือนนี้เลยตามที่ UI แจ้งไว้) ไม่งั้น draft.total (ที่
+    // รวมยอดค้างเต็มจำนวน) จะไม่มีวันถูกจ่ายครบ ทำให้บิลเดือนนี้ค้างสถานะ "ยังไม่จ่าย" ตลอดไปทั้งที่จริงๆ เก็บเงินครบแล้ว
+    // (ดูรายการชำระแยกของเดือนเก่าที่ผูกกันผ่าน linkedOldMonthPayments/settledViaMonthYear ด้านล่าง)
+    const oldMonthsCollected = amountApplied - remainingForOld;
+    const amountForCurrent = payload.includeCurrentMonth ? Math.min(remainingForOld, ownRemainingDue) : 0;
+    const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent + (payload.includeCurrentMonth ? oldMonthsCollected : 0);
     const fullySettled = newPaidAmount >= draft.total - 0.005; // เผื่อ floating point
 
     // ปิดยอดค้างชำระเดือนก่อนที่มีเงินพอปิดเต็มจำนวนจริงเท่านั้น (fullyCoveredOldMonths) — ตั้งสถานะบิลต้นทาง
@@ -2668,6 +2682,7 @@ export default function BillsPage() {
       billTotal: draft.total,
       paidTotal: newPaidAmount,
       linkedOldMonthPayments,
+      linkedOldMonthsCreditedAmount: payload.includeCurrentMonth ? oldMonthsCollected : 0,
       sendReceipt: payload.sendReceipt,
     });
     setPayments((prev) => [...prev, paymentRow]);
@@ -2732,7 +2747,10 @@ export default function BillsPage() {
 
     const roomId = payment?.data?.roomId;
     const monthYear = payment?.data?.monthYear;
-    const applied = Number(payment?.data?.amount) || 0;
+    // paidAmount ของเดือนนี้ที่เพิ่มไปตอนบันทึก ไม่ได้มีแค่ payment.data.amount (ส่วนของเดือนนี้เองล้วนๆ) แต่รวม
+    // linkedOldMonthsCreditedAmount ที่จ่ายยอดค้างยกมาของเดือนเก่าไปด้วยพร้อมกัน (ดู handleConfirmPayment) ต้อง
+    // บวกกลับเข้าไปตอนย้อนยอดของเดือนนี้ด้วย ไม่งั้น paidAmount จะค้างเกินจริงอยู่ถาวรหลังยกเลิก (ยกเลิกไม่ครบ)
+    const applied = (Number(payment?.data?.amount) || 0) + (Number(payment?.data?.linkedOldMonthsCreditedAmount) || 0);
     await revertBillAmount(monthYear, roomId, applied);
 
     // รายการนี้เคยปิดยอดค้างของเดือนอื่นไปพร้อมกันตอนบันทึกด้วยไหม (linkedOldMonthPayments — ดู
