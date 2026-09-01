@@ -421,10 +421,11 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
   // หักออกจากยอดที่ต้องชำระวันนี้ไปด้วยผ่าน deferredOutstandingAmount ด้านล่างเหมือนกัน (รวมอยู่ในยอด
   // effectiveTotal ก้อนเดียว ไม่ได้แยกเรียกเก็บเป็นบิลของเดือนนั้นต่างหาก — ยอดขึ้นเป็นชำระของเดือนนี้เดือนเดียว)
   const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + adjustedOutstandingAmount(o, outstandingAdjustments), 0);
-  // ยอดค้างที่ยัง "ไม่เก็บวันนี้" = ยอดค้างเต็มที่แช่แข็งไว้ - เดือนที่เลือกปิด - เดือนที่ปิดไปแล้วก่อนหน้า
-  // (alreadySettledAmount) — ทั้งสองก้อนถูกหักออกจาก effectiveTotal เท่ากัน เดือนที่ปิดไปแล้วจะถูกเครดิตกลับเข้า
-  // paidAmount ของเดือนนี้ตอนบันทึกจริง (ดู handleConfirmPayment) เพื่อให้บิลเดือนนี้ปิดครบได้
-  const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount - alreadySettledAmount);
+  // ยอดค้างยกมาที่ "ไม่เก็บวันนี้" = ยอดค้างเต็มที่แช่แข็งไว้ - เฉพาะเดือนที่เลือกปิดวันนี้ — ก้อนนี้รวมทั้งเดือนที่
+  // ยังไม่เลือก (deferred จริง) และเดือนที่ปิดยอดไปแล้วก่อนหน้า (alreadySettledAmount) เพราะทั้งคู่ต้องถูกหักออก
+  // จากยอดที่ต้องชำระวันนี้เท่ากัน — ส่วนเดือนที่ปิดไปแล้วจะถูกเครดิตกลับเข้า paidAmount ของเดือนนี้ตอนบันทึกจริง
+  // (ดู handleConfirmPayment) เพื่อให้บิลเดือนนี้ยังปิดครบยอดเต็มได้
+  const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount);
 
   const totalAdjustment = fineWaiveAmount + discountDelta + deferredOutstandingAmount;
   // ปิดสวิตช์ "รวมยอดเดือนนี้ด้วย" = จ่ายเฉพาะเดือนเก่าที่เลือกไว้เท่านั้น ไม่แตะยอด/สถานะของเดือนนี้เลย
