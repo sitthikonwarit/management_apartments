@@ -15,6 +15,7 @@ import {
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
   adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
+  reconcileOutstandingItems,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -343,11 +344,12 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
 }
 
 // ── ป็อปอัพบันทึกการชำระเงิน — เลือกช่องทาง (เงินสด/สแกน) แนบสลิป บันทึกยอดสุทธิ+วันที่จ่าย ──
-function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, onCancelPayment }: {
+function PaymentModal({ item, history, monthYear, config, allBills, onClose, onConfirm, onCancelPayment }: {
   item: BillItem;
   history: any[];
   monthYear: string;
   config: AppConfig;
+  allBills: BillGroup[];
   onClose: () => void;
   onConfirm: (payload: {
     method: "cash" | "scan"; received: number; note: string; paymentDate: string;
@@ -375,7 +377,14 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
   const [discountItems, setDiscountItems] = useState<BillLineItem[]>(item.discountItems);
   const [newDiscName, setNewDiscName] = useState("");
   const [newDiscPrice, setNewDiscPrice] = useState("");
-  const [settleMonths, setSettleMonths] = useState<Set<string>>(() => new Set(item.outstandingItems.map((o) => o.monthYear)));
+  // ยอดค้างยกมาที่แช่แข็งไว้กับบิลนี้ อาจมีบางเดือนที่ผู้ใช้ไปปิดยอดจากหน้าของเดือนนั้นเองไปแล้ว — แยกออกมา
+  // ไม่ให้โผล่เป็นตัวเลือก "ปิดยอด" ซ้ำ และหักยอดที่ปิดไปแล้วออกจากยอดที่ต้องเก็บวันนี้ให้อัตโนมัติ
+  const { pending: pendingOutstandingItems, settled: settledOutstandingItems, settledAmount: alreadySettledAmount } =
+    useMemo(
+      () => reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems),
+      [allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems]
+    );
+  const [settleMonths, setSettleMonths] = useState<Set<string>>(() => new Set(pendingOutstandingItems.map((o) => o.monthYear)));
   // ปิดได้ = จ่ายเฉพาะยอดค้างเดือนเก่าที่เลือกไว้ ไม่จำเป็นต้องปิดยอด/จ่ายเดือนนี้ไปด้วยพร้อมกัน
   const [includeCurrentMonth, setIncludeCurrentMonth] = useState(true);
 
@@ -407,12 +416,15 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
 
   // เดือนที่ไม่ติ๊กเลือกปิดยอด = ยังไม่เก็บวันนี้ ต้องหักออกจากยอดที่ต้องชำระวันนี้ด้วย (ไม่ใช่แค่ไม่ปิดสถานะบิลต้นทาง)
   // ไม่งั้นจะเก็บเงินไปเต็มโดยที่ไม่ได้ปิดยอดค้างเดือนนั้นจริง กลายเป็นเงินเกินไม่มีที่ไป
-  const includedOutstandingItems = item.outstandingItems.filter((o) => settleMonths.has(o.monthYear));
+  const includedOutstandingItems = pendingOutstandingItems.filter((o) => settleMonths.has(o.monthYear));
   // ใช้ยอดหลังยกเว้นค่าปรับ/เพิ่มส่วนลดของเดือนนั้นๆ แล้ว (ถ้ามีปรับ) ไม่ใช่ o.amount ดิบ — ยอดที่ลดไปนี้จะ
   // หักออกจากยอดที่ต้องชำระวันนี้ไปด้วยผ่าน deferredOutstandingAmount ด้านล่างเหมือนกัน (รวมอยู่ในยอด
   // effectiveTotal ก้อนเดียว ไม่ได้แยกเรียกเก็บเป็นบิลของเดือนนั้นต่างหาก — ยอดขึ้นเป็นชำระของเดือนนี้เดือนเดียว)
   const includedOutstandingAmount = includedOutstandingItems.reduce((s, o) => s + adjustedOutstandingAmount(o, outstandingAdjustments), 0);
-  const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount);
+  // ยอดค้างที่ยัง "ไม่เก็บวันนี้" = ยอดค้างเต็มที่แช่แข็งไว้ - เดือนที่เลือกปิด - เดือนที่ปิดไปแล้วก่อนหน้า
+  // (alreadySettledAmount) — ทั้งสองก้อนถูกหักออกจาก effectiveTotal เท่ากัน เดือนที่ปิดไปแล้วจะถูกเครดิตกลับเข้า
+  // paidAmount ของเดือนนี้ตอนบันทึกจริง (ดู handleConfirmPayment) เพื่อให้บิลเดือนนี้ปิดครบได้
+  const deferredOutstandingAmount = Math.max(0, item.outstandingAmount - includedOutstandingAmount - alreadySettledAmount);
 
   const totalAdjustment = fineWaiveAmount + discountDelta + deferredOutstandingAmount;
   // ปิดสวิตช์ "รวมยอดเดือนนี้ด้วย" = จ่ายเฉพาะเดือนเก่าที่เลือกไว้เท่านั้น ไม่แตะยอด/สถานะของเดือนนี้เลย
@@ -587,7 +599,7 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
                 </div>
               )}
 
-              {item.outstandingItems.length > 0 && (
+              {(pendingOutstandingItems.length > 0 || settledOutstandingItems.length > 0) && (
                 <div className="payment-adjust-row mt-2">
                   <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />เลือกเดือนที่จะปิดยอดในการชำระครั้งนี้ (เลือกได้หลายเดือน)</label>
                   <div className="d-flex justify-content-between align-items-center py-1 mb-1" style={{ borderBottom: "1px dashed var(--color-light)" }}>
@@ -600,7 +612,16 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
                       {money(Math.max(0, item.total - item.outstandingAmount - fineWaiveAmount - discountDelta))} ฿
                     </span>
                   </div>
-                  {item.outstandingItems.map((o) => {
+                  {settledOutstandingItems.map((o) => (
+                    <div key={o.monthYear} className="d-flex justify-content-between align-items-center py-1 mb-1">
+                      <span className="small text-muted">
+                        <i className="fas fa-circle-check me-2 text-success" />{monthYearLabel(o.monthYear)}
+                        <span className="ms-1">(ปิดยอดไปแล้ว)</span>
+                      </span>
+                      <span className="small text-muted text-decoration-line-through">{money(o.amount)} ฿</span>
+                    </div>
+                  ))}
+                  {pendingOutstandingItems.map((o) => {
                     const checked = settleMonths.has(o.monthYear);
                     const adj = getAdjustment(o.monthYear);
                     const adjustedAmt = adjustedOutstandingAmount(o, outstandingAdjustments);
@@ -665,6 +686,13 @@ function PaymentModal({ item, history, monthYear, config, onClose, onConfirm, on
                     และถูกรวมในยอดที่ต้องชำระวันนี้ด้วย ส่วนเดือนที่ไม่ติ๊กจะไม่ถูกบวกเข้ายอดวันนี้ และยังคงค้างต่อไปให้เก็บภายหลัง —
                     ปิดสวิตช์ "{monthYearLabel(monthYear)} (เดือนนี้)" ได้ถ้าต้องการเก็บเฉพาะยอดค้างเดือนเก่าอย่างเดียว
                   </div>
+                  {alreadySettledAmount > 0 && (
+                    <div className="text-success small mt-1">
+                      <i className="fas fa-circle-check me-1" />
+                      ยอดค้างของ {settledOutstandingItems.map((o) => monthYearLabel(o.monthYear)).join(", ")} รวม {money(alreadySettledAmount)} ฿
+                      ถูกปิดยอดไปก่อนหน้านี้แล้ว — หักออกจากยอดที่ต้องชำระวันนี้ให้อัตโนมัติ
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1703,10 +1731,11 @@ function BillPinMenuPopup({ menu, cols, onPin, onClose }: { menu: BillPinMenu; c
   );
 }
 
-function BillTableView({ data, payments, monthYear, onEdit, onPrint, onToggleStatus, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
+function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
   data: { item: BillItem; idx: number }[];
   payments: any[];
   monthYear: string;
+  allBills: BillGroup[];
   onEdit: (idx: number) => void;
   onPrint: (item: BillItem) => void;
   onToggleStatus: (idx: number) => void;
@@ -1795,8 +1824,15 @@ function BillTableView({ data, payments, monthYear, onEdit, onPrint, onToggleSta
       case "electric":
         return <>{money(item.priceElectric)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterElectric.unit} หน่วย</div></>;
       case "other": return money(otherChargesTotal(item));
-      case "outstanding":
-        return item.outstandingAmount > 0 && item.status !== "paid" ? <span className="text-danger">{money(item.outstandingAmount)}</span> : "-";
+      case "outstanding": {
+        if (item.status === "paid" || !(item.outstandingAmount > 0)) return "-";
+        // หักเดือนค้างยกมาที่บิลต้นทางถูกปิดยอดไปแล้ว (ผู้ใช้ปิดจากหน้าของเดือนนั้นเองโดยตรง) ออกจากยอดที่โชว์
+        const { settledAmount } = item.outstandingItems.length > 0
+          ? reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems)
+          : { settledAmount: 0 };
+        const stillCarried = Math.max(0, item.outstandingAmount - settledAmount);
+        return stillCarried > 0 ? <span className="text-danger">{money(stillCarried)}</span> : "-";
+      }
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
@@ -2538,8 +2574,18 @@ export default function BillsPage() {
     // ยอดค้างของเดือนเก่าที่เลือกปิด (หลังหักค่าปรับ/ส่วนลดที่ปรับไว้แล้ว) — คำนวณด้วยสูตรเดียวกับที่ป็อปอัพ
     // ใช้แสดงผล กันตัวเลขสองที่เพี้ยนไม่ตรงกัน — เก็บเรียงลำดับเดิมของ outstandingItems (เก่าสุดก่อน) ไว้ใช้
     // จัดสรรเงินที่รับจริงด้านล่าง
+    // เดือนค้างยกมาที่บิลต้นทางถูก "ปิดยอดไปแล้ว" ก่อนหน้านี้ (ผู้ใช้ไปกดปิดจากหน้าของเดือนนั้นเองโดยตรง ไม่ได้
+    // ปิดผ่านป็อปอัพนี้) — snapshot outstandingAmount ที่ฝังอยู่ใน draft.total ยังนับรวมยอดพวกนี้อยู่ ต้องแยกออก
+    // ไม่เอาไปปิดซ้ำ แต่ต้องเครดิตกลับเข้า paidAmount ของเดือนนี้ (alreadySettledCredit ด้านล่าง) เท่ากับที่ป็อปอัพ
+    // หักออกจากยอดที่ต้องชำระวันนี้ไปแล้ว ไม่งั้นบิลเดือนนี้จะปิดครบไม่ได้ทั้งที่เก็บเงินจริงครบแล้ว
+    const reconciledOutstanding = reconcileOutstandingItems(
+      bills, target.roomId, target.tenantId, target.tenantName, target.outstandingItems
+    );
+    const alreadySettledMonths = new Set(reconciledOutstanding.settled.map((o) => o.monthYear));
+    const alreadySettledCredit = payload.includeCurrentMonth ? reconciledOutstanding.settledAmount : 0;
+
     const oldMonthsList = target.outstandingItems
-      .filter((o) => payload.settleOutstandingMonths.includes(o.monthYear))
+      .filter((o) => payload.settleOutstandingMonths.includes(o.monthYear) && !alreadySettledMonths.has(o.monthYear))
       .map((o) => ({ monthYear: o.monthYear, due: adjustedOutstandingAmount(o, payload.settleOutstandingAdjustments) }));
     const oldMonthsDue = oldMonthsList.reduce((s, o) => s + o.due, 0);
     // ยอดค้างยกมาทั้งหมด (draft.outstandingAmount) ถูกรวมเป็นส่วนหนึ่งของ draft.total อยู่แล้ว (ดู calcItemTotal
@@ -2584,7 +2630,12 @@ export default function BillsPage() {
     // (ดูรายการชำระแยกของเดือนเก่าที่ผูกกันผ่าน linkedOldMonthPayments/settledViaMonthYear ด้านล่าง)
     const oldMonthsCollected = amountApplied - remainingForOld;
     const amountForCurrent = payload.includeCurrentMonth ? Math.min(remainingForOld, ownRemainingDue) : 0;
-    const newPaidAmount = (draft.paidAmount || 0) + amountForCurrent + (payload.includeCurrentMonth ? oldMonthsCollected : 0);
+    const paidBeforeSettledCredit = (draft.paidAmount || 0) + amountForCurrent
+      + (payload.includeCurrentMonth ? oldMonthsCollected : 0);
+    // เครดิตยอดเดือนเก่าที่ปิดไปแล้วเข้า paidAmount ของเดือนนี้ แค่เท่าที่ยังขาดให้ครบ draft.total เท่านั้น
+    // (กันบวกเกินยอดถ้าเผลอรันซ้ำบนบิลที่ปิดครบไปแล้ว)
+    const settledCreditApplied = Math.max(0, Math.min(alreadySettledCredit, draft.total - paidBeforeSettledCredit));
+    const newPaidAmount = paidBeforeSettledCredit + settledCreditApplied;
     const fullySettled = newPaidAmount >= draft.total - 0.005; // เผื่อ floating point
 
     // ปิดยอดค้างชำระเดือนก่อนที่มีเงินพอปิดเต็มจำนวนจริงเท่านั้น (fullyCoveredOldMonths) — ตั้งสถานะบิลต้นทาง
@@ -2682,7 +2733,9 @@ export default function BillsPage() {
       billTotal: draft.total,
       paidTotal: newPaidAmount,
       linkedOldMonthPayments,
-      linkedOldMonthsCreditedAmount: payload.includeCurrentMonth ? oldMonthsCollected : 0,
+      // รวมยอดเดือนเก่าที่ปิดพร้อมกันในรายการนี้ + ยอดเดือนเก่าที่ปิดไปก่อนแล้วแต่เพิ่งถูกเครดิตเข้าเดือนนี้
+      // (alreadySettledCredit) — ตอนยกเลิกรายการนี้ต้องย้อน paidAmount ของเดือนนี้ออกให้ครบทั้งก้อน
+      linkedOldMonthsCreditedAmount: payload.includeCurrentMonth ? oldMonthsCollected + settledCreditApplied : 0,
       sendReceipt: payload.sendReceipt,
     });
     setPayments((prev) => [...prev, paymentRow]);
@@ -3093,6 +3146,7 @@ export default function BillsPage() {
               data={filteredData}
               payments={payments}
               monthYear={editingMonthYear}
+              allBills={bills}
               onEdit={openDetail}
               onPrint={(item) => openPrintConfig(
                 billData.map((it) => ({ item: it, monthYear: editingMonthYear })),
@@ -3491,6 +3545,7 @@ export default function BillsPage() {
           history={getPaymentHistory(payments, billData[payingIndex].roomId, editingMonthYear)}
           monthYear={editingMonthYear}
           config={config}
+          allBills={bills}
           onClose={() => setPayingIndex(null)}
           onConfirm={handleConfirmPayment}
           onCancelPayment={handleCancelPayment}

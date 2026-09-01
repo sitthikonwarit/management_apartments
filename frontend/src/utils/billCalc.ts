@@ -198,6 +198,31 @@ export function getOutstandingBalance(
   return { amount, items };
 }
 
+// ── ปรับ outstandingItems ที่แช่แข็งไว้ให้ตรงกับความจริง ────────────────────────
+// outstandingAmount/outstandingItems ถูก "แช่แข็ง" ไว้กับบิลตอนสร้าง และ refreshDerivedFields จงใจไม่คำนวณใหม่
+// (ดูคอมเมนต์ยาวที่ refreshDerivedFields) แต่ถ้าผู้ใช้ไปกดปิดยอดบิลเดือนเก่าจาก "หน้าของเดือนนั้นเอง" โดยตรง
+// (ไม่ได้ปิดผ่านป็อปอัพชำระเงินของเดือนนี้) snapshot นี้จะไม่ถูกอัปเดต ทำให้เดือนนี้ยังโชว์ยอดค้าง/ให้เลือกปิด
+// เดือนที่จริงๆ ปิดไปแล้ว — ฟังก์ชันนี้เทียบ outstandingItems กับสถานะจริงของบิลต้นทางแต่ละเดือน แล้วแยกเป็น
+// เดือนที่ยัง "ค้างจริง" (pending) กับยอดรวมของเดือนที่ "ปิดไปแล้ว" (settledAmount) ให้ผู้เรียกเอาไปหักออก
+export function reconcileOutstandingItems(
+  allBills: BillGroup[], roomId: string, tenantId: string | null, tenantName: string,
+  outstandingItems: OutstandingItem[]
+): { pending: OutstandingItem[]; settled: OutstandingItem[]; settledAmount: number } {
+  const pending: OutstandingItem[] = [];
+  const settled: OutstandingItem[] = [];
+  let settledAmount = 0;
+  for (const o of outstandingItems) {
+    const group = allBills.find((b) => b.monthYear === o.monthYear);
+    const roomBill = (group?.data || []).find((r) => String(r.roomId) === String(roomId));
+    const isSettled = !!roomBill
+      && sameOutstandingTenant(roomBill, tenantId, tenantName)
+      && (roomBill.status === "paid" || (Number(roomBill.paidAmount) || 0) >= (Number(roomBill.total) || 0) - 0.005);
+    if (isSettled) { settled.push(o); settledAmount += Number(o.amount) || 0; }
+    else pending.push(o);
+  }
+  return { pending, settled, settledAmount };
+}
+
 // ยกเว้นค่าปรับ/เพิ่มส่วนลดให้บิลเดือนก่อนหน้าที่กำลังจะปิดยอด (ตั้งค่าได้จากป็อปอัพบันทึกการชำระเงินของเดือน
 // ปัจจุบัน โดยไม่ต้องย้อนไปเปิดบิลเดือนนั้นแก้เอง) — key เป็น monthYear ของกลุ่มบิลที่จะปรับ
 export interface OutstandingAdjustment { fineWaiveAmount: number; discountItems: BillLineItem[] }
