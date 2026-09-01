@@ -3104,7 +3104,7 @@ export default function BillsPage() {
             <div className="bill-received-panel-grid">
               <div className="bill-received-item">
                 <div className="val text-success">{money(stats.receivedThisMonth)}</div>
-                <div className="lbl">รับแล้วเดือนนี้ ({stats.collectRate.toFixed(0)}%)</div>
+                <div className="lbl">รับแล้วเดือ ({stats.collectRate.toFixed(0)}%)</div>
               </div>
               <div className="bill-received-item">
                 <div className="val" style={{ color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)}</div>
