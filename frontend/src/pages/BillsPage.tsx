@@ -172,7 +172,7 @@ function renderBillRecordCell(col: BillRecordColDef, entry: PrintEntry, config: 
     case "water": return money(item.priceWater);
     case "electric": return money(item.priceElectric);
     case "other": return money(otherChargesTotal(item));
-    case "outstanding": return item.outstandingAmount > 0 ? money(item.outstandingAmount) : "-";
+    case "outstanding": return item.outstandingAmount > 0 && item.status !== "paid" ? money(item.outstandingAmount) : "-";
     case "fine": return item.fineAmount > 0 ? money(item.fineAmount) : "-";
     case "total": {
       if (isSplitRow) {
@@ -1796,7 +1796,7 @@ function BillTableView({ data, payments, monthYear, onEdit, onPrint, onToggleSta
         return <>{money(item.priceElectric)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterElectric.unit} หน่วย</div></>;
       case "other": return money(otherChargesTotal(item));
       case "outstanding":
-        return item.outstandingAmount > 0 ? <span className="text-danger">{money(item.outstandingAmount)}</span> : "-";
+        return item.outstandingAmount > 0 && item.status !== "paid" ? <span className="text-danger">{money(item.outstandingAmount)}</span> : "-";
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
@@ -3165,7 +3165,7 @@ export default function BillsPage() {
                   </div>
                   <div className="text-end">
                     <div style={{ fontWeight: 600, color: "var(--color-primary)" }}>{money(item.total)} ฿</div>
-                    {item.outstandingAmount > 0 && <small className="text-danger">ค้าง {money(item.outstandingAmount)} ฿</small>}
+                    {item.outstandingAmount > 0 && item.status !== "paid" && <small className="text-danger">ค้าง {money(item.outstandingAmount)} ฿</small>}
                   </div>
                   {getLatestSlipUrl(payments, item.roomId, editingMonthYear) && (
                     <button type="button" className="btn btn-sm btn-outline-primary" title="ดูสลิป"
