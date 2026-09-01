@@ -1646,7 +1646,9 @@ const BILL_TABLE_COLS: BillColDef[] = [
   { key: "electric",    header: "ค่าไฟ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "other",       header: "อื่นๆ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "outstanding", header: "ค้างชำระ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "ownMonth",    header: "ยอดเดือนนี้",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "total",       header: "รวมสุทธิ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "received",    header: "รับชำระแล้ว",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "status",      header: "สถานะ",       visible: true, pinnable: true,  pin: false,   thClass: "text-center", tdClass: "text-center" },
   { key: "actions",     header: "จัดการ",      visible: true, pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
@@ -1755,7 +1757,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
     checkbox: 40, room: 90, tenant: 160, priceRoom: 100, water: 100,
-    electric: 100, other: 100, outstanding: 110, total: 110, status: 110, actions: 130,
+    electric: 100, other: 100, outstanding: 110, ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
 
   const visible = cols.filter((c) => c.visible);
@@ -1826,15 +1828,23 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
         return <>{money(item.priceElectric)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterElectric.unit} หน่วย</div></>;
       case "other": return money(otherChargesTotal(item));
       case "outstanding": {
-        if (item.status === "paid" || !(item.outstandingAmount > 0)) return "-";
-        // หักเดือนค้างยกมาที่บิลต้นทางถูกปิดยอดไปแล้ว (ผู้ใช้ปิดจากหน้าของเดือนนั้นเองโดยตรง) ออกจากยอดที่โชว์
+        if (!(item.outstandingAmount > 0)) return "-";
+        // ยอดค้างยกมายังโชว์ให้เห็นเสมอ — เปลี่ยนเป็นสีเขียวเมื่อยอดก้อนนี้ถูกปิด/จ่ายครบแล้ว (บิลเดือนนี้จ่ายครบ
+        // หรือบิลต้นทางของเดือนที่ยกมาถูกปิดยอดไปแล้วเอง) ถ้ายังค้างจริงอยู่ให้เป็นสีแดงตามเดิม
         const { settledAmount } = item.outstandingItems.length > 0
           ? reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems)
           : { settledAmount: 0 };
-        const stillCarried = Math.max(0, item.outstandingAmount - settledAmount);
-        return stillCarried > 0 ? <span className="text-danger">{money(stillCarried)}</span> : "-";
+        const cleared = item.status === "paid" || settledAmount >= item.outstandingAmount - 0.005;
+        return <span className={cleared ? "text-success" : "text-danger"}>{money(item.outstandingAmount)}</span>;
       }
+      case "ownMonth": return money(Math.max(0, item.total - (item.outstandingAmount || 0)));
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
+      case "received": {
+        const paid = Number(item.paidAmount) || 0;
+        return paid > 0
+          ? <span className={paid >= item.total - 0.005 ? "text-success" : "text-warning"}>{money(paid)}</span>
+          : "-";
+      }
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
         const slipUrl = getLatestSlipUrl(payments, item.roomId, monthYear);
