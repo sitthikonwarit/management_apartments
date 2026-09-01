@@ -258,6 +258,11 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
           const cancelled = !!p.data?.cancelled;
           const linkedOld: { id: string; monthYear: string; amount: number }[] = Array.isArray(p.data?.linkedOldMonthPayments) ? p.data.linkedOldMonthPayments : [];
           const settledVia: string = p.data?.settledViaMonthYear || "";
+          // ยอดของรายการนี้ = ส่วนที่ลงบิลเดือนนี้ (data.amount) + ยอดเดือนเก่าที่ปิดไปพร้อมกันในรายการเดียวกัน
+          // (linkedOldMonthPayments) ไม่งั้นถ้าจ่าย "เฉพาะเดือนเก่า" (ไม่รวมเดือนนี้) data.amount จะเป็น 0 ทั้งที่
+          // จริงๆ รับเงินของเดือนเก่ามาแล้ว
+          const linkedOldTotal = linkedOld.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+          const txnAmount = (Number(p.data?.amount) || 0) + linkedOldTotal;
           return (
             <div key={p.id} className={`payment-history-item${cancelled ? " cancelled" : ""}`}>
               <div className="phi-top">
@@ -265,7 +270,7 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
                   ยอดที่ {i + 1}
                   {cancelled && <span className="phi-cancelled-badge">ยกเลิกแล้ว</span>}
                 </span>
-                <span className="phi-amt">{money(p.data?.amount ?? 0)} ฿</span>
+                <span className="phi-amt">{money(txnAmount)} ฿</span>
               </div>
               <div className="phi-bottom">
                 <span className="phi-meta">
@@ -291,7 +296,8 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
               )}
               {linkedOld.length > 0 && (
                 <div className="text-muted" style={{ fontSize: 11 }}>
-                  <i className="fas fa-link me-1" />ปิดยอดของเดือน {linkedOld.map((l) => monthYearLabel(l.monthYear)).join(", ")} ไปด้วย
+                  <i className="fas fa-link me-1" />
+                  ปิดยอดของเดือน {linkedOld.map((l) => `${monthYearLabel(l.monthYear)} (${money(Number(l.amount) || 0)} ฿)`).join(", ")} ไปด้วย
                 </div>
               )}
               {cancelled && (
@@ -315,7 +321,7 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
             <div className="confirm-icon confirm-icon--danger"><i className="fas fa-times" /></div>
             <h6 className="confirm-title">ยกเลิกยอดชำระนี้?</h6>
             <p className="confirm-message">
-              ยกเลิกยอด {money(confirmCancel.data?.amount ?? 0)} ฿ ที่ชำระเมื่อ {scheduledDateSafe(confirmCancel.paymentDate)} ใช่หรือไม่?
+              ยกเลิกยอด {money((Number(confirmCancel.data?.amount) || 0) + (Array.isArray(confirmCancel.data?.linkedOldMonthPayments) ? confirmCancel.data.linkedOldMonthPayments.reduce((s: number, l: any) => s + (Number(l?.amount) || 0), 0) : 0))} ฿ ที่ชำระเมื่อ {scheduledDateSafe(confirmCancel.paymentDate)} ใช่หรือไม่?
               <br /><small className="text-danger">ยอดคงเหลือของบิลจะเพิ่มขึ้นตามจำนวนนี้ และสถานะจะเปลี่ยนเป็นค้างชำระถ้ายังไม่ครบ</small>
             </p>
             <div className="text-start mb-3">
