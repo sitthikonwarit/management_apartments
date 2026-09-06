@@ -1091,6 +1091,59 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                 </div>
               </div>
             </div>
+
+            <div className="card mb-3 shadow-sm border-0">
+              <div className="card-body">
+                <h6 className="text-muted small fw-bold mb-2">
+                  <i className="fas fa-triangle-exclamation me-2 text-danger" />ค่าปรับล่าช้า (เฉพาะบิลใบนี้)
+                </h6>
+                {(() => {
+                  const fineMode = item.fineOverride?.mode ?? "auto";
+                  const setFineMode = (m: "auto" | "off" | "manual") => onUpdate((d) => {
+                    if (m === "auto") { d.fineOverride = undefined; return; }
+                    const prevAmt = d.fineOverride?.amount;
+                    d.fineOverride = {
+                      mode: m,
+                      amount: prevAmt ?? (m === "manual" ? Math.round(Number(item.fineAmount) || 0) : 0),
+                    };
+                  });
+                  return (
+                    <>
+                      <div className="btn-group btn-group-sm w-100 mb-2" role="group">
+                        <button type="button" className={`btn btn-outline-secondary${fineMode === "auto" ? " active" : ""}`}
+                          onClick={() => setFineMode("auto")}>อัตโนมัติ</button>
+                        <button type="button" className={`btn btn-outline-secondary${fineMode === "off" ? " active" : ""}`}
+                          onClick={() => setFineMode("off")}>ปิด</button>
+                        <button type="button" className={`btn btn-outline-secondary${fineMode === "manual" ? " active" : ""}`}
+                          onClick={() => setFineMode("manual")}>กรอกเอง</button>
+                      </div>
+                      {fineMode === "manual" && (
+                        <div className="row g-2 align-items-center mb-2">
+                          <label className="col-4 col-form-label small">จำนวนเงิน (฿)</label>
+                          <div className="col-8">
+                            <input type="number" min={0} className="form-control form-control-sm text-end"
+                              value={item.fineOverride?.amount ?? 0}
+                              onChange={(e) => onUpdate((d) => {
+                                d.fineOverride = { mode: "manual", amount: Math.max(0, Number(e.target.value) || 0) };
+                              })} />
+                          </div>
+                        </div>
+                      )}
+                      <div className="small text-muted">
+                        {fineMode === "off"
+                          ? "ไม่คิดค่าปรับล่าช้าสำหรับบิลใบนี้"
+                          : fineMode === "manual"
+                            ? <>ค่าปรับที่จะแสดงบนบิล: <span className="fw-bold text-danger">{money(item.fineAmount)} ฿</span>
+                              {(Number(item.fineWaived) || 0) > 0 && <> (หักส่วนลดค่าปรับ {money(item.fineWaived)} ฿ แล้ว)</>}</>
+                            : item.isOverdue
+                              ? <>เกินกำหนด {item.overdueDays} วัน · ค่าปรับอัตโนมัติ <span className="fw-bold text-danger">{money(item.fineAmount)} ฿</span></>
+                              : "ยังไม่เลยวันครบกำหนดชำระ — ยังไม่มีค่าปรับ"}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1198,7 +1251,7 @@ function BillSlip({ item, monthYear, config, payerName, payerIndex, payerCount, 
     ...item.customItems.map((c) => ({ name: c.name, price: c.price })),
     // เปิดสวิตช์ "ยอดค้างชำระ" แล้วต้องขึ้นเสมอไม่ว่าจะมียอดค้างจริงหรือไม่ (0 บาทก็ยังโชว์บรรทัดนี้)
     ...(showOutstanding ? [{ name: "ค้างชำระยกมา", price: item.outstandingAmount }] : []),
-    ...(item.fineAmount ? [{ name: `ค่าปรับ (${item.overdueDays} วัน)`, price: item.fineAmount }] : []),
+    ...(item.fineAmount ? [{ name: item.overdueDays > 0 ? `ค่าปรับ (${item.overdueDays} วัน)` : "ค่าปรับล่าช้า", price: item.fineAmount }] : []),
     ...item.discountItems.map((d) => ({ name: `ส่วนลด: ${d.name}`, price: -d.price })),
   ];
   // ขนาดตัวอักษรฐานของใบนี้ — สเกลขึ้นเล็กน้อยตามความสูงช่อง (สูงสุดแค่ 1.5 เท่า ที่ 1 ใบ/แผ่น) ไม่ใช่สเกล

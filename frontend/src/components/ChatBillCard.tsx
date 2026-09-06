@@ -94,7 +94,7 @@ function ChatBillCard({ data }: { data: BillSnapshot }) {
         ))}
 
         {data.fineAmount > 0 && (
-          <Row icon={data.fineIcon} name={`ค่าปรับล่าช้า (${data.overdueDays} วัน)`} price={`${money(data.fineAmount)} ฿`} highlight />
+          <Row icon={data.fineIcon} name={data.overdueDays > 0 ? `ค่าปรับล่าช้า (${data.overdueDays} วัน)` : "ค่าปรับล่าช้า"} price={`${money(data.fineAmount)} ฿`} highlight />
         )}
         {data.outstandingItems.length > 0
           ? data.outstandingItems.map((o, i) => (

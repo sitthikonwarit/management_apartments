@@ -49,6 +49,11 @@ export interface BillItem {
   // ยอดค่าปรับล่าช้าที่ยกเว้น/ปรับลดให้สะสม (หักออกจากค่าปรับที่คำนวณอัตโนมัติใน calculateOverdueFine เสมอ)
   // — ตั้งผ่านป็อปอัพบันทึกการชำระเงิน เพื่อลดหย่อนค่าปรับให้ผู้เช่าเป็นกรณีๆ ไป โดยไม่กระทบค่าเริ่มต้นของระบบ
   fineWaived: number;
+  // ตั้งค่าปรับล่าช้า "เฉพาะบิลใบนี้" ทับกติกากลาง (หน้า Settings) / กติกาต่อผู้เช่า — ตั้งจากหน้ารายละเอียดบิล
+  //   undefined หรือ mode "auto" = คิดค่าปรับอัตโนมัติตามกติกาปกติ
+  //   "off"    = ไม่คิดค่าปรับล่าช้าสำหรับบิลใบนี้ (ยังโชว์ป้าย "เกินกำหนด" ตามจริง แต่ยอดค่าปรับ = 0)
+  //   "manual" = กรอกจำนวนเงินค่าปรับเอง (ไม่สนวันครบกำหนด/อัตราต่อวัน) ยังหัก fineWaived ต่อได้ตามปกติ
+  fineOverride?: { mode: "auto" | "off" | "manual"; amount: number };
   isOverdue: boolean;
   overdueDays: number;
   total: number;
@@ -335,19 +340,36 @@ export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue
   item.isOverdue = false;
   item.overdueDays = 0;
   if (item.status === "paid") return;
-  if (!overdue?.enabled) return;
 
-  const dueDate = computeDueDate(monthYear, overdue.day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const mode = item.fineOverride?.mode ?? "auto";
 
-  if (today > dueDate) {
+  // ป้าย "เกินกำหนด X วัน" / ตัวกรอง = ข้อเท็จจริงว่าเลยวันครบกำหนดของงวดนี้จริงหรือยัง คิดตามกติกาวันครบ
+  // กำหนดเสมอ (ถ้ากติกาเปิดอยู่) ไม่ขึ้นกับ override — override คุมแค่ "ยอดเงินค่าปรับ" เท่านั้น
+  const pastDue = (() => {
+    if (!overdue?.enabled) return false;
+    const dueDate = computeDueDate(monthYear, overdue.day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today <= dueDate) return false;
     item.isOverdue = true;
-    const diffDays = Math.ceil(Math.abs(today.getTime() - dueDate.getTime()) / 86400000);
-    item.overdueDays = diffDays;
-    const rawFine = overdue.type === "fixed" ? (Number(overdue.amount) || 0) : diffDays * (Number(overdue.amount) || 0);
-    item.fineAmount = Math.max(0, rawFine - (Number(item.fineWaived) || 0));
+    item.overdueDays = Math.ceil(Math.abs(today.getTime() - dueDate.getTime()) / 86400000);
+    return true;
+  })();
+
+  if (mode === "off") return; // ปิดค่าปรับเฉพาะบิลใบนี้
+
+  if (mode === "manual") {
+    const amt = Math.max(0, Number(item.fineOverride?.amount) || 0);
+    item.fineAmount = Math.max(0, amt - (Number(item.fineWaived) || 0));
+    return;
   }
+
+  // auto — คิดอัตโนมัติตามกติกา ต่อเมื่อเลยวันครบกำหนดจริงเท่านั้น
+  if (!pastDue || !overdue?.enabled) return;
+  const rawFine = overdue.type === "fixed"
+    ? (Number(overdue.amount) || 0)
+    : item.overdueDays * (Number(overdue.amount) || 0);
+  item.fineAmount = Math.max(0, rawFine - (Number(item.fineWaived) || 0));
 }
 
 // ── ปัดเศษยอดบิลลง ────────────────────────────────────────────────────────────
@@ -688,6 +710,9 @@ export function normalizeBillItem(raw: any): BillItem {
       : [],
     fineAmount: Number(raw?.fineAmount) || 0,
     fineWaived: Number(raw?.fineWaived) || 0,
+    fineOverride: (raw?.fineOverride?.mode === "off" || raw?.fineOverride?.mode === "manual")
+      ? { mode: raw.fineOverride.mode, amount: Number(raw.fineOverride.amount) || 0 }
+      : undefined,
     isOverdue: !!raw?.isOverdue,
     overdueDays: Number(raw?.overdueDays) || 0,
     total: Number(raw?.total) || 0,

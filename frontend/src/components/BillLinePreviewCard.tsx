@@ -88,7 +88,7 @@ export function BillLinePreview({ item, monthYear, config }: { item: BillItem; m
 
         {item.fineAmount > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, background: "rgba(255,0,96,0.08)", padding: 10, borderRadius: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-danger)" }}><i className="fas fa-exclamation-triangle me-2" />ค่าปรับล่าช้า ({item.overdueDays} วัน)</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-danger)" }}><i className="fas fa-exclamation-triangle me-2" />ค่าปรับล่าช้า{item.overdueDays > 0 ? ` (${item.overdueDays} วัน)` : ""}</span>
             <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-danger)" }}>{money(item.fineAmount)}</span>
           </div>
         )}
