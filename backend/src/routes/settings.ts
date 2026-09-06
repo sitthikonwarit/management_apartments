@@ -200,8 +200,9 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
     let lineBotUserId = existingConfig.lineBotUserId ?? "";
     // ต้องถอดรหัส token เดิมก่อนเทียบ (เก็บเข้ารหัสไว้ในฐานข้อมูล — ดู lib/encryption.ts) ไม่งั้นจะเทียบกับ
     // newToken (plaintext จาก request body) ไม่ตรงทุกครั้งแม้ผู้ใช้ไม่ได้แก้ไข ทำให้ยิง LINE API ทุกครั้งที่
-    // กดบันทึกโดยไม่จำเป็น
-    if (newToken !== decryptField(existingConfig.lineChannelAccessToken ?? "")) {
+    // กดบันทึกโดยไม่จำเป็น — ยิงซ้ำเมื่อ token เปลี่ยน "หรือ" ยังไม่เคยแคช bot user id ไว้เลยทั้งที่มี token แล้ว
+    // (แถวเก่าที่ตั้ง token ไว้ก่อนมีฟีเจอร์ multi-tenant webhook — self-heal ให้ตอนกดบันทึกครั้งถัดไป)
+    if (newToken !== decryptField(existingConfig.lineChannelAccessToken ?? "") || (newToken && !lineBotUserId)) {
       lineBotUserId = newToken ? (await getBotUserId(newToken)) ?? "" : "";
     }
     await db.update(appConfig).set({

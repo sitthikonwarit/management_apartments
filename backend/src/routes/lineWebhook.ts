@@ -11,14 +11,44 @@
 import { Elysia } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { chatMessages, lineProfiles, rooms } from "../db/schema";
+import { appConfig, chatMessages, lineProfiles, rooms } from "../db/schema";
 import {
   getLineSettings, verifyLineSignature, getLineProfile, downloadLineContent,
   findTenantByLineUserId, cacheLineProfile,
 } from "../services/line";
 import { tryAutoConfirmSlipPayment } from "../services/payments";
 import { broadcastChange, broadcastChatMessage } from "../lib/wsHub";
-import { resolveOrgIdByDestination, resolveOrgIdWithFallback } from "../lib/orgContext";
+import { resolveOrgIdByDestination } from "../lib/orgContext";
+
+// หา "องค์กรเจ้าของ webhook นี้" + settings ของมัน โดยยึด x-line-signature เป็นตัวตัดสินหลัก:
+//   1) ลอง resolve จาก payload.destination ก่อน (เร็วสุด ถ้าเคยแคช appConfig.lineBotUserId ไว้ตอนบันทึกหน้า
+//      Settings) แล้วตรวจลายเซ็นด้วย channel secret ขององค์กรนั้น
+//   2) ถ้ายังไม่ได้ (ยังไม่เคยแคช bot user id / มีหลายองค์กรในระบบ) วนทุกองค์กรที่เปิด LINE Messaging ไว้ แล้ว
+//      เลือกองค์กรที่ channel secret ของมัน "ตรวจลายเซ็นคำขอนี้ผ่าน" — ปลอดภัยเชิงรหัสวิทยา เพราะมีแต่เจ้าของ
+//      secret จริงเท่านั้นที่ทำลายเซ็นให้ผ่านได้ จึงไม่มีทางหยิบข้ามไปองค์กรผิดตัว (ต่างจากการ fallback ไป
+//      "องค์กรแรกสุด" แบบมั่วๆ ที่ lib/orgContext.ts ห้ามไว้ — ดูคอมเมนต์หัวไฟล์นั้น)
+async function resolveWebhookOrg(destination: string, rawBody: string, signature: string | undefined) {
+  if (!signature) return null;
+
+  const tryOrg = async (orgId: string | null | undefined) => {
+    if (!orgId) return null;
+    const settings = await getLineSettings(orgId);
+    if (!settings.enabled || !settings.token || !settings.channelSecret) return null;
+    if (!verifyLineSignature(settings.channelSecret, rawBody, signature)) return null;
+    return { orgId, settings };
+  };
+
+  const byDestination = await tryOrg(await resolveOrgIdByDestination(destination));
+  if (byDestination) return byDestination;
+
+  const rows = await db.select({ id: appConfig.id }).from(appConfig)
+    .where(eq(appConfig.lineMessagingEnabled, "true"));
+  for (const row of rows) {
+    const hit = await tryOrg(row.id);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 const PROFILE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 วัน — ไม่ต้องยิง LINE API ทุกข้อความที่เข้ามา
 
@@ -55,20 +85,17 @@ export const lineWebhookRoute = new Elysia({ prefix: "/line" })
       }
 
       const destination = String(payload?.destination ?? "");
-      const orgId = await resolveOrgIdWithFallback(await resolveOrgIdByDestination(destination));
-      if (!orgId) return { ok: true }; // ไม่รู้จักช่องทางนี้เลย (2+ องค์กรในระบบแล้วแต่ยังไม่มีใครตรงกัน) — ตอบ 200 เฉยๆ ทิ้งไป กัน LINE retry รัว
+      const signature = request.headers.get("x-line-signature") ?? undefined;
 
-      const settings = await getLineSettings(orgId);
-      if (!settings.enabled || !settings.token || !settings.channelSecret) {
-        // ยังไม่ได้ตั้งค่าให้ครบ — ตอบ 200 เฉยๆ กัน LINE เข้าใจว่า endpoint ล่มแล้ว retry รัวๆ
+      // resolve องค์กร + ตรวจลายเซ็นในขั้นตอนเดียว (ดู resolveWebhookOrg ด้านบน) — ไม่ผ่านสักองค์กรก็ตอบ 200
+      // เฉยๆ ทิ้งไป กัน LINE เข้าใจว่า endpoint ล่มแล้ว retry รัวๆ (เคสที่พบบ่อย: ยังไม่ได้กรอก Channel Secret
+      // ในหน้าตั้งค่าระบบ > LINE Messaging ทำให้ตรวจลายเซ็นข้อความเข้าไม่ผ่านเลยสักข้อความ)
+      const resolved = await resolveWebhookOrg(destination, rawBody, signature);
+      if (!resolved) {
+        console.warn("[line-webhook] ไม่พบองค์กรที่ channel secret ตรวจลายเซ็นคำขอนี้ผ่าน — ทิ้งข้อความ (destination=%s)", destination || "(ว่าง)");
         return { ok: true };
       }
-
-      const signature = request.headers.get("x-line-signature") ?? undefined;
-      if (!verifyLineSignature(settings.channelSecret, rawBody, signature)) {
-        set.status = 401;
-        return { error: "invalid signature" };
-      }
+      const { orgId, settings } = resolved;
 
       const events: any[] = Array.isArray(payload?.events) ? payload.events : [];
       let received = false;
