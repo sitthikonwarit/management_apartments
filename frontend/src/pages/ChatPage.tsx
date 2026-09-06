@@ -354,6 +354,11 @@ export default function ChatPage() {
                     style={{
                       alignSelf: m.direction === "out" ? "flex-end" : "flex-start",
                       maxWidth: "70%", minWidth: 0,
+                      // จัดเป็นคอลัมน์ + ชิดด้านตามทิศข้อความ เพื่อให้ "ฟองข้อความ" กับ "บรรทัดเวลา" ต่างก็หด
+                      // พอดีเนื้อหาตัวเอง ไม่งั้นฟองข้อความ (บล็อก) จะถูกยืดกว้างเท่าบรรทัดเวลาที่ยาวกว่า
+                      // ทำให้ข้อความสั้นๆ เช่น "D" มีกล่องใหญ่เกินตัวหนังสือ
+                      display: "flex", flexDirection: "column",
+                      alignItems: m.direction === "out" ? "flex-end" : "flex-start",
                       borderRadius: "var(--border-radius-1)",
                       transition: "background-color 0.3s ease",
                       backgroundColor: highlightId === m.id ? "rgba(255, 214, 0, 0.35)" : "transparent",
