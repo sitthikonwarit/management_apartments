@@ -79,7 +79,7 @@ function Row({ icon, name, sub, price, highlight }: { icon: string; name: string
 
 function ChatBillCard({ data }: { data: BillSnapshot }) {
   return (
-    <div style={cardStyle}>
+    <div className="chat-line-card" style={cardStyle}>
       <div style={{ background: "var(--color-primary)", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <img src={data.logoUrl} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />
@@ -133,7 +133,7 @@ function ChatReceiptCard({ data }: { data: ReceiptSnapshot }) {
   const [showSlip, setShowSlip] = useState(false);
 
   return (
-    <div style={cardStyle}>
+    <div className="chat-line-card" style={cardStyle}>
       <div style={{ background: "var(--color-primary)", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <img src={data.receiptIcon} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />

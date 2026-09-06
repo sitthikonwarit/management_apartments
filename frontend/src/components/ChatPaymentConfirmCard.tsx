@@ -75,7 +75,7 @@ export function ChatPaymentConfirmMessage({ messageId, lineUserId, raw, onUpdate
       : { text: "รอตรวจสอบ", cls: "bg-light text-dark" };
 
   return (
-    <div style={cardStyle}>
+    <div className="chat-line-card" style={cardStyle}>
       <div style={{ background: "#1b9c85", padding: 16 }}>
         <div className="d-flex align-items-center">
           <i className="fas fa-hand-holding-dollar" style={{ color: "#fff", fontSize: 16 }} />

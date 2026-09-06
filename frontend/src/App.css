@@ -2781,3 +2781,16 @@ body.dark-mode .import-format-hint code { background: rgba(255,255,255,0.07); co
   .chat-toast-container { top: 20px; bottom: auto; left: 20px; right: 20px; width: auto; max-width: none; }
 }
 
+/* การ์ดสไตล์ LINE ในหน้าแชท (แจ้งซ่อม/แจ้งบิล/จองห้อง/แจ้งชำระเงิน) — พื้นการ์ดตั้งใจให้เป็นสีขาวตายตัว
+ * เลียนแบบการ์ดของ LINE ทั้งในโหมดสว่างและมืด จึงต้องตรึงสีตัวอักษรเป็นโทนเข้มไว้ด้วย ไม่งั้นโหมดมืดจะดึง
+ * สีตัวอักษร (var(--color-dark)/text-muted/small) เป็นโทนอ่อนมาอยู่บนพื้นขาวจนมองแทบไม่เห็น
+ * ดู ChatRepairCard.tsx / ChatBillCard.tsx / ChatBookingCard.tsx / ChatPaymentConfirmCard.tsx
+ * ที่ใส่ className="chat-line-card" ให้ div นอกสุดของการ์ด */
+.chat-line-card { color: #333; }
+.chat-line-card .text-muted,
+.chat-line-card small,
+body.dark-mode .chat-line-card .text-muted,
+body.dark-mode .chat-line-card small { color: #888 !important; }
+.chat-line-card .border-top,
+body.dark-mode .chat-line-card .border-top { border-color: #e0e0e0 !important; }
+

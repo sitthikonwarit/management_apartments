@@ -66,7 +66,7 @@ export function ChatRepairMessage({ messageId, lineUserId, raw, onUpdated }: {
   const total = data.adminItems.reduce((s, it) => s + it.price * it.qty, 0);
 
   return (
-    <div style={cardStyle}>
+    <div className="chat-line-card" style={cardStyle}>
       <div style={{ background: "#fd7e14", padding: 16 }}>
         <div className="d-flex align-items-center">
           <i className="fas fa-tools" style={{ color: "#fff", fontSize: 16 }} />

@@ -38,7 +38,7 @@ export function ChatBookingMessage({ raw }: { raw: string }) {
   }
 
   return (
-    <div style={cardStyle}>
+    <div className="chat-line-card" style={cardStyle}>
       <div style={{ background: "var(--color-primary)", padding: 16 }}>
         <div className="d-flex align-items-center">
           <i className="fas fa-door-open" style={{ color: "#fff", fontSize: 16 }} />
