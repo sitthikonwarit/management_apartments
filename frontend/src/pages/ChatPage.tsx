@@ -529,23 +529,40 @@ export default function ChatPage() {
   );
 }
 
+type BroadcastFormat = "text" | "image" | "template";
+
 // ── ป็อปอัพส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน — เลือกผู้รับเองจากรายชื่อสนทนาที่มีอยู่แล้ว
-// (ค้นหา + ติ๊กทีละคน/เลือกทั้งหมด) แล้วยิงทีละคนฝั่ง backend (ดู POST /chat/broadcast) สรุปผลสำเร็จ/ล้มเหลว
-// กลับมาแสดงให้พนักงานเห็นหลังส่งเสร็จ
+// (ค้นหา + กรองตามตึก + ติ๊กทีละคน/เลือกทั้งหมด) เลือกรูปแบบข้อความได้ 3 แบบ (ดู FORMAT_TABS ด้านล่าง) แล้วยิง
+// ทีละคนฝั่ง backend (ดู POST /chat/broadcast) สรุปผลสำเร็จ/ล้มเหลวกลับมาแสดงให้พนักงานเห็นหลังส่งเสร็จ
 function BroadcastModal({ conversations, onClose, onSent }: {
   conversations: ChatConversation[];
   onClose: () => void;
   onSent: () => void;
 }) {
   const [search, setSearch] = useState("");
+  const [towerFilter, setTowerFilter] = useState<string>(""); // "" = ทุกตึก
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [format, setFormat] = useState<BroadcastFormat>("text");
   const [text, setText] = useState("");
+  const [title, setTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [image, setImage] = useState<{ base64: string; name: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; results: { lineUserId: string; ok: boolean; error?: string }[] } | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
-  const filtered = conversations.filter((c) =>
-    `${c.displayName} ${c.roomNumber ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())
-  );
+  // รายชื่อตึก (เอาเฉพาะตึกที่มีห้องผูกกับสนทนาอยู่จริง) — เรียงตามชื่อให้หาง่าย มีตัวเลือก "ไม่ระบุตึก" ไว้ท้าย
+  // สำหรับสนทนาที่ยังไม่ผูกผู้เช่า/ห้อง (เช่น คนทักเข้ามาถามก่อนจอง)
+  const towerOptions = Array.from(
+    new Map(conversations.filter((c) => c.towerId).map((c) => [c.towerId as string, c.towerName || ""])).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1], "th"));
+  const hasUnassigned = conversations.some((c) => !c.towerId);
+
+  const filtered = conversations.filter((c) => {
+    if (towerFilter === "__none__" && c.towerId) return false;
+    if (towerFilter && towerFilter !== "__none__" && c.towerId !== towerFilter) return false;
+    return `${c.displayName} ${c.roomNumber ?? ""}`.toLowerCase().includes(search.trim().toLowerCase());
+  });
   const allFilteredSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.lineUserId));
 
   function toggle(lineUserId: string) {
@@ -565,12 +582,28 @@ function BroadcastModal({ conversations, onClose, onSent }: {
     });
   }
 
+  async function handlePickImage(file: File) {
+    const base64 = await readFileAsBase64(file);
+    setImage({ base64, name: file.name });
+  }
+
+  const canSend = selectedIds.size > 0
+    && (format === "text" ? !!text.trim()
+      : format === "template" ? !!text.trim()
+        : !!image); // image: รูปภาพบังคับ ลิงก์ไม่บังคับ
+
   async function handleSend() {
-    const value = text.trim();
-    if (!value || selectedIds.size === 0 || sending) return;
+    if (!canSend || sending) return;
     setSending(true);
     try {
-      const res = await chatApi.broadcast(Array.from(selectedIds), value);
+      const res = await chatApi.broadcast({
+        lineUserIds: Array.from(selectedIds),
+        format,
+        text: text.trim() || undefined,
+        title: format === "template" ? title.trim() || undefined : undefined,
+        linkUrl: (format === "image" || format === "template") ? linkUrl.trim() || undefined : undefined,
+        image: format === "image" && image ? image : undefined,
+      });
       setResult(res);
       if (res.failed === 0) {
         toastSuccess(`ส่งข้อความสำเร็จ ${res.sent} ห้อง`);
@@ -587,9 +620,15 @@ function BroadcastModal({ conversations, onClose, onSent }: {
     ? result.results.filter((r) => !r.ok).map((r) => conversations.find((c) => c.lineUserId === r.lineUserId)?.displayName ?? r.lineUserId)
     : [];
 
+  const FORMAT_TABS: { key: BroadcastFormat; icon: string; label: string }[] = [
+    { key: "text", icon: "fa-comment-dots", label: "ข้อความธรรมดา" },
+    { key: "image", icon: "fa-image", label: "รูปภาพขนาดใหญ่" },
+    { key: "template", icon: "fa-rectangle-ad", label: "การ์ดประกาศ" },
+  ];
+
   return (
     <div className="confirm-overlay" onClick={() => !sending && onClose()} style={{ zIndex: 1200 }}>
-      <div className="confirm-dialog" style={{ maxWidth: 480, width: "94%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+      <div className="confirm-dialog" style={{ maxWidth: 520, width: "94%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
         <div className="d-flex align-items-center gap-2 mb-3">
           <i className="fas fa-bullhorn text-primary" style={{ fontSize: "1.3rem" }} />
           <h6 className="confirm-title mb-0" style={{ textAlign: "left" }}>ส่งข้อความหลายห้องพร้อมกัน</h6>
@@ -612,13 +651,31 @@ function BroadcastModal({ conversations, onClose, onSent }: {
           </div>
         ) : (
           <>
+            <label className="form-label small fw-bold mb-1">รูปแบบข้อความ</label>
+            <div className="btn-group btn-group-sm w-100 mb-3" role="group">
+              {FORMAT_TABS.map((f) => (
+                <button key={f.key} type="button" className={`btn btn-outline-primary${format === f.key ? " active" : ""}`}
+                  onClick={() => setFormat(f.key)}>
+                  <i className={`fas ${f.icon} me-1`} />{f.label}
+                </button>
+              ))}
+            </div>
+
             <label className="form-label small fw-bold mb-1">เลือกผู้รับ ({selectedIds.size} คน)</label>
-            <div className="search-container mb-2">
-              <i className="fas fa-search" />
-              <input
-                type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ/ห้อง..."
-                value={search} onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="d-flex gap-2 mb-2">
+              <div className="search-container flex-grow-1">
+                <i className="fas fa-search" />
+                <input
+                  type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ/ห้อง..."
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <select className="form-select form-select-sm" style={{ maxWidth: 160 }} value={towerFilter}
+                onChange={(e) => setTowerFilter(e.target.value)}>
+                <option value="">ทุกตึก</option>
+                {towerOptions.map(([id, name]) => <option key={id} value={id}>{name || "(ไม่มีชื่อ)"}</option>)}
+                {hasUnassigned && <option value="__none__">ไม่ระบุตึก</option>}
+              </select>
             </div>
             <div className="d-flex justify-content-between align-items-center mb-1">
               <button type="button" className="btn btn-sm btn-outline-secondary" onClick={toggleSelectAllFiltered}>
@@ -630,7 +687,7 @@ function BroadcastModal({ conversations, onClose, onSent }: {
                 </button>
               )}
             </div>
-            <div className="nicescrollbar mb-3" style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--color-light)", borderRadius: 8 }}>
+            <div className="nicescrollbar mb-3" style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--color-light)", borderRadius: 8 }}>
               {filtered.length === 0 && <p className="text-muted small p-3 mb-0">ไม่พบรายชื่อ</p>}
               {filtered.map((c) => (
                 <label key={c.lineUserId} className="d-flex align-items-center gap-2 px-2 py-1" style={{ cursor: "pointer", borderBottom: "1px solid var(--color-light)" }}>
@@ -644,13 +701,51 @@ function BroadcastModal({ conversations, onClose, onSent }: {
               ))}
             </div>
 
-            <label className="form-label small fw-bold mb-1">ข้อความ</label>
-            <textarea className="form-control mb-3" rows={4} value={text} onChange={(e) => setText(e.target.value)}
-              placeholder="พิมพ์ข้อความที่จะส่งให้ทุกคนที่เลือกไว้..." />
+            {format === "template" && (
+              <>
+                <label className="form-label small fw-bold mb-1">หัวข้อประกาศ</label>
+                <input className="form-control mb-2" value={title} onChange={(e) => setTitle(e.target.value)}
+                  placeholder="เช่น แจ้งปิดน้ำชั่วคราว, ประกาศจากผู้ดูแลหอพัก..." />
+              </>
+            )}
+
+            {format === "image" ? (
+              <>
+                <label className="form-label small fw-bold mb-1">รูปภาพ</label>
+                <input ref={imageInputRef} type="file" accept="image/*" hidden
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePickImage(f); e.target.value = ""; }} />
+                <div className="mb-2">
+                  {image ? (
+                    <div className="d-flex align-items-center gap-2">
+                      <img src={image.base64} alt="" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, border: "1px solid var(--color-light)" }} />
+                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setImage(null)}><i className="fas fa-times me-1" />ลบ</button>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => imageInputRef.current?.click()}>
+                      <i className="fas fa-paperclip me-1" />เลือกรูปภาพ
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="form-label small fw-bold mb-1">ข้อความ</label>
+                <textarea className="form-control mb-2" rows={format === "template" ? 4 : 5} value={text} onChange={(e) => setText(e.target.value)}
+                  placeholder="พิมพ์ข้อความที่จะส่งให้ทุกคนที่เลือกไว้..." />
+              </>
+            )}
+
+            {(format === "image" || format === "template") && (
+              <>
+                <label className="form-label small fw-bold mb-1">ลิงก์แนบ <span className="text-muted fw-normal">(ไม่บังคับ)</span></label>
+                <input className="form-control mb-3" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https:// ... เช่น ลิงก์รูปประกาศ/รายละเอียดเพิ่มเติม" />
+              </>
+            )}
 
             <div className="confirm-actions">
               <button className="btn btn-outline-secondary" onClick={onClose} disabled={sending}>ยกเลิก</button>
-              <button className="btn btn-primary" onClick={handleSend} disabled={sending || !text.trim() || selectedIds.size === 0}>
+              <button className="btn btn-primary" onClick={handleSend} disabled={sending || !canSend}>
                 {sending
                   ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
                   : <><i className="fas fa-paper-plane me-1" />ส่งให้ {selectedIds.size || ""} ห้อง</>}

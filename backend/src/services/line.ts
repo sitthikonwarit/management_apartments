@@ -626,6 +626,71 @@ export async function sendFileLinkMessage(token: string, to: string, publicFileU
   await sendTextMessage(token, to, `📎 ${fileName}\n${publicFileUrl}`);
 }
 
+// รูปภาพขนาดใหญ่ (ใช้กับฟีเจอร์ส่งประกาศหลายห้องพร้อมกัน — ดู POST /chat/broadcast) ไม่แปะลิงก์ = ส่งเป็น
+// LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE) แปะลิงก์ = ต้องห่อ
+// ด้วย Flex bubble รูปใหญ่ (hero) + ปุ่มลิงก์แทน เพราะ image message ธรรมดาไม่รองรับ action ให้กดเปิดลิงก์ได้
+export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string): any {
+  if (!linkUrl) {
+    return { type: "image", originalContentUrl: publicImageUrl, previewImageUrl: publicImageUrl };
+  }
+  return {
+    type: "flex",
+    altText: "📷 รูปภาพประกาศ — กดดูรายละเอียด",
+    contents: {
+      type: "bubble",
+      size: "giga",
+      hero: { type: "image", url: publicImageUrl, size: "full", aspectRatio: "20:13", aspectMode: "cover", action: { type: "uri", uri: linkUrl } },
+      footer: {
+        type: "box", layout: "vertical", paddingAll: "12px",
+        contents: [
+          { type: "button", style: "primary", height: "md", color: COLOR_PRIMARY, action: { type: "uri", label: "เปิดลิงก์", uri: linkUrl } },
+        ],
+      },
+    },
+  };
+}
+
+// ข้อความประกาศแบบการ์ดใหญ่ — โทนสี/เลย์เอาต์เดียวกับการ์ดแจ้งบิล (ดู buildBillFlexMessage ด้านบน) เพื่อให้
+// ผู้เช่าคุ้นตาว่าเป็นข้อความทางการจากระบบ ไม่ใช่แค่ข้อความตัวอักษรธรรมดา — มีปุ่มลิงก์ท้ายการ์ดได้ถ้าระบุมา
+export function buildAnnouncementFlexMessage(settings: LineAppearanceSettings, title: string, bodyText: string, linkUrl: string): any {
+  const logoUrl = isUsableImageUrl(settings.logoUrl) ? settings.logoUrl : ICONS.HOME;
+  const footer = linkUrl
+    ? {
+        type: "box", layout: "vertical", paddingAll: "12px",
+        contents: [
+          { type: "button", style: "primary", height: "md", color: COLOR_PRIMARY, action: { type: "uri", label: "ดูเพิ่มเติม", uri: linkUrl } },
+        ],
+      }
+    : undefined;
+  return {
+    type: "flex",
+    altText: `${title || "ประกาศ"} — กดดูรายละเอียดในแชท`,
+    contents: {
+      type: "bubble",
+      size: "giga",
+      header: {
+        type: "box", layout: "vertical", backgroundColor: COLOR_PRIMARY, paddingAll: "20px",
+        contents: [
+          {
+            type: "box", layout: "horizontal", alignItems: "center",
+            contents: [
+              { type: "image", url: logoUrl, size: ICON_SIZE_HEADER, aspectRatio: "1:1", flex: 0 },
+              { type: "text", text: ` ${title || "ประกาศ"}`, weight: "bold", color: "#ffffff", size: "xl", margin: "md", wrap: true },
+            ],
+          },
+        ],
+      },
+      body: {
+        type: "box", layout: "vertical", backgroundColor: BG_BODY, paddingAll: "20px",
+        contents: [
+          { type: "text", text: bodyText || "-", size: "md", color: COLOR_TEXT, wrap: true },
+        ],
+      },
+      ...(footer ? { footer } : {}),
+    },
+  };
+}
+
 // ตรวจลายเซ็น webhook (header "x-line-signature") — ต้องคำนวณจาก raw body ตรงๆ ก่อนแปลงเป็น JSON
 // (ดูคอมเมนต์ใน routes/lineWebhook.ts เรื่องทำไมต้องอ่าน raw body ก่อน) เทียบแบบ timing-safe กันโจมตี
 export function verifyLineSignature(channelSecret: string, rawBody: string, signatureHeader: string | undefined): boolean {

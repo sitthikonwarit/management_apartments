@@ -153,6 +153,8 @@ export interface ChatConversation {
   tenantId: string | null;
   displayName: string;
   roomNumber: string | null;
+  towerId: string | null;
+  towerName: string | null;
   pictureUrl: string | null;
   lastMessage: string;
   lastMessageAt: string;
@@ -236,10 +238,16 @@ export const chatApi = {
   }) => api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/repair`, data).then((r) => r.data as ChatMessage),
   confirmPayment: (lineUserId: string, messageId: string, action: "confirm" | "reject", reason?: string) =>
     api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/payment-confirm`, { action, reason }).then((r) => r.data as ChatMessage),
-  // ส่งข้อความข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนา) — ยิงทีละคนฝั่ง backend
-  // แล้วสรุปผลกลับมาว่าสำเร็จ/ล้มเหลวกี่ราย (ดู BroadcastModal ใน ChatPage.tsx)
-  broadcast: (lineUserIds: string[], text: string) =>
-    api.post("/chat/broadcast", { lineUserIds, text }).then((r) => r.data as {
+  // ส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนา) — เลือกรูปแบบได้ 3 อย่าง:
+  // "text" ข้อความธรรมดา, "image" รูปภาพขนาดใหญ่ (แปะลิงก์ให้กดเปิดด้วยก็ได้), "template" การ์ดประกาศขนาดใหญ่
+  // โทนเดียวกับการ์ดแจ้งบิล (หัวข้อ+เนื้อหา+ปุ่มลิงก์ถ้ามี) — ยิงทีละคนฝั่ง backend แล้วสรุปผลกลับมาว่าสำเร็จ/
+  // ล้มเหลวกี่ราย (ดู BroadcastModal ใน ChatPage.tsx)
+  broadcast: (payload: {
+    lineUserIds: string[]; format: "text" | "image" | "template";
+    text?: string; title?: string; linkUrl?: string;
+    image?: { base64: string; name: string };
+  }) =>
+    api.post("/chat/broadcast", payload).then((r) => r.data as {
       sent: number; failed: number;
       results: { lineUserId: string; ok: boolean; error?: string }[];
     }),

@@ -5,7 +5,7 @@ import { chatMessages, lineProfiles, paymentIntents, rooms, tenants, towers, use
 import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
   uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
-  getOutstandingBillsForTenant,
+  getOutstandingBillsForTenant, pushLineMessage, buildBroadcastImageMessage, buildAnnouncementFlexMessage,
 } from "../services/line";
 import { recordConfirmedPayment } from "../services/payments";
 import { authDerive } from "../lib/authDerive";
@@ -112,15 +112,18 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
   // ไม่ใหญ่พอที่จะต้องทำ aggregate query เอง เหมือนที่ tenants.ts/settings.ts ก็โหลดทั้งตารางมาประมวลผลเอง)
   .get("/conversations", async ({ authUser }) => {
     const orgId = authUser!.orgId;
-    const [messages, tenantRows, roomRows, profileRows] = await Promise.all([
+    const [messages, tenantRows, roomRows, profileRows, towerRows] = await Promise.all([
       db.select().from(chatMessages).where(eq(chatMessages.orgId, orgId)),
       db.select().from(tenants).where(eq(tenants.orgId, orgId)),
       db.select().from(rooms).where(eq(rooms.orgId, orgId)),
       db.select().from(lineProfiles).where(eq(lineProfiles.orgId, orgId)),
+      db.select().from(towers).where(eq(towers.orgId, orgId)),
     ]);
     const tenantMap = new Map(tenantRows.map((t) => [t.id, t]));
     const roomMap = new Map(roomRows.map((r) => [r.id, r]));
     const profileMap = new Map(profileRows.map((p) => [p.lineUserId, p]));
+    // ตึก/อาคารของห้อง — ใช้ให้หน้าเว็บกรองรายชื่อสนทนาตามตึกได้ตอนส่งข้อความหลายห้องพร้อมกัน (ดู POST /broadcast)
+    const towerMap = new Map(towerRows.map((t) => [t.id, t]));
 
     const groups = new Map<string, Array<typeof chatMessages.$inferSelect>>();
     for (const m of messages) {
@@ -139,11 +142,14 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
         ? `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim()
         : [...msgs].reverse().find((m) => m.senderName)?.senderName || "ไม่ทราบชื่อ";
       const unreadCount = msgs.filter((m) => m.direction === "in" && !m.readAt).length;
+      const tower = room?.towerId ? towerMap.get(room.towerId) : undefined;
       return {
         lineUserId,
         tenantId: tenantId || null,
         displayName,
         roomNumber: room?.number || null,
+        towerId: room?.towerId || null,
+        towerName: tower?.name || null,
         pictureUrl: profileMap.get(lineUserId)?.pictureUrl || null,
         lastMessage: previewText(last),
         lastMessageAt: last.createdAt,
@@ -200,14 +206,23 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return parseMessage(row);
   })
-  // พนักงานส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนาฝั่งหน้าเว็บ) — ยิง push
+  // พนักงานส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนาฝั่งหน้าเว็บ) — เลือกรูปแบบ
+  // ได้ 3 อย่าง (format): "text" ข้อความธรรมดา, "image" รูปภาพขนาดใหญ่ (แปะลิงก์ให้กดเปิดด้วยก็ได้ ไม่แปะก็ได้),
+  // "template" การ์ดประกาศขนาดใหญ่โทนสีเดียวกับการ์ดแจ้งบิล (หัวข้อ + เนื้อหา + ปุ่มลิงก์ถ้ามี) — ยิง push
   // message ทีละคน (กันโดน LINE rate-limit ถ้ายิงพร้อมกันทีเดียวจำนวนมาก) รายที่ส่งไม่สำเร็จ (เช่น บล็อกบอทไปแล้ว)
   // ไม่ทำให้รายอื่นพังตามไปด้วย เก็บผลลัพธ์แยกรายคนคืนกลับไปให้หน้าเว็บสรุปให้พนักงานเห็นว่าใครส่งไม่ผ่านบ้าง
   .post("/broadcast", async ({ body, set, authUser }) => {
     const orgId = authUser!.orgId;
     const b = body as any;
+    const format = b?.format === "image" ? "image" : b?.format === "template" ? "template" : "text";
     const text = String(b?.text ?? "").trim();
-    if (!text) { set.status = 400; return { error: "กรุณากรอกข้อความ" }; }
+    const title = String(b?.title ?? "").trim();
+    const linkUrl = String(b?.linkUrl ?? "").trim();
+
+    if ((format === "text" || format === "template") && !text) {
+      set.status = 400;
+      return { error: "กรุณากรอกข้อความ" };
+    }
 
     const requestedIds = Array.isArray(b?.lineUserIds)
       ? Array.from(new Set(b.lineUserIds.map((x: any) => String(x)).filter(Boolean)))
@@ -227,12 +242,30 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const lineUserIds = requestedIds.filter((id) => knownIds.has(id));
     if (lineUserIds.length === 0) { set.status = 400; return { error: "ไม่พบผู้รับที่เลือกในองค์กรนี้" }; }
 
+    // รูปภาพต้องอัปโหลดครั้งเดียวก่อนวนส่ง (ใช้ URL เดียวกันซ้ำกับทุกคน ไม่อัปโหลดซ้ำทุกรอบ) ต้องมี
+    // PUBLIC_BASE_URL ตั้งไว้เหมือนฟีเจอร์แนบรูป/ไฟล์อื่นๆ ในหน้าแชท ไม่งั้น LINE ดึงรูปจากเซิร์ฟเวอร์เราไม่ได้
+    let relativeImageUrl = "";
+    let publicImageUrl = "";
+    if (format === "image") {
+      const base64 = String(b?.image?.base64 ?? "");
+      if (!base64) { set.status = 400; return { error: "กรุณาแนบรูปภาพ" }; }
+      relativeImageUrl = await uploadChatAttachment(b?.image?.name || `broadcast_${Date.now()}.jpg`, base64);
+      publicImageUrl = toPublicUrl(relativeImageUrl);
+      if (!publicImageUrl) { set.status = 400; return { error: "ยังไม่ได้ตั้งค่า PUBLIC_BASE_URL — LINE ต้องการ URL สาธารณะเพื่อดึงรูปไปแสดง" }; }
+    }
+
     const actor = await resolveActorName(orgId, authUser);
     const results: { lineUserId: string; ok: boolean; error?: string }[] = [];
     // ยิงทีละคนตามลำดับ (ไม่ใช้ Promise.all) — กันยิง LINE push message ถี่เกินไปพร้อมกันจำนวนมากจนโดน rate-limit
     for (const lineUserId of lineUserIds) {
       try {
-        await sendTextMessage(settings.token, lineUserId, text);
+        const message = format === "image"
+          ? buildBroadcastImageMessage(publicImageUrl, linkUrl)
+          : format === "template"
+            ? buildAnnouncementFlexMessage(settings, title, text, linkUrl)
+            : { type: "text", text };
+        await pushLineMessage(settings.token, lineUserId, [message]);
+
         const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         await db.insert(chatMessages).values({
           id,
@@ -240,8 +273,9 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
           lineUserId,
           tenantId: "",
           direction: "out",
-          messageType: "text",
-          text,
+          messageType: format === "image" ? "image" : "text",
+          text: format === "image" ? `[รูปภาพ]${linkUrl ? ` ${linkUrl}` : ""}` : format === "template" ? [title, text, linkUrl].filter(Boolean).join("\n") : text,
+          imageUrl: format === "image" ? relativeImageUrl : "",
           senderName: actor,
           createdAt: new Date().toISOString(),
           readAt: new Date().toISOString(),
