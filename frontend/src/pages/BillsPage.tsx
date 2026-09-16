@@ -609,16 +609,33 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
               {(pendingOutstandingItems.length > 0 || settledOutstandingItems.length > 0) && (
                 <div className="payment-adjust-row mt-2">
                   <label className="form-label small fw-bold mb-1"><i className="fas fa-history me-1 text-danger" />เลือกเดือนที่จะปิดยอดในการชำระครั้งนี้ (เลือกได้หลายเดือน)</label>
-                  <div className="d-flex justify-content-between align-items-center py-1 mb-1" style={{ borderBottom: "1px dashed var(--color-light)" }}>
-                    <span style={{ cursor: "pointer" }} onClick={() => setIncludeCurrentMonth((v) => !v)}>
-                      <input className="form-check-input me-2" type="checkbox" checked={includeCurrentMonth}
-                        onChange={(e) => setIncludeCurrentMonth(e.target.checked)} id="settle-current-month" />
-                      <span className="small fw-semibold">{monthYearLabel(monthYear)} (เดือนนี้)</span>
-                    </span>
-                    <span className="small text-danger fw-bold">
-                      {money(Math.max(0, item.total - item.outstandingAmount - fineWaiveAmount - discountDelta))} ฿
-                    </span>
-                  </div>
+                  {(() => {
+                    // ยอด "เดือนนี้" ล้วนๆ (ไม่รวมยอดค้างยกมา) หลังหักค่าปรับ/ส่วนลดที่ปรับในป็อปอัพนี้ — สูตร
+                    // เดียวกับ ownRemainingDue ใน handleConfirmPayment เทียบกับ item.paidAmount ที่จ่ายไปแล้วจริง
+                    // ถ้าครบแล้ว (เช่น จ่ายยอดของเดือนนี้ไปเต็มในรอบก่อนหน้า เหลือแต่ยอดค้างเดือนเก่า) ให้ล็อกเป็น
+                    // "รวมอยู่ในยอดวันนี้เสมอ" (ปิดคลิกไม่ได้ เหมือนเดือนเก่าที่ปิดยอดไปแล้วด้านล่าง) แทนที่จะโชว์
+                    // ยอดเต็มของเดือนนี้ซ้ำอีกรอบราวกับยังต้องเก็บเพิ่ม ทำให้ผู้ใช้เข้าใจผิดว่าต้องเก็บเงินซ้ำ
+                    const ownMonthTotal = Math.max(0, item.total - item.outstandingAmount - fineWaiveAmount - discountDelta);
+                    const ownMonthRemaining = Math.max(0, ownMonthTotal - (item.paidAmount || 0));
+                    const ownMonthSettled = ownMonthRemaining <= 0.005;
+                    return (
+                      <div className={`d-flex justify-content-between align-items-center py-1 mb-1${ownMonthSettled ? " opacity-50" : ""}`}
+                        style={{ borderBottom: "1px dashed var(--color-light)" }}>
+                        <span style={{ cursor: ownMonthSettled ? "default" : "pointer" }}
+                          onClick={() => { if (!ownMonthSettled) setIncludeCurrentMonth((v) => !v); }}>
+                          <input className="form-check-input me-2" type="checkbox"
+                            checked={ownMonthSettled ? true : includeCurrentMonth} disabled={ownMonthSettled}
+                            onChange={(e) => setIncludeCurrentMonth(e.target.checked)} id="settle-current-month" />
+                          <span className="small fw-semibold">{monthYearLabel(monthYear)} (เดือนนี้)</span>
+                        </span>
+                        {ownMonthSettled ? (
+                          <span className="small text-success fw-bold"><i className="fas fa-circle-check me-1" />ครบถ้วนแล้ว</span>
+                        ) : (
+                          <span className="small text-danger fw-bold">{money(ownMonthRemaining)} ฿</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {settledOutstandingItems.map((o) => (
                     <div key={o.monthYear} className="d-flex justify-content-between align-items-center py-1 mb-1">
                       <span className="small text-muted">
