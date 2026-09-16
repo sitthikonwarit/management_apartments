@@ -778,8 +778,12 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
       </div>
 
       {showReceiptChoice && (
-        <div className="confirm-overlay" style={{ zIndex: 1200 }}
-          onClick={(e) => { e.stopPropagation(); if (!submitting) setShowReceiptChoice(false); }}>
+        // กดปุ่ม "ยืนยันการชำระ" ที่ฟอร์มหลักไปแล้ว ถือว่ายืนยันจะบันทึกยอดนี้แน่นอน ป็อปอัพนี้แค่ถามต่อว่าจะส่ง
+        // ใบเสร็จเข้า LINE ไปด้วยหรือไม่เท่านั้น — ห้ามมีทางปิดป็อปอัพนี้ที่ไม่บันทึกยอดเลย (เดิมมีปุ่ม "ยกเลิก" +
+        // กดพื้นหลังปิดได้ ซึ่งดูเหมือนแค่ "ไม่เอาใบเสร็จ" แต่จริงๆ ยกเลิกการบันทึกยอดทั้งก้อนไปเงียบๆ โดยไม่มี error
+        // ใดๆ ทำให้ยอดที่จ่ายไปแล้วดูเหมือนไม่ถูกบันทึกเลย/ค้างเท่าเดิม — บั๊กเดิม) ปิดพื้นหลัง/กด Escape จึงไม่ทำอะไร
+        // ต้องเลือกปุ่มใดปุ่มหนึ่งด้านล่างเท่านั้นถึงจะปิดป็อปอัพได้ ทั้งคู่บันทึกยอดเหมือนกัน ต่างกันแค่ส่งใบเสร็จหรือไม่
+        <div className="confirm-overlay" style={{ zIndex: 1200 }}>
           <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="confirm-icon confirm-icon--primary"><i className="fab fa-line" /></div>
             <h6 className="confirm-title">ส่งใบเสร็จเข้า LINE ให้ผู้เช่าด้วยไหม?</h6>
@@ -787,9 +791,6 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
               บันทึกยอด {money(received)} ฿ — เลือกว่าจะส่งใบเสร็จรับเงินเข้าแชท LINE ของผู้เช่าไปด้วยหรือไม่
             </p>
             <div className="confirm-actions" style={{ flexWrap: "wrap" }}>
-              <button className="btn btn-outline-secondary" onClick={() => setShowReceiptChoice(false)} disabled={submitting}>
-                ยกเลิก
-              </button>
               <button className="btn btn-outline-success" onClick={() => submit(false)} disabled={submitting}>
                 {submitting ? <span className="spinner-border spinner-border-sm" /> : <>ไม่ส่งใบเสร็จ</>}
               </button>
