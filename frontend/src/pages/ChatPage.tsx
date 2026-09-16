@@ -43,6 +43,18 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+// อ่านขนาดจริง (กว้าง/สูง) ของรูปจาก base64 — ใช้ส่งไปให้ backend คำนวณ aspectRatio ของการ์ด Flex ตอนส่งรูป
+// พร้อมลิงก์ในฟีเจอร์ "ส่งข้อความหลายห้องพร้อมกัน" (ดู BroadcastModal) ให้การ์ดแสดงตามสัดส่วนจริงของรูป
+// ไม่ใช่ตัดครอปตามอัตราส่วนตายตัวแบบเดิม
+function readImageDims(base64: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("อ่านขนาดรูปไม่สำเร็จ"));
+    img.src = base64;
+  });
+}
+
 export default function ChatPage() {
   const { setBreadcrumb } = useBreadcrumb();
   useEffect(() => { setBreadcrumb([]); return () => setBreadcrumb([]); }, []);
@@ -546,7 +558,7 @@ function BroadcastModal({ conversations, onClose, onSent }: {
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-  const [image, setImage] = useState<{ base64: string; name: string } | null>(null);
+  const [image, setImage] = useState<{ base64: string; name: string; width: number; height: number } | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; results: { lineUserId: string; ok: boolean; error?: string }[] } | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -584,7 +596,8 @@ function BroadcastModal({ conversations, onClose, onSent }: {
 
   async function handlePickImage(file: File) {
     const base64 = await readFileAsBase64(file);
-    setImage({ base64, name: file.name });
+    const { width, height } = await readImageDims(base64).catch(() => ({ width: 0, height: 0 }));
+    setImage({ base64, name: file.name, width, height });
   }
 
   const canSend = selectedIds.size > 0

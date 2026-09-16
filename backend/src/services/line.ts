@@ -626,10 +626,27 @@ export async function sendFileLinkMessage(token: string, to: string, publicFileU
   await sendTextMessage(token, to, `📎 ${fileName}\n${publicFileUrl}`);
 }
 
+function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
+
+// สัดส่วนจริงของรูป (w:h ที่ลดรูปแล้ว) ให้การ์ด Flex แสดงตามสัดส่วนจริงของรูปที่อัปโหลด ไม่ใช่ครอปตามอัตราส่วน
+// ตายตัว — LINE รองรับ aspectRatio ระหว่าง 1:3 ถึง 3:1 เท่านั้น (นอกช่วงนี้ต้อง clamp ไม่งั้น LINE ปฏิเสธข้อความ
+// ทั้งฉบับ) ไม่มีขนาดจริงส่งมา (เช่น อ่านไม่สำเร็จฝั่ง frontend) ใช้ 1:1 เป็นค่าเริ่มต้นแทน
+function resolveImageAspectRatio(width?: number, height?: number): string {
+  if (!width || !height || width <= 0 || height <= 0) return "1:1";
+  const clamped = Math.max(1 / 3, Math.min(3, width / height));
+  // แปลงอัตราส่วนที่ clamp แล้วกลับเป็นเศษส่วนจำนวนเต็ม (คูณ 1000 แล้วลดรูปด้วย gcd) กัน string ยาวเกินไป
+  const w = Math.round(clamped * 1000);
+  const h = 1000;
+  const g = gcd(w, h) || 1;
+  return `${w / g}:${h / g}`;
+}
+
 // รูปภาพขนาดใหญ่ (ใช้กับฟีเจอร์ส่งประกาศหลายห้องพร้อมกัน — ดู POST /chat/broadcast) ไม่แปะลิงก์ = ส่งเป็น
-// LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE) แปะลิงก์ = ต้องห่อ
-// ด้วย Flex bubble รูปใหญ่ (hero) + ปุ่มลิงก์แทน เพราะ image message ธรรมดาไม่รองรับ action ให้กดเปิดลิงก์ได้
-export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string): any {
+// LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE ตามสัดส่วนจริงของรูป
+// อยู่แล้วโดยไม่ต้องกำหนดเอง) แปะลิงก์ = ต้องห่อด้วย Flex bubble รูปใหญ่ (hero) + ปุ่มลิงก์แทน เพราะ image
+// message ธรรมดาไม่รองรับ action ให้กดเปิดลิงก์ได้ — กรณีนี้ต้องกำหนด aspectRatio เอง (ดู resolveImageAspectRatio)
+// ให้ตรงกับสัดส่วนจริงของรูป ไม่งั้น Flex จะครอปรูปตามอัตราส่วนตายตัว ทำให้รูปเพี้ยน/โดนตัดขอบ
+export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string, width?: number, height?: number): any {
   if (!linkUrl) {
     return { type: "image", originalContentUrl: publicImageUrl, previewImageUrl: publicImageUrl };
   }
@@ -639,7 +656,11 @@ export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: stri
     contents: {
       type: "bubble",
       size: "giga",
-      hero: { type: "image", url: publicImageUrl, size: "full", aspectRatio: "20:13", aspectMode: "cover", action: { type: "uri", uri: linkUrl } },
+      hero: {
+        type: "image", url: publicImageUrl, size: "full",
+        aspectRatio: resolveImageAspectRatio(width, height), aspectMode: "cover",
+        action: { type: "uri", uri: linkUrl },
+      },
       footer: {
         type: "box", layout: "vertical", paddingAll: "12px",
         contents: [

@@ -260,7 +260,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     for (const lineUserId of lineUserIds) {
       try {
         const message = format === "image"
-          ? buildBroadcastImageMessage(publicImageUrl, linkUrl)
+          ? buildBroadcastImageMessage(publicImageUrl, linkUrl, Number(b?.image?.width) || undefined, Number(b?.image?.height) || undefined)
           : format === "template"
             ? buildAnnouncementFlexMessage(settings, title, text, linkUrl)
             : { type: "text", text };

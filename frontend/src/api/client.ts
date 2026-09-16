@@ -245,7 +245,7 @@ export const chatApi = {
   broadcast: (payload: {
     lineUserIds: string[]; format: "text" | "image" | "template";
     text?: string; title?: string; linkUrl?: string;
-    image?: { base64: string; name: string };
+    image?: { base64: string; name: string; width?: number; height?: number };
   }) =>
     api.post("/chat/broadcast", payload).then((r) => r.data as {
       sent: number; failed: number;
