@@ -236,6 +236,13 @@ export const chatApi = {
   }) => api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/repair`, data).then((r) => r.data as ChatMessage),
   confirmPayment: (lineUserId: string, messageId: string, action: "confirm" | "reject", reason?: string) =>
     api.patch(`/chat/conversations/${lineUserId}/messages/${messageId}/payment-confirm`, { action, reason }).then((r) => r.data as ChatMessage),
+  // ส่งข้อความข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนา) — ยิงทีละคนฝั่ง backend
+  // แล้วสรุปผลกลับมาว่าสำเร็จ/ล้มเหลวกี่ราย (ดู BroadcastModal ใน ChatPage.tsx)
+  broadcast: (lineUserIds: string[], text: string) =>
+    api.post("/chat/broadcast", { lineUserIds, text }).then((r) => r.data as {
+      sent: number; failed: number;
+      results: { lineUserId: string; ok: boolean; error?: string }[];
+    }),
 };
 
 export const settingsApi = {

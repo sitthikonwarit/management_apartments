@@ -200,6 +200,61 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return parseMessage(row);
   })
+  // พนักงานส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน (เลือกผู้รับเองจากรายชื่อสนทนาฝั่งหน้าเว็บ) — ยิง push
+  // message ทีละคน (กันโดน LINE rate-limit ถ้ายิงพร้อมกันทีเดียวจำนวนมาก) รายที่ส่งไม่สำเร็จ (เช่น บล็อกบอทไปแล้ว)
+  // ไม่ทำให้รายอื่นพังตามไปด้วย เก็บผลลัพธ์แยกรายคนคืนกลับไปให้หน้าเว็บสรุปให้พนักงานเห็นว่าใครส่งไม่ผ่านบ้าง
+  .post("/broadcast", async ({ body, set, authUser }) => {
+    const orgId = authUser!.orgId;
+    const b = body as any;
+    const text = String(b?.text ?? "").trim();
+    if (!text) { set.status = 400; return { error: "กรุณากรอกข้อความ" }; }
+
+    const requestedIds = Array.isArray(b?.lineUserIds)
+      ? Array.from(new Set(b.lineUserIds.map((x: any) => String(x)).filter(Boolean)))
+      : [];
+    if (requestedIds.length === 0) { set.status = 400; return { error: "กรุณาเลือกผู้รับอย่างน้อย 1 คน" }; }
+
+    const settings = await getLineSettings(orgId);
+    if (!settings.enabled || !settings.token) {
+      set.status = 400;
+      return { error: "ยังไม่ได้เปิดใช้งาน/ตั้งค่า LINE Channel Access Token ในหน้าตั้งค่าระบบ" };
+    }
+
+    // จำกัดผู้รับเฉพาะ lineUserId ที่เคยมีบทสนทนากับองค์กรนี้จริงเท่านั้น (กันส่งไปหา LINE user id ขององค์กรอื่น
+    // ที่หลุดเข้ามาในคำขอ) — ดูรายชื่อจาก chatMessages ที่มีอยู่แล้ว แทนที่จะเชื่อ lineUserIds จาก client ตรงๆ
+    const knownRows = await db.select({ lineUserId: chatMessages.lineUserId }).from(chatMessages).where(eq(chatMessages.orgId, orgId));
+    const knownIds = new Set(knownRows.map((r) => r.lineUserId));
+    const lineUserIds = requestedIds.filter((id) => knownIds.has(id));
+    if (lineUserIds.length === 0) { set.status = 400; return { error: "ไม่พบผู้รับที่เลือกในองค์กรนี้" }; }
+
+    const actor = await resolveActorName(orgId, authUser);
+    const results: { lineUserId: string; ok: boolean; error?: string }[] = [];
+    // ยิงทีละคนตามลำดับ (ไม่ใช้ Promise.all) — กันยิง LINE push message ถี่เกินไปพร้อมกันจำนวนมากจนโดน rate-limit
+    for (const lineUserId of lineUserIds) {
+      try {
+        await sendTextMessage(settings.token, lineUserId, text);
+        const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await db.insert(chatMessages).values({
+          id,
+          orgId,
+          lineUserId,
+          tenantId: "",
+          direction: "out",
+          messageType: "text",
+          text,
+          senderName: actor,
+          createdAt: new Date().toISOString(),
+          readAt: new Date().toISOString(),
+        });
+        await markInboundRead(orgId, lineUserId);
+        results.push({ lineUserId, ok: true });
+      } catch (e: any) {
+        results.push({ lineUserId, ok: false, error: e?.message ?? "Unknown error" });
+      }
+    }
+
+    return { sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+  })
   // พนักงานส่งรูปภาพ/ไฟล์แนบ — รูปภาพส่งเป็น LINE image message จริง, ไฟล์อื่นๆ (LINE ไม่มี message type
   // "file" สำหรับส่งออก) ส่งเป็นข้อความลิงก์ดาวน์โหลดแทน (ดู sendFileLinkMessage ใน services/line.ts)
   .post("/conversations/:lineUserId/send-attachment", async ({ params, body, set, authUser }) => {

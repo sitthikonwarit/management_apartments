@@ -4,7 +4,7 @@ import { chatApi, type ChatConversation, type ChatMessage } from "../api/client"
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { thaiDateTimeString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
-import { toastError } from "../utils/toast";
+import { toastError, toastSuccess } from "../utils/toast";
 import { LINE_STICKERS, stickerThumbUrl } from "../utils/lineStickers";
 import { AVATAR_URL } from "../components/TenantTableView";
 import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
@@ -57,6 +57,7 @@ export default function ChatPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [search, setSearch] = useState("");
   const [detailTab, setDetailTab] = useState<ChatDetailTab | null>(null);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -250,12 +251,18 @@ export default function ChatPage() {
         background: "var(--color-white)",
         borderRadius: "var(--border-radius-1)", border: "1px solid var(--color-light)",
       }}>
-        <div className="search-container p-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
-          <i className="fas fa-search" />
-          <input
-            type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ..."
-            value={search} onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="d-flex gap-2 p-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
+          <div className="search-container flex-grow-1">
+            <i className="fas fa-search" />
+            <input
+              type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ..."
+              value={search} onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" title="ส่งข้อความหลายห้องพร้อมกัน"
+            disabled={conversations.length === 0} onClick={() => setBroadcastOpen(true)}>
+            <i className="fas fa-bullhorn" />
+          </button>
         </div>
         {conversations.length === 0 && (
           <p className="text-muted small p-3 mb-0">ยังไม่มีข้อความเข้ามาจาก LINE</p>
@@ -510,6 +517,148 @@ export default function ChatPage() {
           onIndexChange={setLightboxIndex}
         />
       )}
+
+      {broadcastOpen && (
+        <BroadcastModal
+          conversations={conversations}
+          onClose={() => setBroadcastOpen(false)}
+          onSent={() => { setBroadcastOpen(false); loadConversations(); if (selected) chatApi.getMessages(selected).then(setMessages).catch(() => {}); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── ป็อปอัพส่งข้อความเดียวกันให้หลายห้อง/หลายคนพร้อมกัน — เลือกผู้รับเองจากรายชื่อสนทนาที่มีอยู่แล้ว
+// (ค้นหา + ติ๊กทีละคน/เลือกทั้งหมด) แล้วยิงทีละคนฝั่ง backend (ดู POST /chat/broadcast) สรุปผลสำเร็จ/ล้มเหลว
+// กลับมาแสดงให้พนักงานเห็นหลังส่งเสร็จ
+function BroadcastModal({ conversations, onClose, onSent }: {
+  conversations: ChatConversation[];
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ sent: number; failed: number; results: { lineUserId: string; ok: boolean; error?: string }[] } | null>(null);
+
+  const filtered = conversations.filter((c) =>
+    `${c.displayName} ${c.roomNumber ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())
+  );
+  const allFilteredSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.lineUserId));
+
+  function toggle(lineUserId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineUserId)) next.delete(lineUserId); else next.add(lineUserId);
+      return next;
+    });
+  }
+
+  function toggleSelectAllFiltered() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) filtered.forEach((c) => next.delete(c.lineUserId));
+      else filtered.forEach((c) => next.add(c.lineUserId));
+      return next;
+    });
+  }
+
+  async function handleSend() {
+    const value = text.trim();
+    if (!value || selectedIds.size === 0 || sending) return;
+    setSending(true);
+    try {
+      const res = await chatApi.broadcast(Array.from(selectedIds), value);
+      setResult(res);
+      if (res.failed === 0) {
+        toastSuccess(`ส่งข้อความสำเร็จ ${res.sent} ห้อง`);
+        onSent();
+      }
+    } catch (e: any) {
+      toastError(e?.response?.data?.error || "ส่งข้อความไม่สำเร็จ");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const failedNames = result
+    ? result.results.filter((r) => !r.ok).map((r) => conversations.find((c) => c.lineUserId === r.lineUserId)?.displayName ?? r.lineUserId)
+    : [];
+
+  return (
+    <div className="confirm-overlay" onClick={() => !sending && onClose()} style={{ zIndex: 1200 }}>
+      <div className="confirm-dialog" style={{ maxWidth: 480, width: "94%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+        <div className="d-flex align-items-center gap-2 mb-3">
+          <i className="fas fa-bullhorn text-primary" style={{ fontSize: "1.3rem" }} />
+          <h6 className="confirm-title mb-0" style={{ textAlign: "left" }}>ส่งข้อความหลายห้องพร้อมกัน</h6>
+        </div>
+
+        {result ? (
+          <div>
+            <div className={`small mb-2 ${result.failed > 0 ? "text-warning" : "text-success"}`}>
+              <i className={`fas ${result.failed > 0 ? "fa-triangle-exclamation" : "fa-circle-check"} me-1`} />
+              ส่งสำเร็จ {result.sent} ห้อง{result.failed > 0 ? ` · ล้มเหลว ${result.failed} ห้อง` : ""}
+            </div>
+            {failedNames.length > 0 && (
+              <ul className="small text-muted mb-3" style={{ maxHeight: 140, overflowY: "auto" }}>
+                {failedNames.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            )}
+            <div className="confirm-actions">
+              <button className="btn btn-primary" onClick={onSent}>เสร็จสิ้น</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label className="form-label small fw-bold mb-1">เลือกผู้รับ ({selectedIds.size} คน)</label>
+            <div className="search-container mb-2">
+              <i className="fas fa-search" />
+              <input
+                type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ/ห้อง..."
+                value={search} onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="d-flex justify-content-between align-items-center mb-1">
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={toggleSelectAllFiltered}>
+                {allFilteredSelected ? "ยกเลิกเลือกทั้งหมด" : "เลือกทั้งหมด"}
+              </button>
+              {selectedIds.size > 0 && (
+                <button type="button" className="btn btn-sm btn-outline-danger border-0" onClick={() => setSelectedIds(new Set())}>
+                  ล้างที่เลือก
+                </button>
+              )}
+            </div>
+            <div className="nicescrollbar mb-3" style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--color-light)", borderRadius: 8 }}>
+              {filtered.length === 0 && <p className="text-muted small p-3 mb-0">ไม่พบรายชื่อ</p>}
+              {filtered.map((c) => (
+                <label key={c.lineUserId} className="d-flex align-items-center gap-2 px-2 py-1" style={{ cursor: "pointer", borderBottom: "1px solid var(--color-light)" }}>
+                  <input type="checkbox" className="form-check-input" checked={selectedIds.has(c.lineUserId)} onChange={() => toggle(c.lineUserId)} />
+                  <img src={c.pictureUrl || AVATAR_URL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                    onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }} />
+                  <span className="small text-truncate">
+                    {c.displayName}{c.roomNumber ? ` · ห้อง ${c.roomNumber}` : ""}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <label className="form-label small fw-bold mb-1">ข้อความ</label>
+            <textarea className="form-control mb-3" rows={4} value={text} onChange={(e) => setText(e.target.value)}
+              placeholder="พิมพ์ข้อความที่จะส่งให้ทุกคนที่เลือกไว้..." />
+
+            <div className="confirm-actions">
+              <button className="btn btn-outline-secondary" onClick={onClose} disabled={sending}>ยกเลิก</button>
+              <button className="btn btn-primary" onClick={handleSend} disabled={sending || !text.trim() || selectedIds.size === 0}>
+                {sending
+                  ? <><span className="spinner-border spinner-border-sm me-2" />กำลังส่ง...</>
+                  : <><i className="fas fa-paper-plane me-1" />ส่งให้ {selectedIds.size || ""} ห้อง</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
