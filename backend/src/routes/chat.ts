@@ -254,16 +254,20 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       if (!publicImageUrl) { set.status = 400; return { error: "ยังไม่ได้ตั้งค่า PUBLIC_BASE_URL — LINE ต้องการ URL สาธารณะเพื่อดึงรูปไปแสดง" }; }
     }
 
+    // ข้อความธรรมดาไม่มีฟิลด์ altText ให้กำหนดแจ้งเตือนเอง (ต่างจาก image/template ที่เป็น Flex) — ถ้าตั้งหัวข้อไว้
+    // ให้ฝังเป็นบรรทัดแรกของเนื้อความแทน เพราะแจ้งเตือน LINE ของข้อความตัวอักษรจะโชว์ขึ้นต้นของเนื้อความเสมออยู่แล้ว
+    const textWithTitle = title ? `${title}\n${text}` : text;
+
     const actor = await resolveActorName(orgId, authUser);
     const results: { lineUserId: string; ok: boolean; error?: string }[] = [];
     // ยิงทีละคนตามลำดับ (ไม่ใช้ Promise.all) — กันยิง LINE push message ถี่เกินไปพร้อมกันจำนวนมากจนโดน rate-limit
     for (const lineUserId of lineUserIds) {
       try {
         const message = format === "image"
-          ? buildBroadcastImageMessage(publicImageUrl, linkUrl, Number(b?.image?.width) || undefined, Number(b?.image?.height) || undefined)
+          ? buildBroadcastImageMessage(publicImageUrl, linkUrl, title, Number(b?.image?.width) || undefined, Number(b?.image?.height) || undefined)
           : format === "template"
             ? buildAnnouncementFlexMessage(settings, title, text, linkUrl)
-            : { type: "text", text };
+            : { type: "text", text: textWithTitle };
         await pushLineMessage(settings.token, lineUserId, [message]);
 
         const id = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -274,7 +278,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
           tenantId: "",
           direction: "out",
           messageType: format === "image" ? "image" : "text",
-          text: format === "image" ? `[รูปภาพ]${linkUrl ? ` ${linkUrl}` : ""}` : format === "template" ? [title, text, linkUrl].filter(Boolean).join("\n") : text,
+          text: format === "image" ? `[รูปภาพ]${title ? ` ${title}` : ""}${linkUrl ? ` ${linkUrl}` : ""}` : format === "template" ? [title, text, linkUrl].filter(Boolean).join("\n") : textWithTitle,
           imageUrl: format === "image" ? relativeImageUrl : "",
           senderName: actor,
           createdAt: new Date().toISOString(),

@@ -641,32 +641,36 @@ function resolveImageAspectRatio(width?: number, height?: number): string {
   return `${w / g}:${h / g}`;
 }
 
-// รูปภาพขนาดใหญ่ (ใช้กับฟีเจอร์ส่งประกาศหลายห้องพร้อมกัน — ดู POST /chat/broadcast) ไม่แปะลิงก์ = ส่งเป็น
-// LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE ตามสัดส่วนจริงของรูป
-// อยู่แล้วโดยไม่ต้องกำหนดเอง) แปะลิงก์ = ต้องห่อด้วย Flex bubble รูปใหญ่ (hero) + ปุ่มลิงก์แทน เพราะ image
-// message ธรรมดาไม่รองรับ action ให้กดเปิดลิงก์ได้ — กรณีนี้ต้องกำหนด aspectRatio เอง (ดู resolveImageAspectRatio)
-// ให้ตรงกับสัดส่วนจริงของรูป ไม่งั้น Flex จะครอปรูปตามอัตราส่วนตายตัว ทำให้รูปเพี้ยน/โดนตัดขอบ
-export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string, width?: number, height?: number): any {
-  if (!linkUrl) {
+// รูปภาพขนาดใหญ่ (ใช้กับฟีเจอร์ส่งประกาศหลายห้องพร้อมกัน — ดู POST /chat/broadcast) ไม่แปะลิงก์และไม่ตั้งหัวข้อ
+// = ส่งเป็น LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE ตามสัดส่วน
+// จริงของรูปอยู่แล้วโดยไม่ต้องกำหนดเอง) — แต่ image message ธรรมดาไม่มีฟิลด์ altText ให้กำหนดเอง (แจ้งเตือนจะ
+// ขึ้นเป็นข้อความปริยายของ LINE เช่น "ส่งรูปภาพ" เสมอ กำหนดเองไม่ได้) มีลิงก์และ/หรือตั้งหัวข้อไว้ = ต้องห่อด้วย
+// Flex bubble รูปใหญ่ (hero) แทน เพราะ Flex เท่านั้นที่มี altText ให้กำหนดข้อความแจ้งเตือนเองได้ (ปุ่มลิงก์ใส่
+// เฉพาะตอนมีลิงก์จริงเท่านั้น) ต้องกำหนด aspectRatio เอง (ดู resolveImageAspectRatio) ให้ตรงกับสัดส่วนจริงของรูป
+// ไม่งั้น Flex จะครอปรูปตามอัตราส่วนตายตัว ทำให้รูปเพี้ยน/โดนตัดขอบ
+export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string, title: string, width?: number, height?: number): any {
+  if (!linkUrl && !title) {
     return { type: "image", originalContentUrl: publicImageUrl, previewImageUrl: publicImageUrl };
   }
   return {
     type: "flex",
-    altText: "📷 รูปภาพประกาศ — กดดูรายละเอียด",
+    altText: title || "📷 รูปภาพประกาศ — กดดูรายละเอียด",
     contents: {
       type: "bubble",
       size: "giga",
       hero: {
         type: "image", url: publicImageUrl, size: "full",
         aspectRatio: resolveImageAspectRatio(width, height), aspectMode: "cover",
-        action: { type: "uri", uri: linkUrl },
+        ...(linkUrl ? { action: { type: "uri", uri: linkUrl } } : {}),
       },
-      footer: {
-        type: "box", layout: "vertical", paddingAll: "12px",
-        contents: [
-          { type: "button", style: "primary", height: "md", color: COLOR_PRIMARY, action: { type: "uri", label: "เปิดลิงก์", uri: linkUrl } },
-        ],
-      },
+      ...(linkUrl ? {
+        footer: {
+          type: "box", layout: "vertical", paddingAll: "12px",
+          contents: [
+            { type: "button", style: "primary", height: "md", color: COLOR_PRIMARY, action: { type: "uri", label: "เปิดลิงก์", uri: linkUrl } },
+          ],
+        },
+      } : {}),
     },
   };
 }

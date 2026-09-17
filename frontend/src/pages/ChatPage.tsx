@@ -613,7 +613,7 @@ function BroadcastModal({ conversations, onClose, onSent }: {
         lineUserIds: Array.from(selectedIds),
         format,
         text: text.trim() || undefined,
-        title: format === "template" ? title.trim() || undefined : undefined,
+        title: title.trim() || undefined,
         linkUrl: (format === "image" || format === "template") ? linkUrl.trim() || undefined : undefined,
         image: format === "image" && image ? image : undefined,
       });
@@ -714,13 +714,16 @@ function BroadcastModal({ conversations, onClose, onSent }: {
               ))}
             </div>
 
-            {format === "template" && (
-              <>
-                <label className="form-label small fw-bold mb-1">หัวข้อประกาศ</label>
-                <input className="form-control mb-2" value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="เช่น แจ้งปิดน้ำชั่วคราว, ประกาศจากผู้ดูแลหอพัก..." />
-              </>
-            )}
+            <label className="form-label small fw-bold mb-1">
+              หัวข้อ <span className="text-muted fw-normal">(ไม่บังคับ — แสดงในแจ้งเตือน LINE ของผู้รับ)</span>
+            </label>
+            <input className="form-control mb-1" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="เช่น แจ้งปิดน้ำชั่วคราว, ประกาศจากผู้ดูแลหอพัก..." />
+            <div className="text-muted mb-2" style={{ fontSize: 11 }}>
+              {format === "text" && "จะแทรกเป็นบรรทัดแรกของข้อความ และเป็นข้อความที่เห็นในแจ้งเตือน"}
+              {format === "image" && "กำหนดข้อความแจ้งเตือนแทนคำว่า \"ส่งรูปภาพ\" เริ่มต้นของ LINE (ถ้าเว้นว่างและไม่แปะลิงก์ จะส่งเป็นรูปภาพธรรมดา)"}
+              {format === "template" && "แสดงเป็นหัวข้อบนการ์ด และเป็นข้อความที่เห็นในแจ้งเตือน"}
+            </div>
 
             {format === "image" ? (
               <>
