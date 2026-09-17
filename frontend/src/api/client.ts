@@ -44,6 +44,12 @@ export const authApi = {
   updateUser: (id: string, data: { displayName?: string; password?: string }) =>
     api.put(`/auth/users/${id}`, data).then((r) => r.data),
   deleteUser: (id: string) => api.delete(`/auth/users/${id}`).then((r) => r.data),
+  // ── ขั้นตอน "ล็อกอินครั้งแรก" ของเจ้าของที่ superadmin สร้างองค์กรไว้ล่วงหน้าด้วยเบอร์โทร (ดู
+  // routes/lineLogin.ts) — ยืนยันเบอร์ก่อน แล้วตั้ง username/password ของตัวเอง ก่อนจะกดเชื่อม LINE ต่อ
+  checkFirstTimePhone: (phone: string) =>
+    api.post("/auth/line/first-time/check-phone", { phone }).then((r) => r.data as { ok: true }),
+  setFirstTimeCredentials: (phone: string, username: string, password: string, confirmPassword: string) =>
+    api.post("/auth/line/first-time/set-credentials", { phone, username, password, confirmPassword }).then((r) => r.data as { ok: true }),
 };
 
 export const logsApi = {

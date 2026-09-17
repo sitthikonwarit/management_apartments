@@ -2,8 +2,11 @@
 // คนละ LINE product กับ LIFF/Messaging API ที่ใช้กับผู้เช่า (services/line.ts, routes/liff.ts,
 // routes/lineWebhook.ts) — อันนั้นผูกกับ "LINE Official Account ของแต่ละองค์กรเอง" ส่วนอันนี้คือ
 // "LINE Login channel ของผู้ให้บริการระบบ" (เราเอง) ช่องทางเดียวใช้ร่วมกันทุกองค์กร สำหรับยืนยันตัวตนคนที่
-// จะเข้ามาใช้งานระบบหลังบ้านเท่านั้น ล็อกอินครั้งแรกของบัญชี LINE ที่ยังไม่เคยผูกกับ users แถวไหนเลย = สร้าง
-// องค์กรใหม่ + บัญชีเจ้าของ (role "owner") ให้อัตโนมัติ (self-serve signup) ล็อกอินครั้งต่อๆ ไปแค่พาเข้าระบบเดิม
+// จะเข้ามาใช้งานระบบหลังบ้านเท่านั้น — ไม่มี self-serve signup อีกต่อไป (เคยมี แต่ปิดไปแล้ว) องค์กรใหม่ต้อง
+// ให้ superadmin สร้างไว้ล่วงหน้าด้วยเบอร์โทรเท่านั้น (ดู routes/superadmin.ts) เจ้าของเอาเบอร์นั้นมากรอกใน
+// ขั้นตอน "ล็อกอินครั้งแรก" ที่หน้า Login (ดู .post("/first-time/check-phone")/.post("/first-time/set-credentials")
+// ด้านล่าง) ตั้ง username/password ของตัวเอง แล้วค่อยกดเชื่อม LINE (.get("/authorize") ที่มี ?phone= แนบมา)
+// เพื่อผูก lineUserId เข้ากับบัญชีที่เตรียมไว้ ล็อกอินครั้งต่อๆ ไปแค่พาเข้าระบบเดิมด้วย lineUserId ที่ผูกแล้ว
 import { Elysia } from "elysia";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
@@ -11,7 +14,6 @@ import { organizations, users } from "../db/schema";
 import { signToken } from "../lib/jwt";
 import { recordLog } from "../lib/activityLog";
 import { revokeSessionsForUser } from "../lib/wsHub";
-import { generateSlug } from "../lib/orgContext";
 
 // เหมือน normalizePhone ใน routes/superadmin.ts (ก๊อปมาแบบเดียวกับ helper เล็กๆ อื่นในไฟล์นี้ — ต้องได้
 // ผลลัพธ์ตรงกันเป๊ะกับตอนซุปเปอร์แอดมินกรอกเบอร์ไว้ตอนสร้างองค์กร ถึงจะจับคู่กันได้ตอนเชื่อม LINE ครั้งแรก)
@@ -59,6 +61,47 @@ function loginErrorRedirect(reason: string): Response {
 }
 
 export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
+  // ── ขั้นตอน "ล็อกอินครั้งแรก" ของเจ้าของที่ superadmin สร้างองค์กรไว้ล่วงหน้าด้วยเบอร์โทร (ดู
+  // routes/superadmin.ts) — ก่อนจะเชื่อม LINE ต้องยืนยันเบอร์ก่อน (ดู .post("/first-time/check-phone")
+  // ด้านล่าง) แล้วตั้ง username/password ของตัวเอง (.post("/first-time/set-credentials")) จากนั้นค่อยกดปุ่ม
+  // เชื่อม LINE ต่อ (ไปที่ .get("/authorize") ด้านล่างเหมือนเดิม) — แยก 2 ขั้นตอนออกจาก authorize/callback
+  // เพราะไม่เกี่ยวกับ LINE OAuth เลย เป็นแค่การเตรียมบัญชีให้พร้อมก่อนเท่านั้น
+  .post("/first-time/check-phone", async ({ body, set }) => {
+    const phone = normalizePhone((body as any)?.phone);
+    if (phone.length < 9) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรให้ครบ" }; }
+    const [pending] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.phone, phone), isNull(users.lineUserId)));
+    if (!pending) { set.status = 404; return { error: "ไม่พบเบอร์นี้ในระบบ หรือถูกเชื่อมบัญชีไปแล้ว กรุณาติดต่อผู้ดูแลระบบ" }; }
+    return { ok: true };
+  })
+  // ตั้งชื่อผู้ใช้/รหัสผ่านของตัวเอง (เดิม superadmin สร้างองค์กรไว้ด้วยเบอร์โทรอย่างเดียว ไม่ได้ตั้ง
+  // username/password ให้) — username ต้องไม่ซ้ำกับคนอื่น "ในองค์กรเดียวกัน" เท่านั้น (เหมือนกับ
+  // POST /auth/users ที่พนักงานสร้างบัญชีเพิ่มกันในหน้า Settings ดู routes/auth.ts) เรียกซ้ำได้ถ้ายังไม่ได้
+  // เชื่อม LINE (เผื่อพิมพ์ผิด/เปลี่ยนใจก่อนกดเชื่อม LINE จริง)
+  .post("/first-time/set-credentials", async ({ body, set }) => {
+    const b = body as any;
+    const phone = normalizePhone(b?.phone);
+    const username = String(b?.username ?? "").trim();
+    const password = String(b?.password ?? "");
+    const confirmPassword = String(b?.confirmPassword ?? "");
+
+    if (phone.length < 9) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรให้ครบ" }; }
+    if (!username) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้" }; }
+    if (!password || password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
+    if (password !== confirmPassword) { set.status = 400; return { error: "รหัสผ่านทั้งสองช่องไม่ตรงกัน" }; }
+
+    const [pending] = await db.select().from(users).where(and(eq(users.phone, phone), isNull(users.lineUserId)));
+    if (!pending) { set.status = 404; return { error: "ไม่พบเบอร์นี้ในระบบ หรือถูกเชื่อมบัญชีไปแล้ว กรุณาติดต่อผู้ดูแลระบบ" }; }
+
+    const [dup] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.username, username), eq(users.orgId, pending.orgId)));
+    if (dup && dup.id !== pending.id) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว กรุณาเลือกชื่ออื่น" }; }
+
+    const passwordHash = await Bun.password.hash(password);
+    const ts = new Date().toISOString();
+    await db.update(users).set({ username, passwordHash, updatedAt: ts }).where(eq(users.id, pending.id));
+    return { ok: true };
+  })
   // ?phone= มาจากหน้า Login โหมด "ล็อกอินครั้งแรก" (เจ้าของที่ superadmin สร้างองค์กรไว้ล่วงหน้าด้วยเบอร์โทร
   // แทน username/password — ดู routes/superadmin.ts) เช็คตั้งแต่ตรงนี้เลยว่าเบอร์นี้มีบัญชีที่ "รอผูก LINE"
   // จริงไหม (ยังไม่เคยมี lineUserId) กันเสียเวลาไป-กลับ LINE OAuth ทั้งรอบแล้วมาพบว่าเบอร์ผิด/ผูกไปแล้ว —
@@ -142,7 +185,6 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
       const sessionId = crypto.randomUUID();
 
       let user = (await db.select().from(users).where(eq(users.lineUserId, lineUserId)))[0];
-      let isNewOrg = false;
       let isClaim = false;
 
       if (!user && claimPhone) {
@@ -159,43 +201,11 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
         user = (await db.select().from(users).where(eq(users.id, pending.id)))[0];
         isClaim = true;
       } else if (!user) {
-        // ล็อกอินครั้งแรกของบัญชี LINE นี้ (ไม่มีเบอร์มาผูก) — สร้างองค์กรใหม่ + บัญชีเจ้าของให้อัตโนมัติ
-        // (self-serve signup)
-        const orgId = `ORG-${Date.now()}`;
-        const userId = `USR-${Date.now()}`;
-        // slug ไว้ใช้เป็น ?org= ใน LIFF URL ขององค์กรนี้ (ดู lib/orgContext.ts, routes/liff.ts) — สุ่มใหม่ทุก
-        // ครั้งที่ชนกับ organizations_slug_unique (ความน่าจะเป็นต่ำมาก แต่กันไว้) แยกจากการชนกันของ
-        // line_user_id ด้านล่างที่เป็นคนละ constraint กัน
-        let slugAttemptsLeft = 5;
-        for (;;) {
-          const slug = generateSlug();
-          try {
-            await db.transaction(async (tx) => {
-              await tx.insert(organizations).values({
-                id: orgId, name: displayName ? `หอพักของ ${displayName}` : "องค์กรใหม่",
-                slug, status: "active", createdAt: ts, updatedAt: ts,
-              });
-              await tx.insert(users).values({
-                id: userId, orgId, role: "owner", lineUserId, displayName,
-                createdAt: ts, updatedAt: ts, lastLoginAt: ts, currentSessionId: sessionId,
-              });
-            });
-            isNewOrg = true;
-            user = (await db.select().from(users).where(eq(users.id, userId)))[0];
-            break;
-          } catch (e: any) {
-            if (e?.code === "23505" && e?.constraint_name === "organizations_slug_unique" && slugAttemptsLeft > 0) {
-              slugAttemptsLeft--;
-              continue;
-            }
-            // ชนกับ unique index ของ line_user_id (สอง request ล็อกอินครั้งแรกพร้อมกัน) — แถวที่ชนะไปแล้วต้อง
-            // มีอยู่จริง ดึงมาใช้แทนแทนที่จะรายงาน error ให้ผู้ใช้เห็น (กันสร้างองค์กรซ้ำซ้อน)
-            if (e?.code !== "23505") throw e;
-            user = (await db.select().from(users).where(eq(users.lineUserId, lineUserId)))[0];
-            if (!user) throw e;
-            break;
-          }
-        }
+        // ล็อกอินครั้งแรกของบัญชี LINE นี้ โดยไม่มีเบอร์มาผูก (ไม่ได้มาจากขั้นตอน "ล็อกอินครั้งแรก" ในหน้า
+        // Login) — เดิมสร้างองค์กรใหม่ + บัญชีเจ้าของให้อัตโนมัติตรงนี้เลย (self-serve signup) แต่ปิดไปแล้ว
+        // เพราะต้องการให้ superadmin เป็นคนสร้างองค์กร+เบอร์โทรไว้ล่วงหน้าเท่านั้น (ดู routes/superadmin.ts)
+        // ป้องกันใครก็ได้เข้ามาสร้างองค์กรของตัวเองได้เองโดยไม่ผ่านการอนุมัติ — เด้งกลับไปให้ใช้ขั้นตอนกรอกเบอร์แทน
+        return redirectResponse(`${frontendUrl()}/login?lineLoginError=${encodeURIComponent("ยังไม่มีบัญชีนี้ในระบบ กรุณาใช้เบอร์โทรที่ผู้ดูแลระบบสร้างให้ ผ่านขั้นตอน \"ล็อกอินครั้งแรก\" ด้านล่างแทน")}`, { "Set-Cookie": clearStateCookie });
       } else {
         await db.update(users).set({ lastLoginAt: ts, currentSessionId: sessionId, displayName: displayName || user.displayName })
           .where(eq(users.id, user.id));
@@ -203,9 +213,8 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
 
       if (!user.orgId) throw new Error("user has no orgId after provisioning");
 
-      // องค์กรถูกระงับโดยหน้าควบคุมแพลตฟอร์ม (ดู routes/superadmin.ts) — ห้ามออก token ใหม่ (ครอบคลุมทั้ง
-      // กรณีองค์กรเดิมถูกระงับไปแล้วมาล็อกอินซ้ำ องค์กรที่เพิ่งสร้างใหม่ในบล็อกด้านบนจะเป็น "active" เสมอ
-      // จึงผ่านเงื่อนไขนี้เสมอ ไม่กระทบ self-serve signup)
+      // องค์กรถูกระงับโดยหน้าควบคุมแพลตฟอร์ม (ดู routes/superadmin.ts) — ห้ามออก token ใหม่ ครอบคลุมทั้งกรณี
+      // องค์กรเดิมถูกระงับไปแล้วมาล็อกอินซ้ำ และกรณีเพิ่งผูกบัญชี LINE เข้ากับองค์กรที่เตรียมไว้เสร็จหมาดๆ
       const [org] = await db.select({ status: organizations.status }).from(organizations).where(eq(organizations.id, user.orgId));
       if (org?.status === "suspended") {
         return redirectResponse(`${frontendUrl()}/login?lineLoginError=${encodeURIComponent("องค์กรนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ")}`, { "Set-Cookie": clearStateCookie });
@@ -215,7 +224,7 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
       await recordLog({
         orgId: user.orgId, userId: user.id, username: user.username || displayName, method: "GET", path: "/auth/line/callback",
         action: "login", entityType: "auth",
-        description: isNewOrg ? "สร้างองค์กรใหม่และเข้าสู่ระบบด้วย LINE Login" : isClaim ? "เชื่อมบัญชี LINE เข้ากับองค์กรที่เตรียมไว้ด้วยเบอร์โทร" : "เข้าสู่ระบบด้วย LINE Login",
+        description: isClaim ? "เชื่อมบัญชี LINE เข้ากับองค์กรที่เตรียมไว้ด้วยเบอร์โทร" : "เข้าสู่ระบบด้วย LINE Login",
         status: 200, userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
       });
       revokeSessionsForUser(user.id);
