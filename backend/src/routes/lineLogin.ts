@@ -75,7 +75,7 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
     return { ok: true };
   })
   // ตั้งชื่อผู้ใช้/รหัสผ่านของตัวเอง (เดิม superadmin สร้างองค์กรไว้ด้วยเบอร์โทรอย่างเดียว ไม่ได้ตั้ง
-  // username/password ให้) — username ต้องไม่ซ้ำกับคนอื่น "ในองค์กรเดียวกัน" เท่านั้น (เหมือนกับ
+  // username/password ให้) — username ต้อง unique "ทั้งระบบ" ไม่ใช่แค่ในองค์กรเดียวกัน (เหมือนกับ
   // POST /auth/users ที่พนักงานสร้างบัญชีเพิ่มกันในหน้า Settings ดู routes/auth.ts) เรียกซ้ำได้ถ้ายังไม่ได้
   // เชื่อม LINE (เผื่อพิมพ์ผิด/เปลี่ยนใจก่อนกดเชื่อม LINE จริง)
   .post("/first-time/set-credentials", async ({ body, set }) => {
@@ -93,8 +93,7 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
     const [pending] = await db.select().from(users).where(and(eq(users.phone, phone), isNull(users.lineUserId)));
     if (!pending) { set.status = 404; return { error: "ไม่พบเบอร์นี้ในระบบ หรือถูกเชื่อมบัญชีไปแล้ว กรุณาติดต่อผู้ดูแลระบบ" }; }
 
-    const [dup] = await db.select({ id: users.id }).from(users)
-      .where(and(eq(users.username, username), eq(users.orgId, pending.orgId)));
+    const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
     if (dup && dup.id !== pending.id) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว กรุณาเลือกชื่ออื่น" }; }
 
     const passwordHash = await Bun.password.hash(password);

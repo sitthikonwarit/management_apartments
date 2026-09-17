@@ -37,8 +37,9 @@ export const authPublicRoute = new Elysia({ prefix: "/auth" })
     const password = String(b.password ?? "");
     if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
 
-    // username unique แค่ "ต่อองค์กร" ไม่ใช่ทั้งระบบ (สองหอพักตั้งชื่อผู้ใช้ "admin" ซ้ำกันได้) อาจเจอมากกว่า
-    // 1 แถวที่ username ตรงกัน — วนเช็ครหัสผ่านทีละแถวจนกว่าจะเจอที่ตรง (แถวที่เหลือ hash ไม่ตรงจะ verify ไม่ผ่านเอง)
+    // username ต้อง unique ทั้งระบบตอนสร้างใหม่ (ดู POST /users ด้านล่าง + first-time/set-credentials ใน
+    // lineLogin.ts) แต่บัญชีเก่าก่อนกฎนี้อาจยังมีชื่อซ้ำข้ามองค์กรตกค้างอยู่ได้ — วนเช็ครหัสผ่านทีละแถวจนกว่าจะ
+    // เจอที่ตรง (แถวที่เหลือ hash ไม่ตรงจะ verify ไม่ผ่านเอง) กันเผื่อไว้ ไม่พังถ้าเจอข้อมูลเก่าที่ซ้ำกัน
     const candidates = await db.select().from(users).where(eq(users.username, username));
     let row: typeof users.$inferSelect | undefined;
     for (const c of candidates) {
@@ -105,8 +106,10 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
     const displayName = String(b.displayName ?? "").trim();
     if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
     if (password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
-    const [dup] = await db.select({ id: users.id }).from(users).where(and(eq(users.username, username), eq(users.orgId, orgId)));
-    if (dup) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว" }; }
+    // username ห้ามซ้ำ "ทั้งระบบ" ไม่ใช่แค่ในองค์กรตัวเอง (เช็คทุกองค์กร ไม่กรอง org_id) — กันสับสนเวลา
+    // ซุปเปอร์แอดมิน/ผู้ใช้คนเดียวกันดูแลหลายองค์กรพร้อมกัน แล้วเจอชื่อผู้ใช้ซ้ำข้ามองค์กร
+    const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+    if (dup) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว กรุณาเลือกชื่ออื่น" }; }
 
     const id = `USR-${Date.now()}`;
     const ts = new Date().toISOString();

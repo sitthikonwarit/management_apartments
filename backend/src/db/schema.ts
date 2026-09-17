@@ -251,9 +251,12 @@ export const users = pgTable("users", {
   orgId: orgId(),
   // "owner" = ผู้สร้างองค์กร (ล็อกอินผ่าน LINE Login) / "staff" = บัญชีลูกน้องที่ owner สร้างเพิ่มด้วย username/password
   role: text("role").notNull().default("staff"),
-  // ทั้ง username และ passwordHash เป็น nullable ตอนนี้ (เดิมบังคับ notNull+unique ทั้งคู่) เพราะบัญชีที่สร้าง
-  // จาก LINE Login ไม่มีรหัสผ่านเลยจนกว่าเจ้าของจะมาตั้งเพิ่มเองทีหลัง — ความ unique ของ username ต้องกลาย
-  // เป็นแบบ "ต่อองค์กร" (org_id, username) แทน unique ทั้งระบบแบบเดิม เพราะสองบ้านเช่าตั้งชื่อผู้ใช้ซ้ำกันได้
+  // ทั้ง username และ passwordHash เป็น nullable ตอนนี้ (เดิมบังคับ notNull+unique ทั้งคู่ที่ระดับ schema) เพราะ
+  // บัญชีที่สร้างจาก LINE Login ไม่มีรหัสผ่านเลยจนกว่าเจ้าของจะมาตั้งเพิ่มเองทีหลัง — username ต้อง unique
+  // "ทั้งระบบ" (ไม่ใช่แค่ต่อองค์กร) แต่บังคับที่ระดับแอปเท่านั้น (เช็คก่อน insert/update ทุกจุดที่ตั้ง username —
+  // ดู POST /auth/users ใน routes/auth.ts และ POST /auth/line/first-time/set-credentials ใน routes/lineLogin.ts)
+  // ไม่มี unique index ระดับ DB เพราะค่าเป็น null ได้ (บัญชีที่ยังไม่เคยตั้ง username เลย) และมีข้อมูลเก่าก่อน
+  // กฎ unique-ทั้งระบบนี้ที่อาจซ้ำข้ามองค์กรตกค้างอยู่ (ดู comment ที่ POST /auth/login ใน routes/auth.ts)
   username: text("username"),
   passwordHash: text("password_hash"),
   // ผูกกับบัญชี LINE ส่วนตัวของเจ้าของ (LINE Login "sub") — คนละอย่างกับ tenants.lineUserId (ผู้เช่า) และ
