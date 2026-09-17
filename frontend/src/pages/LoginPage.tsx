@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const [showFirstTimeLogin, setShowFirstTimeLogin] = useState(false);
   // ขั้นตอน "ล็อกอินครั้งแรก" 3 ขั้น: กรอกเบอร์ที่ผู้ดูแลระบบสร้างให้ → ยืนยันแล้วค่อยตั้ง username/password
   // ของตัวเอง → เสร็จแล้วค่อยกดเชื่อม LINE ต่อ (ไปหน้า LINE OAuth จริง) ดู routes/lineLogin.ts ฝั่ง backend
   const [firstTimeStep, setFirstTimeStep] = useState<"phone" | "credentials" | "done">("phone");
@@ -115,13 +114,11 @@ export default function LoginPage() {
           <i className="fab fa-line me-2" />เข้าสู่ระบบด้วย LINE
         </a>
 
-        <button type="button" className="btn btn-link btn-sm w-100 mb-3 text-decoration-none"
-          onClick={() => { setShowFirstTimeLogin((v) => !v); resetFirstTimeFlow(); }}>
-          {showFirstTimeLogin ? "ยกเลิก" : "เจ้าของใหม่ที่ยังไม่เคยเชื่อมบัญชี LINE? ล็อกอินครั้งแรกที่นี่"}
-        </button>
+        <p className="text-muted small text-center mb-2">
+          เจ้าของใหม่ที่ยังไม่เคยเชื่อมบัญชี LINE? กรอกเบอร์ที่ผู้ดูแลระบบสร้างให้ด้านล่างนี้
+        </p>
 
-        {showFirstTimeLogin && (
-          <div className="mb-3 p-3" style={{ background: "var(--color-background)", borderRadius: "var(--border-radius-1)" }}>
+        <div className="mb-3 p-3" style={{ background: "var(--color-background)", borderRadius: "var(--border-radius-1)" }}>
             {/* หัวขั้นตอน — จุดไล่ระดับบอกว่าตอนนี้อยู่ขั้นไหนจาก 3 ขั้น */}
             <div className="d-flex align-items-center justify-content-center gap-2 mb-3">
               {(["phone", "credentials", "done"] as const).map((s, i) => (
@@ -140,16 +137,14 @@ export default function LoginPage() {
             {firstTimeStep === "phone" && (
               <>
                 <label className="form-label small fw-bold">1. เบอร์โทรที่ได้รับจากผู้ดูแลระบบ</label>
-                <div className="d-flex gap-2">
-                  <input type="tel" className="form-control" value={firstTimePhone}
-                    onChange={(e) => setFirstTimePhone(e.target.value)} placeholder="เช่น 0812345678"
-                    onKeyDown={(e) => { if (e.key === "Enter") handleCheckPhone(); }} />
-                  <button type="button" className="btn btn-success flex-shrink-0"
-                    disabled={firstTimeSubmitting || firstTimePhone.replace(/\D/g, "").length < 9}
-                    onClick={handleCheckPhone}>
-                    {firstTimeSubmitting ? <span className="spinner-border spinner-border-sm" /> : "ตรวจสอบเบอร์"}
-                  </button>
-                </div>
+                <input type="tel" className="form-control mb-2" value={firstTimePhone}
+                  onChange={(e) => setFirstTimePhone(e.target.value)} placeholder="เช่น 0812345678"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCheckPhone(); }} />
+                <button type="button" className="btn btn-success w-100"
+                  disabled={firstTimeSubmitting || firstTimePhone.replace(/\D/g, "").length < 9}
+                  onClick={handleCheckPhone}>
+                  {firstTimeSubmitting ? <span className="spinner-border spinner-border-sm" /> : "ตรวจสอบเบอร์"}
+                </button>
                 <p className="text-muted small mt-1 mb-0">เบอร์นี้ต้องเป็นเบอร์ที่ผู้ดูแลระบบสร้างบัญชีไว้ให้ล่วงหน้าเท่านั้น</p>
               </>
             )}
@@ -167,10 +162,13 @@ export default function LoginPage() {
                   onChange={(e) => setFirstTimeConfirmPassword(e.target.value)} placeholder="ยืนยันรหัสผ่านอีกครั้ง"
                   onKeyDown={(e) => { if (e.key === "Enter") handleSetCredentials(); }} />
 
-                <button type="button" className="btn btn-success w-100" disabled={firstTimeSubmitting} onClick={handleSetCredentials}>
+                <button type="button" className="btn btn-success w-100 mb-2" disabled={firstTimeSubmitting} onClick={handleSetCredentials}>
                   {firstTimeSubmitting
                     ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</>
                     : "บันทึกและดำเนินการต่อ"}
+                </button>
+                <button type="button" className="btn btn-link btn-sm w-100 text-decoration-none" disabled={firstTimeSubmitting} onClick={resetFirstTimeFlow}>
+                  กรอกเบอร์ผิด? ย้อนกลับไปแก้เบอร์
                 </button>
               </>
             )}
@@ -187,8 +185,7 @@ export default function LoginPage() {
                 <p className="text-muted small mt-2 mb-0">ครั้งต่อไปกดปุ่ม "เข้าสู่ระบบด้วย LINE" ด้านบนได้เลย หรือใช้ชื่อผู้ใช้/รหัสผ่านที่เพิ่งตั้งก็ได้</p>
               </div>
             )}
-          </div>
-        )}
+        </div>
 
         <div className="d-flex align-items-center gap-2 mb-3">
           <hr className="flex-grow-1 m-0" />
