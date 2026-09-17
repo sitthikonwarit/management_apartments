@@ -738,18 +738,44 @@ function BroadcastModal({ conversations, onClose, onSent }: {
                 <label className="form-label small fw-bold mb-1">รูปภาพ</label>
                 <input ref={imageInputRef} type="file" accept="image/*" hidden
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePickImage(f); e.target.value = ""; }} />
-                <div className="mb-2">
-                  {image ? (
-                    <div className="d-flex align-items-center gap-2">
-                      <img src={image.base64} alt="" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, border: "1px solid var(--color-light)" }} />
-                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setImage(null)}><i className="fas fa-times me-1" />ลบ</button>
+                {image ? (
+                  <div className="mb-3" style={{
+                    position: "relative", width: "100%", borderRadius: 12, overflow: "hidden",
+                    border: "1px solid var(--color-light)",
+                  }}>
+                    <img src={image.base64} alt="" style={{ width: "100%", height: 190, objectFit: "cover", display: "block" }} />
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      background: "linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0) 55%)",
+                    }} />
+                    <div className="d-flex justify-content-between align-items-end" style={{ position: "absolute", left: 10, right: 10, bottom: 10 }}>
+                      <span className="small text-white text-truncate" style={{ maxWidth: "60%", textShadow: "0 1px 2px rgba(0,0,0,0.6)" }}>
+                        <i className="fas fa-image me-1" />{image.name}
+                      </span>
+                      <div className="d-flex gap-1">
+                        <button type="button" className="btn btn-sm btn-light" title="เปลี่ยนรูป" onClick={() => imageInputRef.current?.click()}>
+                          <i className="fas fa-rotate" />
+                        </button>
+                        <button type="button" className="btn btn-sm btn-danger" title="ลบรูป" onClick={() => setImage(null)}>
+                          <i className="fas fa-trash" />
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => imageInputRef.current?.click()}>
-                      <i className="fas fa-paperclip me-1" />เลือกรูปภาพ
-                    </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <button type="button" className="w-100 mb-3" onClick={() => imageInputRef.current?.click()} style={{
+                    border: "2px dashed var(--color-light)", borderRadius: 12, background: "var(--color-background)",
+                    padding: "28px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                    color: "var(--color-dark-variant)", transition: "border-color 0.15s ease, color 0.15s ease",
+                  }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.color = "var(--color-primary)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-light)"; e.currentTarget.style.color = "var(--color-dark-variant)"; }}
+                  >
+                    <i className="fas fa-cloud-arrow-up" style={{ fontSize: 26 }} />
+                    <span className="small fw-semibold">คลิกเพื่อเลือกรูปภาพ</span>
+                    <span className="text-muted" style={{ fontSize: 11 }}>จะแสดงเป็นรูปขนาดใหญ่เต็มการ์ดในแชท LINE</span>
+                  </button>
+                )}
               </>
             ) : (
               <>

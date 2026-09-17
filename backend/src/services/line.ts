@@ -645,9 +645,11 @@ function resolveImageAspectRatio(width?: number, height?: number): string {
 // = ส่งเป็น LINE image message ธรรมดา (แตะเปิดแล้วขยายเต็มจอเองอยู่แล้วตามพฤติกรรมปกติของแอป LINE ตามสัดส่วน
 // จริงของรูปอยู่แล้วโดยไม่ต้องกำหนดเอง) — แต่ image message ธรรมดาไม่มีฟิลด์ altText ให้กำหนดเอง (แจ้งเตือนจะ
 // ขึ้นเป็นข้อความปริยายของ LINE เช่น "ส่งรูปภาพ" เสมอ กำหนดเองไม่ได้) มีลิงก์และ/หรือตั้งหัวข้อไว้ = ต้องห่อด้วย
-// Flex bubble รูปใหญ่ (hero) แทน เพราะ Flex เท่านั้นที่มี altText ให้กำหนดข้อความแจ้งเตือนเองได้ (ปุ่มลิงก์ใส่
-// เฉพาะตอนมีลิงก์จริงเท่านั้น) ต้องกำหนด aspectRatio เอง (ดู resolveImageAspectRatio) ให้ตรงกับสัดส่วนจริงของรูป
-// ไม่งั้น Flex จะครอปรูปตามอัตราส่วนตายตัว ทำให้รูปเพี้ยน/โดนตัดขอบ
+// Flex bubble รูปใหญ่ (hero) แทน เพราะ Flex เท่านั้นที่มี altText ให้กำหนดข้อความแจ้งเตือนเองได้ — ไม่ใส่ปุ่ม
+// "เปิดลิงก์" แยกเป็นแถบด้านล่างเหมือนการ์ดประกาศ (buildAnnouncementFlexMessage) เพราะรูปเต็มจอสวยงามอยู่แล้ว
+// ตัวรูปเองกดแตะเปิดลิงก์ได้เลยผ่าน action บน hero image ไม่ต้องมีปุ่มซ้อนทับความสวยของรูป — ต้องกำหนด
+// aspectRatio เอง (ดู resolveImageAspectRatio) ให้ตรงกับสัดส่วนจริงของรูป ไม่งั้น Flex จะครอปรูปตามอัตราส่วน
+// ตายตัว ทำให้รูปเพี้ยน/โดนตัดขอบ
 export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: string, title: string, width?: number, height?: number): any {
   if (!linkUrl && !title) {
     return { type: "image", originalContentUrl: publicImageUrl, previewImageUrl: publicImageUrl };
@@ -663,14 +665,6 @@ export function buildBroadcastImageMessage(publicImageUrl: string, linkUrl: stri
         aspectRatio: resolveImageAspectRatio(width, height), aspectMode: "cover",
         ...(linkUrl ? { action: { type: "uri", uri: linkUrl } } : {}),
       },
-      ...(linkUrl ? {
-        footer: {
-          type: "box", layout: "vertical", paddingAll: "12px",
-          contents: [
-            { type: "button", style: "primary", height: "md", color: COLOR_PRIMARY, action: { type: "uri", label: "เปิดลิงก์", uri: linkUrl } },
-          ],
-        },
-      } : {}),
     },
   };
 }
