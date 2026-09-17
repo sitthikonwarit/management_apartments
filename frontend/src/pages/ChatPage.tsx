@@ -13,6 +13,7 @@ import { ChatBillMessage } from "../components/ChatBillCard";
 import { ChatRepairMessage } from "../components/ChatRepairCard";
 import { ChatPaymentConfirmMessage } from "../components/ChatPaymentConfirmCard";
 import { ChatBookingMessage } from "../components/ChatBookingCard";
+import CustomSelect2 from "../components/CustomSelect2";
 
 // รูปโปรไฟล์ + วงกลมสีเขียวเล็กๆ มุมล่างขวา (แบบเดียวกับสถานะ "ออนไลน์" ของแอปแชททั่วไป) โผล่ตอนคนนี้กำลัง
 // เปิดหน้า LIFF อยู่ผ่าน web (ดู state `presence` ใน ChatPage — มาจาก event "chat:web-presence")
@@ -569,6 +570,11 @@ function BroadcastModal({ conversations, onClose, onSent }: {
     new Map(conversations.filter((c) => c.towerId).map((c) => [c.towerId as string, c.towerName || ""])).entries()
   ).sort((a, b) => a[1].localeCompare(b[1], "th"));
   const hasUnassigned = conversations.some((c) => !c.towerId);
+  const towerSelectOptions = [
+    { value: "", label: "ทุกตึก" },
+    ...towerOptions.map(([id, name]) => ({ value: id, label: name || "(ไม่มีชื่อ)" })),
+    ...(hasUnassigned ? [{ value: "__none__", label: "ไม่ระบุตึก" }] : []),
+  ];
 
   const filtered = conversations.filter((c) => {
     if (towerFilter === "__none__" && c.towerId) return false;
@@ -683,12 +689,14 @@ function BroadcastModal({ conversations, onClose, onSent }: {
                   value={search} onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <select className="form-select form-select-sm" style={{ maxWidth: 160 }} value={towerFilter}
-                onChange={(e) => setTowerFilter(e.target.value)}>
-                <option value="">ทุกตึก</option>
-                {towerOptions.map(([id, name]) => <option key={id} value={id}>{name || "(ไม่มีชื่อ)"}</option>)}
-                {hasUnassigned && <option value="__none__">ไม่ระบุตึก</option>}
-              </select>
+              <div style={{ minWidth: 150, flexShrink: 0 }}>
+                <CustomSelect2
+                  value={towerSelectOptions.find((o) => o.value === towerFilter) ?? towerSelectOptions[0]}
+                  options={towerSelectOptions}
+                  isSearchable={false}
+                  onChange={(o: any) => setTowerFilter(o?.value ?? "")}
+                />
+              </div>
             </div>
             <div className="d-flex justify-content-between align-items-center mb-1">
               <button type="button" className="btn btn-sm btn-outline-secondary" onClick={toggleSelectAllFiltered}>
