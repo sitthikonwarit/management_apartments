@@ -7,6 +7,11 @@ import {
   Title, Tooltip, Legend,
 } from "chart.js";
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+// Chart.js ใช้ฟอนต์ default ของตัวเอง (Helvetica/Arial) ไม่ใช่ฟอนต์หลักของเว็บ (ดู --font-family บน body ใน
+// App.css) ทำให้ label/legend/tooltip ของกราฟหน้าตาไม่เข้าชุดกับตัวอักษรที่อื่นในหน้าเว็บ ตั้ง default ตรงนี้
+// ที่เดียวให้ทุกกราฟในไฟล์นี้ (และไฟล์อื่นที่ import Chart.js ต่อจากนี้) ใช้ฟอนต์เดียวกันทั้งหมดโดยไม่ต้องเซ็ตซ้ำ
+// ในทุก options ของแต่ละกราฟ
+ChartJS.defaults.font.family = "'Mitr', 'Poppins', sans-serif";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
