@@ -578,6 +578,7 @@ export default function SettingsPage() {
       const payload: AppConfig = {
         orgSlug: config.orgSlug, // อ่านอย่างเดียว backend ไม่รับค่านี้จาก body (ดู PUT /settings/config) ใส่ไว้ให้ตรง type เฉยๆ
         setupCompleted: config.setupCompleted, // อ่านอย่างเดียวเหมือนกัน — เปลี่ยนได้แค่ผ่านปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" เท่านั้น (ดู handleCompleteSetup)
+        ratesConfirmed: config.ratesConfirmed, // อ่านอย่างเดียวเหมือนกัน — ตั้งได้แค่จาก OnboardingWizard.tsx เท่านั้น
         electricRate: Number(electricRate) || 0,
         waterRate: Number(waterRate) || 0,
         serviceFee: {

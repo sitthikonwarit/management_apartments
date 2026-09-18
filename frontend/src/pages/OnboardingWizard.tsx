@@ -20,11 +20,15 @@ const STEPS = [
   { key: "rooms", label: "สร้างห้อง", icon: "fa-door-open" },
 ] as const;
 
+// การ์ดฟอร์มขั้นสั้นๆ (รูปลักษณ์/ค่าน้ำไฟ/หน้าจบ) — จำกัดความกว้างไว้ให้อ่าน/กรอกง่าย ต่างจากขั้นสร้างตึก/
+// สร้างห้องที่ต้องปล่อยเต็มความกว้าง (ตาราง/การ์ดห้องเยอะ ดู FULL_WIDTH_STEPS ด้านล่าง)
 const CARD_STYLE: React.CSSProperties = {
   background: "var(--color-white)",
   border: "1px solid var(--color-light)",
   borderRadius: "var(--border-radius-1)",
   padding: "1.5rem",
+  maxWidth: 640,
+  margin: "0 auto",
 };
 
 export default function OnboardingWizard() {
@@ -46,7 +50,11 @@ export default function OnboardingWizard() {
   // สถานะ "เสร็จหรือยัง" ของแต่ละขั้น — อิงข้อมูลจริงที่บันทึกไว้แล้วเสมอ (config จาก context / towers-rooms
   // ที่โหลดมา) ไม่ใช่ค่าฟอร์มที่ยังไม่ได้กด "บันทึก" กันคนพิมพ์ข้อมูลไว้ในช่องเฉยๆ แล้วหลอกให้ผ่านขั้นได้
   const appearanceDone = !!config.appIdentity.nameText.trim();
-  const ratesDone = Number(config.electricRate) > 0 && Number(config.waterRate) > 0;
+  // ต้องเช็คจาก ratesConfirmed (ธงที่ wizard นี้ตั้งเองตอนกด "บันทึกและไปต่อ") ไม่ใช่แค่ electricRate/waterRate
+  // > 0 เพราะองค์กรใหม่ถูกตั้งค่าเริ่มต้นให้ไม่เป็น 0 อยู่แล้ว (7/18 — ดู getOrCreateConfig ฝั่ง backend) ถ้าเช็ค
+  // แค่ > 0 ขั้นนี้จะโชว์ว่า "เสร็จแล้ว" ตั้งแต่โหลดหน้าแรก ทั้งที่ผู้ใช้ยังไม่เคยกดยืนยันเองเลย (บั๊กเดิม: ข้าม
+  // ขั้นค่าน้ำไฟไปเลยไม่ทันได้เห็น/แก้ไขค่า)
+  const ratesDone = config.ratesConfirmed;
   const towersDone = towers.length > 0;
   const roomsDone = rooms.length > 0;
   const doneFlags = [appearanceDone, ratesDone, towersDone, roomsDone];
@@ -136,7 +144,7 @@ export default function OnboardingWizard() {
     if (e <= 0 || w <= 0) { toastError("กรุณากรอกค่าไฟและค่าน้ำให้มากกว่า 0 ทั้งคู่"); return; }
     setSavingRates(true);
     try {
-      await settingsApi.updateConfig(buildConfigPayload({ electricRate: e, waterRate: w }));
+      await settingsApi.updateConfig(buildConfigPayload({ electricRate: e, waterRate: w, ratesConfirmed: true }));
       await refresh();
       setClickedStep(null);
       toastSuccess("บันทึกค่าน้ำไฟสำเร็จ");
@@ -169,7 +177,7 @@ export default function OnboardingWizard() {
   })), [doneFlags, targetStep]);
 
   return (
-    <div className="custom-card" style={{ maxWidth: 760, margin: "0 auto" }}>
+    <div className="custom-card">
       <div className="text-center mb-4">
         <h5 className="mb-1" style={{ fontWeight: 700 }}>
           <i className="fas fa-flag-checkered me-2" style={{ color: "var(--color-primary)" }} />ตั้งค่าเริ่มต้นระบบ

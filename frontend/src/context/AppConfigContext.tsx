@@ -63,8 +63,13 @@ export interface AppConfig {
     easySlipEnabled: boolean; easySlipApiKey: string; promptPayId: string;
   };
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — false = AuthenticatedShell (App.tsx) บังคับพาไปหน้า
-  // Settings ค้างไว้ทุก route จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" (ดู backend routes/settings.ts)
+  // wizard ตั้งค่าเริ่มต้นค้างไว้ทุก route จนกว่าจะกดปุ่ม "เริ่มใช้งานระบบ" ในขั้นสุดท้าย (ดู
+  // backend routes/settings.ts, frontend/src/pages/OnboardingWizard.tsx)
   setupCompleted: boolean;
+  // ผ่านขั้น "ค่าน้ำไฟ" ใน wizard ตั้งค่าเริ่มต้นแล้วจริงหรือยัง — แยกจาก electricRate/waterRate > 0 เพราะ
+  // องค์กรใหม่ถูกตั้งค่าเริ่มต้นให้ไม่เป็น 0 อยู่แล้ว (7/18 — ดู getOrCreateConfig ฝั่ง backend) เช็คแค่ > 0
+  // จะเข้าใจผิดว่าผ่านขั้นนี้ไปแล้วทั้งที่ยังไม่เคยกดยืนยันเองเลย
+  ratesConfirmed: boolean;
   updatedAt?: string;
 }
 
@@ -105,6 +110,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   // ค่าเริ่มต้น "true" ตั้งใจ (fail open) — กันไม่ให้แอปแวบล็อกทุกคนไปหน้า Settings ระหว่างที่ยังโหลดค่าจริง
   // จาก backend ไม่เสร็จ (AuthenticatedShell เช็ค loading ของ context นี้ประกอบด้วยอยู่แล้ว แต่กันไว้อีกชั้น)
   setupCompleted: true,
+  ratesConfirmed: false,
 };
 
 const AppConfigContext = createContext<{

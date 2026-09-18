@@ -429,6 +429,12 @@ export const appConfig = pgTable("app_config", {
   // อยู่ = ฝั่ง frontend บังคับพาไปหน้า Settings ค้างไว้จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" (ดู
   // POST /settings/config/complete-setup ด้านล่าง, AuthenticatedShell ใน frontend/src/App.tsx)
   setupCompleted: text("setup_completed").notNull().default("false"),
+  // ผ่านขั้น "ค่าน้ำไฟ" ในหน้า wizard ตั้งค่าเริ่มต้นแล้วจริงหรือยัง (ดู frontend/src/pages/OnboardingWizard.tsx)
+  // แยกจากการเช็ค "electricRate/waterRate > 0" เพราะ getOrCreateConfig ด้านล่างตั้งค่าเริ่มต้นให้เป็น "7"/"18"
+  // (ไม่ใช่ 0) อยู่แล้วตั้งแต่สร้างองค์กรใหม่ ถ้าใช้แค่ > 0 เป็นตัวเช็คว่า "ทำขั้นนี้เสร็จหรือยัง" จะเข้าใจผิดว่า
+  // เสร็จตั้งแต่ยังไม่เคยกดผ่านขั้นนี้เลย (บั๊กเดิม: wizard ข้ามขั้นค่าน้ำไฟไปเลยตั้งแต่โหลดหน้าแรก) ต้องมีค่า
+  // นี้แยกต่างหากเป็นสัญญาณว่า "ผู้ใช้กดยืนยันขั้นนี้เองแล้วจริงๆ" เท่านั้น ไม่เกี่ยวกับตัวเลขค่าอัตราที่ตั้งไว้
+  ratesConfirmed: text("rates_confirmed").notNull().default("false"),
   updatedAt: str("updated_at"),
 });
 

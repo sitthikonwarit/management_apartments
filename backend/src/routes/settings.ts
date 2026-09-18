@@ -104,6 +104,7 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       promptPayId: r.paymentPromptPayId || "",
     },
     setupCompleted: r.setupCompleted === "true",
+    ratesConfirmed: r.ratesConfirmed === "true",
     updatedAt: r.updatedAt,
   };
 }
@@ -252,6 +253,11 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       easySlipEnabled: b.payment?.easySlipEnabled ? "true" : "false",
       easySlipApiKey: encryptField(String(b.payment?.easySlipApiKey ?? "")),
       paymentPromptPayId: String(b.payment?.promptPayId ?? ""),
+      // ตั้งใจไม่เขียนทับด้วย "false" ถ้า body ไม่ได้ส่งฟิลด์นี้มา (เช่น payload จาก SettingsPage.tsx หลัง
+      // ผ่านขั้นตอนตั้งค่าเริ่มต้นไปแล้ว ไม่มีฟิลด์นี้ในฟอร์มเลย) — คงค่าที่มีอยู่เดิมไว้เสมอ ต่างจากฟิลด์อื่นๆ
+      // ด้านบนที่ยอมให้ "ไม่ส่งมา = false" ได้ เพราะฟิลด์นี้ตั้งใจให้เขียนได้จากจุดเดียวคือ
+      // OnboardingWizard.tsx (ที่ clone ค่า config เดิมมาด้วยเสมอ จึงส่งค่าที่ถูกต้องมาให้ทุกครั้งอยู่แล้ว)
+      ...(b.ratesConfirmed !== undefined ? { ratesConfirmed: b.ratesConfirmed ? "true" : "false" } : {}),
       updatedAt: new Date().toISOString(),
     }).where(eq(appConfig.id, orgId));
     const [row, orgSlug] = await Promise.all([
