@@ -269,42 +269,47 @@ export default function ChatPage() {
         background: "var(--color-white)",
         borderRadius: "var(--border-radius-1)", border: "1px solid var(--color-light)",
       }}>
-        <div className="d-flex gap-2 p-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
-          <div className="search-container flex-grow-1">
-            <i className="fas fa-search" />
-            <input
-              type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ..."
-              value={search} onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" title="ส่งข้อความหลายห้องพร้อมกัน"
-            disabled={conversations.length === 0} onClick={() => setBroadcastOpen(true)}>
-            <i className="fas fa-bullhorn" />
-          </button>
-        </div>
-        {quota?.type === "limited" && (() => {
-          const pct = quota.limit > 0 ? Math.max(0, Math.min(100, ((quota.remaining ?? 0) / quota.limit) * 100)) : 0;
-          const color = pct <= 20 ? "var(--color-danger)" : pct <= 50 ? "#f7d060" : "var(--color-success)";
-          return (
-            <div className="px-2 pt-2 pb-1" style={{ borderBottom: "1px solid var(--color-light)" }}
-              title={`ใช้ไปแล้ว ${quota.used.toLocaleString()} จาก ${quota.limit.toLocaleString()} ข้อความในรอบเดือนนี้ (LINE Official Account แพลนฟรีจำกัดจำนวนข้อความ push/broadcast ต่อเดือน)`}>
-              <div className="d-flex justify-content-between align-items-center mb-1">
-                <span className="text-muted" style={{ fontSize: 11 }}>โควตาข้อความเดือนนี้</span>
-                <span className="small fw-bold" style={{ color }}>
-                  เหลือ {(quota.remaining ?? 0).toLocaleString()} / {quota.limit.toLocaleString()}
-                </span>
-              </div>
-              <div style={{ height: 5, borderRadius: 3, background: "var(--color-light)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${pct}%`, background: color, transition: "width 0.3s ease" }} />
-              </div>
+        {/* ส่วนหัว (ค้นหา + ปุ่มส่งหลายห้อง + แถบโควตา) ต้อง "ค้าง" อยู่บนสุดตอนเลื่อนดูรายชื่อสนทนาด้านล่าง
+            ไม่ใช่เลื่อนหายไปพร้อมรายชื่อ — position: sticky เทียบกับ .chat-list-pane ที่เป็นตัว scroll เอง
+            (overflow-y: auto) ต้องมีพื้นหลังทึบ (ไม่ใช่ transparent) กันรายชื่อที่เลื่อนผ่านทะลุขึ้นมาโชว์ใต้ส่วนหัว */}
+        <div style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--color-white)" }}>
+          <div className="d-flex gap-2 p-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
+            <div className="search-container flex-grow-1">
+              <i className="fas fa-search" />
+              <input
+                type="text" className="form-control form-control-sm" placeholder="ค้นหาด้วยชื่อ..."
+                value={search} onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-          );
-        })()}
-        {quota?.type === "none" && (
-          <div className="px-2 py-1 text-muted" style={{ fontSize: 11, borderBottom: "1px solid var(--color-light)" }}>
-            <i className="fas fa-infinity me-1" />ส่งข้อความไม่จำกัด — ใช้ไปแล้ว {quota.used.toLocaleString()} ข้อความเดือนนี้
+            <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" title="ส่งข้อความหลายห้องพร้อมกัน"
+              disabled={conversations.length === 0} onClick={() => setBroadcastOpen(true)}>
+              <i className="fas fa-bullhorn" />
+            </button>
           </div>
-        )}
+          {quota?.type === "limited" && (() => {
+            const pct = quota.limit > 0 ? Math.max(0, Math.min(100, ((quota.remaining ?? 0) / quota.limit) * 100)) : 0;
+            const color = pct <= 20 ? "var(--color-danger)" : pct <= 50 ? "#f7d060" : "var(--color-success)";
+            return (
+              <div className="px-2 pt-2 pb-1" style={{ borderBottom: "1px solid var(--color-light)" }}
+                title={`ใช้ไปแล้ว ${quota.used.toLocaleString()} จาก ${quota.limit.toLocaleString()} ข้อความในรอบเดือนนี้ (LINE Official Account แพลนฟรีจำกัดจำนวนข้อความ push/broadcast ต่อเดือน)`}>
+                <div className="d-flex justify-content-between align-items-center mb-1">
+                  <span className="text-muted" style={{ fontSize: 11 }}>โควตาข้อความเดือนนี้</span>
+                  <span className="small fw-bold" style={{ color }}>
+                    เหลือ {(quota.remaining ?? 0).toLocaleString()} / {quota.limit.toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ height: 5, borderRadius: 3, background: "var(--color-light)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: color, transition: "width 0.3s ease" }} />
+                </div>
+              </div>
+            );
+          })()}
+          {quota?.type === "none" && (
+            <div className="px-2 py-1 text-muted" style={{ fontSize: 11, borderBottom: "1px solid var(--color-light)" }}>
+              <i className="fas fa-infinity me-1" />ส่งข้อความไม่จำกัด — ใช้ไปแล้ว {quota.used.toLocaleString()} ข้อความเดือนนี้
+            </div>
+          )}
+        </div>
         {conversations.length === 0 && (
           <p className="text-muted small p-3 mb-0">ยังไม่มีข้อความเข้ามาจาก LINE</p>
         )}
