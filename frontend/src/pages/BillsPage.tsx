@@ -9,6 +9,7 @@ import { BillLinePreview } from "../components/BillLinePreviewCard";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import ThaiDatePicker from "../components/ThaiDatePicker";
+import EmptyState from "../components/EmptyState";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   monthYearLabel, myScore, prevMY,
@@ -2013,7 +2014,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
           </thead>
           <tbody>
             {data.length === 0 ? (
-              <tr><td colSpan={ordered.length} className="text-center text-muted p-4">ไม่พบข้อมูล</td></tr>
+              <tr><td colSpan={ordered.length}><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" compact /></td></tr>
             ) : data.map(({ item, idx }) => (
               <tr key={item.roomId}>
                 {ordered.map((col) => {
@@ -2194,7 +2195,7 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
           </thead>
           <tbody>
             {data.length === 0 ? (
-              <tr><td colSpan={ordered.length} className="text-center text-muted p-4">ไม่พบข้อมูล</td></tr>
+              <tr><td colSpan={ordered.length}><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" compact /></td></tr>
             ) : data.map((g) => (
               <tr key={g.id}>
                 {ordered.map((col) => {
@@ -3017,7 +3018,7 @@ export default function BillsPage() {
           ) : groupViewMode === "grid" ? (
             <div className="room-grid">
               {sortedBills.length === 0 ? (
-                <div className="text-center text-muted p-5 w-100">ไม่พบข้อมูล</div>
+                <div className="w-100"><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" /></div>
               ) : sortedBills.map((b) => {
                 const paidCount = b.data.filter((i) => i.status === "paid").length;
                 const total = b.data.reduce((s, i) => s + (Number(i.total) || 0), 0);
@@ -3047,7 +3048,7 @@ export default function BillsPage() {
           ) : (
             <div>
               {sortedBills.length === 0 ? (
-                <div className="text-center text-muted p-5">ไม่พบข้อมูล</div>
+                <EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" />
               ) : sortedBills.map((b) => {
                 const paidCount = b.data.filter((i) => i.status === "paid").length;
                 const total = b.data.reduce((s, i) => s + (Number(i.total) || 0), 0);
@@ -3256,7 +3257,7 @@ export default function BillsPage() {
           ) : roomViewMode === "grid" ? (
             <div className="room-grid nicescrollbar" style={{ maxHeight: 600, overflow: "auto" }}>
               {filteredData.length === 0 ? (
-                <div className="text-center text-muted p-5 w-100">ไม่พบข้อมูล</div>
+                <div className="w-100"><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" /></div>
               ) : filteredData.map(({ item, idx }) => (
                 <div key={item.roomId} className="room-card" style={{ cursor: "pointer" }} onClick={() => openDetail(idx)}>
                   <div className="room-card-header">
@@ -3291,7 +3292,7 @@ export default function BillsPage() {
           ) : (
             <div className="nicescrollbar" style={{ maxHeight: 600, overflow: "auto" }}>
               {filteredData.length === 0 ? (
-                <div className="text-center text-muted p-5">ไม่พบข้อมูล</div>
+                <EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" />
               ) : filteredData.map(({ item, idx }) => (
                 <div key={item.roomId} className="d-flex align-items-center gap-3 p-3"
                   style={{ borderBottom: "1px solid var(--color-light)", cursor: "pointer" }} onClick={() => openDetail(idx)}>

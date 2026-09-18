@@ -2,6 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import Select, { components, StylesConfig } from "react-select";
 import { formatCheckInDate } from "../utils/yearFormat";
 import ColResizeHandle from "./ColResizeHandle";
+import EmptyState from "./EmptyState";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 
@@ -476,7 +477,7 @@ export default function TenantTableView({
             ))}
             {data.length === 0 && (
               <tr>
-                <td colSpan={ordered.length} className="text-center text-muted p-4">ไม่พบข้อมูล</td>
+                <td colSpan={ordered.length}><EmptyState icon="fa-user" text="ไม่พบข้อมูล" compact /></td>
               </tr>
             )}
           </tbody>

@@ -3,6 +3,7 @@ import { logsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { thaiDateTimeString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
+import EmptyState from "../components/EmptyState";
 
 interface LogEntry {
   id: string;
@@ -366,7 +367,7 @@ export default function LogPage() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-muted p-4">ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={5}><EmptyState icon="fa-clipboard-list" text="ไม่พบข้อมูล" compact /></td></tr>
               ) : filtered.map((l) => {
                 const meta = entityMeta(l.entityType);
                 const ok = l.status < 400;

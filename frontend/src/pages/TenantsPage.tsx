@@ -7,6 +7,7 @@ import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import TenantTableView from "../components/TenantTableView";
+import EmptyState from "../components/EmptyState";
 import TenantFormView from "../components/TenantFormView";
 import TenantEditView from "../components/TenantEditView";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
@@ -2081,7 +2082,7 @@ export default function TenantsPage() {
               </li>
             ))}
             {filtered.length === 0 && (
-              <li className="list-group-item text-center text-muted p-4">ไม่พบข้อมูล</li>
+              <li className="list-group-item"><EmptyState icon="fa-user" text="ไม่พบข้อมูล" compact /></li>
             )}
           </ul>
         </div>

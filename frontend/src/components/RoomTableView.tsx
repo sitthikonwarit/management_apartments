@@ -2,6 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Select, { components, StylesConfig } from "react-select";
 import ColResizeHandle from "./ColResizeHandle";
+import EmptyState from "./EmptyState";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom, roomHasTenant, findBookingForRoom } from "../utils/tenantRoom";
@@ -506,7 +507,7 @@ export default function RoomTableView({
               </tr>
             ))}
             {data.length === 0 && (
-              <tr><td colSpan={ordered.length} className="text-center text-muted p-4">ไม่พบข้อมูลห้องพัก</td></tr>
+              <tr><td colSpan={ordered.length}><EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพัก" compact /></td></tr>
             )}
           </tbody>
         </table>

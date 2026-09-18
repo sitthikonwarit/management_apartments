@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { roomsApi, tenantsApi } from "../api/client";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom, roomHasTenant } from "../utils/tenantRoom";
+import EmptyState from "./EmptyState";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function statusClass(s: string) {
@@ -660,7 +661,7 @@ function TowerDashboard({
       </div>
 
       {towers.length === 0 && unassigned.length === 0 ? (
-        <div className="text-center text-muted p-5">ยังไม่มีข้อมูลตึก</div>
+        <EmptyState icon="fa-building" text="ยังไม่มีข้อมูลตึก" />
       ) : (
         <div className="tower-dashboard-grid">
           {/* unassigned rooms card */}

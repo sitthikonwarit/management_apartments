@@ -7,6 +7,7 @@ import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
+import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
@@ -1705,9 +1706,7 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
               </tr>
             ))}
             {meters.length === 0 && (
-              <tr><td colSpan={ordered.length} className="text-center text-muted p-4">
-                <i className="fas fa-tachometer-alt fa-2x mb-3 d-block opacity-25" />ไม่พบรายการจดมิเตอร์
-              </td></tr>
+              <tr><td colSpan={ordered.length}><EmptyState icon="fa-tachometer-alt" text="ไม่พบรายการจดมิเตอร์" compact /></td></tr>
             )}
           </tbody>
         </table>
@@ -2229,10 +2228,7 @@ function openExportDialog() {
             <div className="spinner-border" style={{ color: "var(--color-primary)" }} />
           </div>
         ) : filteredMeters.length === 0 ? (
-          <div className="file-view-empty" style={{ padding: "3rem", textAlign: "center" }}>
-            <i className="fas fa-tachometer-alt fa-2x mb-3 d-block opacity-25" />
-            ยังไม่มีข้อมูลการจดมิเตอร์
-          </div>
+          <EmptyState icon="fa-tachometer-alt" text="ยังไม่มีข้อมูลการจดมิเตอร์" />
         ) : listViewMode === "grid" ? (
           /* ── Grid View ── */
           <div className="room-grid">
@@ -2326,7 +2322,7 @@ function openExportDialog() {
               );
             })}
             {filteredMeters.length === 0 && (
-              <div className="text-center text-muted p-5">ไม่พบรายการจดบันทึก</div>
+              <EmptyState icon="fa-tachometer-alt" text="ไม่พบรายการจดบันทึก" />
             )}
           </div>
         )}

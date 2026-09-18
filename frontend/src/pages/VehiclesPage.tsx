@@ -17,6 +17,7 @@ import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
+import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
@@ -1125,9 +1126,7 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
               </tr>
             ))}
             {vehicles.length === 0 && (
-              <tr><td colSpan={ordered.length} className="text-center text-muted p-4">
-                <i className="fas fa-car fa-2x mb-3 d-block opacity-25" />ไม่พบรายการยานพาหนะ
-              </td></tr>
+              <tr><td colSpan={ordered.length}><EmptyState icon="fa-car" text="ไม่พบรายการยานพาหนะ" compact /></td></tr>
             )}
           </tbody>
         </table>
@@ -1494,10 +1493,7 @@ export default function VehiclesPage() {
       ) : (
         <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
           {filtered.length === 0 ? (
-            <div className="text-center text-muted p-5">
-              <i className="fas fa-car fa-2x mb-3 d-block opacity-25" />
-              {search || typeFilter ? "ไม่พบยานพาหนะที่ตรงกัน" : "ยังไม่มีข้อมูลยานพาหนะ"}
-            </div>
+            <EmptyState icon="fa-car" text={search || typeFilter ? "ไม่พบยานพาหนะที่ตรงกัน" : "ยังไม่มีข้อมูลยานพาหนะ"} />
           ) : view === "grid" ? (
             /* ── Grid View ── */
             <div className="room-grid">

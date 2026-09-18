@@ -16,6 +16,7 @@ import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
+import EmptyState from "../components/EmptyState";
 import TowerManagement from "../components/TowerManagement";
 import RoomTableView from "../components/RoomTableView";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
@@ -1893,7 +1894,7 @@ export default function RoomsPage() {
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center text-muted p-5 w-100">ไม่พบข้อมูลห้องพักที่ตรงกัน</div>
+            <div className="w-100"><EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพักที่ตรงกัน" /></div>
           )}
         </div>
       ) : view === "table" ? (
@@ -1957,7 +1958,7 @@ export default function RoomsPage() {
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center text-muted p-5">ไม่พบข้อมูลห้องพักที่ตรงกัน</div>
+            <EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพักที่ตรงกัน" />
           )}
         </div>
       )}
