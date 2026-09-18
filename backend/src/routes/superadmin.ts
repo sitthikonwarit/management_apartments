@@ -5,7 +5,7 @@
 // ที่ล็อกอิน ไม่ใช่ security boundary) แต่ต้องเพิ่ม Callback URL "{PUBLIC_BASE_URL}/auth/superadmin/callback"
 // ไว้ใน LINE Developers Console ของ channel นั้นเองก่อน (ดูคอมเมนต์ที่ .env.example)
 import { Elysia } from "elysia";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { rm } from "fs/promises";
 import { mkdirSync, writeFileSync, readFileSync } from "fs";
 import { resolve } from "path";
@@ -202,11 +202,17 @@ async function countWhereOrg(table: any, orgId: string): Promise<number> {
 }
 
 async function getOwnerUser(orgId: string) {
-  const [owner] = await db.select({
+  const cols = {
     id: users.id, username: users.username, phone: users.phone, lineUserId: users.lineUserId, displayName: users.displayName,
-  }).from(users)
-    .where(and(eq(users.orgId, orgId), eq(users.role, "owner")));
-  return owner ?? null;
+  };
+  const [owner] = await db.select(cols).from(users).where(and(eq(users.orgId, orgId), eq(users.role, "owner")));
+  if (owner) return owner;
+  // องค์กรเก่าบางแห่งไม่มีบัญชี role="owner" เลย (ข้อมูลเก่าก่อนมีแนวคิดนี้ หรือบัญชีเจ้าของเดิมถูกลบไปแล้ว) —
+  // fallback ไปใช้บัญชีที่สร้างก่อนสุดในองค์กรนั้นแทน ให้ฟีเจอร์จัดการฝั่งนี้ (แก้เบอร์/ชื่อ/รีเซ็ตรหัสผ่าน) ยัง
+  // ใช้งานได้ แทนที่จะรายงาน "ไม่พบบัญชีเจ้าของ" ทื่อๆ — role ไม่ได้ใช้เป็น permission gate ที่ไหนอื่นในระบบเลย
+  // (grep ทั้ง backend แล้ว) จึงไม่กระทบสิทธิ์การใช้งานจริงของผู้ใช้คนนั้น
+  const [fallback] = await db.select(cols).from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.createdAt)).limit(1);
+  return fallback ?? null;
 }
 
 // สุ่มรหัสผ่านใหม่ตอนกด "รีเซ็ตรหัสผ่าน" ในหน้าควบคุมแพลตฟอร์ม — ตัดตัวอักษรที่อ่าน/พิมพ์สับสนง่ายออก (0/O,
