@@ -344,11 +344,13 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     console.log(`[superadmin] reset password for org=${params.id} (${org.name}) owner=${owner.id}`);
     return { username, password: newPassword };
   })
-  // แก้ "รหัส (slug)" ขององค์กร และ/หรือ "เบอร์โทร" ของบัญชีเจ้าของ — ส่งมาเฉพาะฟิลด์ที่จะแก้ (ไม่ส่ง = ไม่แตะ)
-  // slug ใช้เป็น ?org= ใน LIFF URL ขององค์กรนี้ (ดู lib/orgContext.ts) เปลี่ยนแล้วต้องไปอัปเดต Endpoint URL ใน
-  // LINE Developers Console ของลูกค้าเองด้วย ไม่งั้น LIFF เดิมจะ resolve องค์กรไม่เจอ — เบอร์ใช้จับคู่ตอนเจ้าของ
-  // มากรอกที่หน้า Login เพื่อเชื่อม LINE ครั้งแรก (ดู routes/lineLogin.ts) แก้ได้แม้ผูก LINE ไปแล้วเผื่อพิมพ์ผิด/
-  // เปลี่ยนเบอร์ทีหลัง (ไม่กระทบการเชื่อม LINE ที่ทำไปแล้ว ใช้แค่ lineUserId เป็นตัวเช็คว่าเชื่อมหรือยัง ไม่ใช่เบอร์)
+  // แก้ "รหัส (slug)" ขององค์กร และ/หรือ "เบอร์โทร"/"ชื่อเจ้าของ" ของบัญชีเจ้าของ — ส่งมาเฉพาะฟิลด์ที่จะแก้
+  // (ไม่ส่ง = ไม่แตะ) slug ใช้เป็น ?org= ใน LIFF URL ขององค์กรนี้ (ดู lib/orgContext.ts) เปลี่ยนแล้วต้องไป
+  // อัปเดต Endpoint URL ใน LINE Developers Console ของลูกค้าเองด้วย ไม่งั้น LIFF เดิมจะ resolve องค์กรไม่เจอ —
+  // เบอร์ใช้จับคู่ตอนเจ้าของมากรอกที่หน้า Login เพื่อเชื่อม LINE ครั้งแรก (ดู routes/lineLogin.ts) แก้ได้แม้ผูก
+  // LINE ไปแล้วเผื่อพิมพ์ผิด/เปลี่ยนเบอร์ทีหลัง (ไม่กระทบการเชื่อม LINE ที่ทำไปแล้ว ใช้แค่ lineUserId เป็นตัวเช็ค
+  // ว่าเชื่อมหรือยัง ไม่ใช่เบอร์) — ชื่อเจ้าของแก้ได้อิสระ ไม่ผูกกับชื่อ LINE จริง (แค่ label ไว้ดูในหน้านี้เท่านั้น
+  // ไม่กระทบชื่อที่ผู้เช่าเห็น/ใช้แสดงในระบบขององค์กรนั้นแต่อย่างใด)
   .patch("/organizations/:id", async ({ params, body, set }) => {
     const b = body as any;
     const [org] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, params.id));
@@ -367,14 +369,23 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
       if (nextPhone.length < 9) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรให้ครบ" }; }
     }
 
+    let nextDisplayName: string | undefined;
+    if (b.displayName !== undefined) {
+      nextDisplayName = String(b.displayName ?? "").trim();
+      if (!nextDisplayName) { set.status = 400; return { error: "กรุณากรอกชื่อเจ้าของ" }; }
+    }
+
     try {
       if (nextSlug !== undefined) {
         await db.update(organizations).set({ slug: nextSlug, updatedAt: new Date().toISOString() }).where(eq(organizations.id, params.id));
       }
-      if (nextPhone !== undefined) {
+      if (nextPhone !== undefined || nextDisplayName !== undefined) {
         const owner = await getOwnerUser(params.id);
         if (!owner) { set.status = 404; return { error: "ไม่พบบัญชีเจ้าของขององค์กรนี้" }; }
-        await db.update(users).set({ phone: nextPhone, updatedAt: new Date().toISOString() }).where(eq(users.id, owner.id));
+        const ownerPatch: Partial<typeof users.$inferInsert> = { updatedAt: new Date().toISOString() };
+        if (nextPhone !== undefined) ownerPatch.phone = nextPhone;
+        if (nextDisplayName !== undefined) ownerPatch.displayName = nextDisplayName;
+        await db.update(users).set(ownerPatch).where(eq(users.id, owner.id));
       }
     } catch (e: any) {
       if (e?.code === "23505" && e?.constraint_name === "organizations_slug_unique") {
@@ -388,8 +399,8 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
       throw e;
     }
 
-    console.log(`[superadmin] updated org=${params.id} (${org.name})${nextSlug !== undefined ? ` slug->${nextSlug}` : ""}${nextPhone !== undefined ? ` phone->${nextPhone}` : ""}`);
-    return { id: params.id, slug: nextSlug, phone: nextPhone };
+    console.log(`[superadmin] updated org=${params.id} (${org.name})${nextSlug !== undefined ? ` slug->${nextSlug}` : ""}${nextPhone !== undefined ? ` phone->${nextPhone}` : ""}${nextDisplayName !== undefined ? ` displayName->${nextDisplayName}` : ""}`);
+    return { id: params.id, slug: nextSlug, phone: nextPhone, displayName: nextDisplayName };
   })
   .patch("/organizations/:id/status", async ({ params, body, set }) => {
     const status = String((body as any)?.status ?? "");

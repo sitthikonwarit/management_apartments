@@ -465,10 +465,10 @@ export const superAdminApi = {
     superAdminHttp.post("/superadmin/organizations", data).then((r) => r.data as { id: string; name: string; slug: string; status: string; ownerPhone: string }),
   updateOrgStatus: (id: string, status: "active" | "suspended") =>
     superAdminHttp.patch(`/superadmin/organizations/${id}/status`, { status }).then((r) => r.data as { id: string; status: string }),
-  // แก้ "รหัส (slug)" และ/หรือ "เบอร์โทรเจ้าของ" — ส่งมาเฉพาะฟิลด์ที่จะแก้ (ดู PATCH /superadmin/organizations/:id
-  // ฝั่ง backend) ใช้กับการแก้ไขแบบ inline ในตารางรายชื่อองค์กร
-  updateOrgDetails: (id: string, data: { slug?: string; phone?: string }) =>
-    superAdminHttp.patch(`/superadmin/organizations/${id}`, data).then((r) => r.data as { id: string; slug?: string; phone?: string }),
+  // แก้ "รหัส (slug)" และ/หรือ "เบอร์โทรเจ้าของ"/"ชื่อเจ้าของ" — ส่งมาเฉพาะฟิลด์ที่จะแก้ (ดู
+  // PATCH /superadmin/organizations/:id ฝั่ง backend) ใช้กับการแก้ไขแบบ inline ในตารางรายชื่อองค์กร
+  updateOrgDetails: (id: string, data: { slug?: string; phone?: string; displayName?: string }) =>
+    superAdminHttp.patch(`/superadmin/organizations/${id}`, data).then((r) => r.data as { id: string; slug?: string; phone?: string; displayName?: string }),
   deleteOrg: (id: string, confirmName: string) =>
     superAdminHttp.delete(`/superadmin/organizations/${id}`, { data: { confirmName } }).then((r) => r.data as { deleted: string }),
   // รีเซ็ตรหัสผ่านบัญชีเจ้าของ — คืนรหัสผ่านใหม่แบบ plaintext ครั้งเดียว (backend ไม่เก็บไว้ดูย้อนหลังได้อีก)

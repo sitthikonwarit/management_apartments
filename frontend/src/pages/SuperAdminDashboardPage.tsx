@@ -189,16 +189,19 @@ export default function SuperAdminDashboardPage() {
     }
   }
 
-  // แก้ "รหัส (slug)" หรือ "เบอร์โทรเจ้าของ" แบบ inline ในตาราง (ดู EditableField ด้านบน) — โยน error กลับไปให้
-  // EditableField แสดงต่อ (เช่น slug/เบอร์นี้ถูกใช้ไปแล้ว) ถ้าสำเร็จค่อยอัปเดต state ตาราง ไม่ต้องโหลดทั้งหน้าใหม่
-  async function handleUpdateOrgField(org: SuperAdminOrg, field: "slug" | "phone", value: string) {
+  // แก้ "รหัส (slug)" / "เบอร์โทรเจ้าของ" / "ชื่อเจ้าของ" แบบ inline ในตาราง (ดู EditableField ด้านบน) — โยน
+  // error กลับไปให้ EditableField แสดงต่อ (เช่น slug/เบอร์นี้ถูกใช้ไปแล้ว) ถ้าสำเร็จค่อยอัปเดต state ตาราง
+  // ไม่ต้องโหลดทั้งหน้าใหม่
+  async function handleUpdateOrgField(org: SuperAdminOrg, field: "slug" | "phone" | "displayName", value: string) {
     const result = await superAdminApi.updateOrgDetails(org.id, { [field]: value });
     setOrgs((prev) => prev.map((o) => {
       if (o.id !== org.id) return o;
       if (field === "slug") return { ...o, slug: result.slug ?? value };
-      return { ...o, owner: { ...o.owner, phone: result.phone ?? value } };
+      if (field === "phone") return { ...o, owner: { ...o.owner, phone: result.phone ?? value } };
+      return { ...o, owner: { ...o.owner, displayName: result.displayName ?? value } };
     }));
-    toastSuccess(field === "slug" ? "แก้ไขรหัส (slug) สำเร็จ" : "แก้ไขเบอร์โทรสำเร็จ");
+    const labels = { slug: "รหัส (slug)", phone: "เบอร์โทร", displayName: "ชื่อเจ้าของ" };
+    toastSuccess(`แก้ไข${labels[field]}สำเร็จ`);
   }
 
   function openDeleteModal(org: SuperAdminOrg) {
@@ -434,7 +437,9 @@ export default function SuperAdminDashboardPage() {
                         <EditableField value={org.slug || ""} placeholder="slug" onSave={(v) => handleUpdateOrgField(org, "slug", v)} />
                       </code>
                     </td>
-                    <td className="small">{org.owner.displayName || <span className="text-muted">-</span>}</td>
+                    <td className="small">
+                      <EditableField value={org.owner.displayName || ""} placeholder="ชื่อเจ้าของ" width={130} onSave={(v) => handleUpdateOrgField(org, "displayName", v)} />
+                    </td>
                     <td className="small">
                       <EditableField value={org.owner.phone || ""} placeholder="เบอร์โทร" width={110} onSave={(v) => handleUpdateOrgField(org, "phone", v)} />
                     </td>
