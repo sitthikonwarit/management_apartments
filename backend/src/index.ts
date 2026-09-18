@@ -25,6 +25,7 @@ import { verifyToken } from "./lib/jwt";
 import { registerClient, unregisterClient, broadcastChange } from "./lib/wsHub";
 import { recordRequest, recordApiCall } from "./lib/apiUsageTracker";
 import { verifyUploadSignature } from "./lib/encryption";
+import { getClientIp } from "./lib/requestIp";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { getDriveImageBuffer } from "./services/sheets";
@@ -193,7 +194,7 @@ const app = new Elysia()
       requestBody: body,
       responseBody: response,
       userAgent: headers["user-agent"] ?? "",
-      ip: server?.requestIP(request)?.address ?? "",
+      ip: getClientIp(headers, server, request),
     });
     // แจ้งทุกเครื่องขององค์กรเดียวกันที่เปิดหน้าเว็บอยู่ (WebSocket) ให้รู้ว่าข้อมูลประเภทนี้เปลี่ยนไปแล้ว
     // จะได้โหลดใหม่ทันที (จำกัดเฉพาะองค์กรตัวเอง กันการแจ้งเตือนข้ามองค์กร — ดู wsHub.ts)

@@ -14,6 +14,7 @@ import { organizations, users } from "../db/schema";
 import { signToken } from "../lib/jwt";
 import { recordLog } from "../lib/activityLog";
 import { revokeSessionsForUser } from "../lib/wsHub";
+import { getClientIp } from "../lib/requestIp";
 
 // เหมือน normalizePhone ใน routes/superadmin.ts (ก๊อปมาแบบเดียวกับ helper เล็กๆ อื่นในไฟล์นี้ — ต้องได้
 // ผลลัพธ์ตรงกันเป๊ะกับตอนซุปเปอร์แอดมินกรอกเบอร์ไว้ตอนสร้างองค์กร ถึงจะจับคู่กันได้ตอนเชื่อม LINE ครั้งแรก)
@@ -224,7 +225,7 @@ export const lineLoginRoute = new Elysia({ prefix: "/auth/line" })
         orgId: user.orgId, userId: user.id, username: user.username || displayName, method: "GET", path: "/auth/line/callback",
         action: "login", entityType: "auth",
         description: isClaim ? "เชื่อมบัญชี LINE เข้ากับองค์กรที่เตรียมไว้ด้วยเบอร์โทร" : "เข้าสู่ระบบด้วย LINE Login",
-        status: 200, userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
+        status: 200, userAgent: headers["user-agent"] ?? "", ip: getClientIp(headers, server, request),
       });
       revokeSessionsForUser(user.id);
 

@@ -6,6 +6,7 @@ import { signToken } from "../lib/jwt";
 import { authDerive } from "../lib/authDerive";
 import { recordLog } from "../lib/activityLog";
 import { revokeSessionsForUser } from "../lib/wsHub";
+import { getClientIp } from "../lib/requestIp";
 
 function parseUser(r: typeof users.$inferSelect) {
   return {
@@ -65,7 +66,7 @@ export const authPublicRoute = new Elysia({ prefix: "/auth" })
     await recordLog({
       orgId: row.orgId, userId: row.id, username: row.username, method: "POST", path: "/auth/login",
       action: "login", entityType: "auth", description: "เข้าสู่ระบบ", status: 200,
-      requestBody: body, userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
+      requestBody: body, userAgent: headers["user-agent"] ?? "", ip: getClientIp(headers, server, request),
     });
     revokeSessionsForUser(row.id);
     return { token, user: parseUser({ ...row, lastLoginAt: ts }) };
@@ -81,7 +82,7 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
     await recordLog({
       orgId: authUser.orgId, userId: authUser.id, username: authUser.username, method: "POST", path: "/auth/logout",
       action: "logout", entityType: "auth", description: "ออกจากระบบ", status: 200,
-      userAgent: headers["user-agent"] ?? "", ip: server?.requestIP(request)?.address ?? "",
+      userAgent: headers["user-agent"] ?? "", ip: getClientIp(headers, server, request),
     });
     return { ok: true };
   })
