@@ -13,7 +13,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   // ขั้นตอน "ล็อกอินครั้งแรก" 3 ขั้น: กรอกเบอร์ที่ผู้ดูแลระบบสร้างให้ → ยืนยันแล้วค่อยตั้ง username/password
-  // ของตัวเอง → เสร็จแล้วค่อยกดเชื่อม LINE ต่อ (ไปหน้า LINE OAuth จริง) ดู routes/lineLogin.ts ฝั่ง backend
+  // ของตัวเอง → เสร็จแล้วค่อยกดเชื่อม LINE ต่อ (ไปหน้า LINE OAuth จริง) ดู routes/lineLogin.ts ฝั่ง backend —
+  // ซ่อนไว้ก่อนจนกว่าจะกด "เข้าสู่ระบบด้วย LINE" แล้วเจอว่ายังไม่มีบัญชี (lineLoginError ส่งกลับมา ดู useEffect
+  // ด้านล่าง) ถึงจะโผล่ขึ้นมา กันคนที่มีบัญชีเชื่อม LINE อยู่แล้วเห็นฟอร์มนี้รกหน้าไปเปล่าๆ
+  const [showFirstTimeFlow, setShowFirstTimeFlow] = useState(false);
   const [firstTimeStep, setFirstTimeStep] = useState<"phone" | "credentials" | "done">("phone");
   const [firstTimePhone, setFirstTimePhone] = useState("");
   const [firstTimeUsername, setFirstTimeUsername] = useState("");
@@ -69,6 +72,7 @@ export default function LoginPage() {
     const lineLoginError = params.get("lineLoginError");
     if (lineLoginError) {
       setError(lineLoginError);
+      setShowFirstTimeFlow(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -114,8 +118,10 @@ export default function LoginPage() {
           <i className="fab fa-line me-2" />เข้าสู่ระบบด้วย LINE
         </a>
 
+        {showFirstTimeFlow && (
+        <>
         <p className="text-muted small text-center mb-2">
-          เจ้าของใหม่ที่ยังไม่เคยเชื่อมบัญชี LINE? กรอกเบอร์ที่ผู้ดูแลระบบสร้างให้ด้านล่างนี้
+          ยังไม่มีบัญชีที่เชื่อมกับ LINE นี้ — กรอกเบอร์ที่ผู้ดูแลระบบสร้างให้ด้านล่างนี้เพื่อเชื่อมบัญชี
         </p>
 
         <div className="mb-3 p-3" style={{ background: "var(--color-background)", borderRadius: "var(--border-radius-1)" }}>
@@ -186,6 +192,8 @@ export default function LoginPage() {
               </div>
             )}
         </div>
+        </>
+        )}
 
         <div className="d-flex align-items-center gap-2 mb-3">
           <hr className="flex-grow-1 m-0" />
