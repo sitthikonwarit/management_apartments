@@ -345,6 +345,13 @@ body.dark-mode #tenantList .list-group-item strong { color: var(--color-dark); }
 body.dark-mode #tenantList.view-grid .list-group-item { border-color: var(--dm-border); background-color: var(--color-white); }
 body.dark-mode #tenantList.view-grid .list-group-item:hover { background-color: var(--dm-surface2); }
 
+/* ── รายการห้องในป็อปอัพ "สร้างห้องอัตโนมัติ" (TowerManagement.tsx) — ใช้ .list-group ของ Bootstrap ตรงๆ
+   ไม่มี id เฉพาะแบบ #tenantList ด้านบน จึงยังเป็นพื้นขาวของ Bootstrap ค้างอยู่ในโหมดมืด ── */
+body.dark-mode .room-select-modal-content .list-group-item {
+  background-color: var(--color-white); color: var(--color-dark); border-color: var(--dm-border);
+}
+body.dark-mode .room-select-modal-content .list-group-item:hover { background-color: var(--dm-surface2); }
+
 /* ── Custom Select2 component ── */
 body.dark-mode .custom-select2 {
   background-color: var(--dm-surface2);

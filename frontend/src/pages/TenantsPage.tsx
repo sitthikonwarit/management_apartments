@@ -2044,6 +2044,12 @@ export default function TenantsPage() {
         />
       ) : (
         <div id="tenantListContainer" style={{ maxHeight: 650, overflow: "auto" }} className="nicescrollbar">
+          {filtered.length === 0 ? (
+            // ไม่ render <ul id="tenantList"> เลยตอนไม่มีข้อมูล — ไม่งั้น EmptyState จะโดน CSS ของ
+            // #tenantList.view-grid .list-group-item ครอบ (ดู App.css) กลายเป็นกล่องสี่เหลี่ยมเล็กๆ
+            // พื้นหลังขาวขุ่นแทนที่จะเป็นแถบเรียบเต็มความกว้างเหมือนหน้าอื่น (จดมิเตอร์/บิล/ห้องพัก ฯลฯ)
+            <EmptyState icon="fa-user" text="ไม่พบข้อมูล" />
+          ) : (
           <ul id="tenantList" className={`list-group list-group-flush view-${view}`}>
             {filtered.map((t) => (
               <li key={t.id} className="list-group-item p-2" style={{ cursor: "pointer" }} onClick={() => goToDetail(t)}>
@@ -2081,10 +2087,8 @@ export default function TenantsPage() {
                 )}
               </li>
             ))}
-            {filtered.length === 0 && (
-              <li className="list-group-item"><EmptyState icon="fa-user" text="ไม่พบข้อมูล" compact /></li>
-            )}
           </ul>
+          )}
         </div>
       )}
 
