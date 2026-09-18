@@ -177,9 +177,17 @@ export const tenantsRoute = new Elysia({ prefix: "/tenants" })
     // pdfLinksToKeep มาจาก frontend ที่ถือ url "เซ็นแล้ว" (ได้จาก parseTenant ด้านบน) ต้องตัด ?sig=... ทิ้ง
     // ก่อนเก็บกลับเข้าฐานข้อมูล ไม่งั้นจะมี path ที่มีลายเซ็นติดค้างอยู่ในฐานข้อมูลถาวร (ผิดหลักที่ตั้งไว้ว่า
     // ฐานข้อมูลเก็บ path ดิบเสมอ เซ็นตอนส่งออกเท่านั้น — ดู lib/encryption.ts) แล้วพังถ้าหมุนกุญแจเซ็นทีหลัง
+    // ต้องกรองด้วยว่า url ที่ส่งมามีอยู่จริงใน pdfLinks เดิมของผู้เช่ารายนี้เท่านั้น (เหมือน kept ใน rooms.ts:
+    // PATCH /:id/pictures และ vehicles.ts: PATCH /:id/images) ห้ามเก็บ url ใดๆ ที่ client ยัดมาเองตรงๆ โดยไม่
+    // เช็ค ไม่งั้นใครก็แนบ path ไฟล์ขององค์กรอื่นมาได้ แล้วฟังก์ชัน signUploadPath จะเซ็นให้เปิดดูได้จริงตอน
+    // GET /tenants (ไม่มีการเช็คว่าไฟล์นั้นเป็นขององค์กร/ผู้เช่ารายนี้จริงหรือไม่ นอกจากเช็คแค่ลายเซ็น HMAC)
+    const existingPdfLinks: any[] = j(existing.pdfLinks, []);
+    const existingPdfUrls = new Set(existingPdfLinks.map((f: any) => f?.url).filter(Boolean));
     let pdfLinksArr: any[] = Array.isArray(pdfLinksToKeep)
-      ? pdfLinksToKeep.map((f: any) => (f?.url ? { ...f, url: String(f.url).split("?")[0] } : f))
-      : j(existing.pdfLinks, []);
+      ? pdfLinksToKeep
+          .map((f: any) => (f?.url ? { ...f, url: String(f.url).split("?")[0] } : f))
+          .filter((f: any) => f?.url && existingPdfUrls.has(f.url))
+      : existingPdfLinks;
     if (Array.isArray(pdfFiles)) {
       for (const pdf of pdfFiles) {
         const url = await uploadFileToDrive(pdf.name, "application/pdf", pdf.data);
@@ -234,6 +242,12 @@ export const tenantsRoute = new Elysia({ prefix: "/tenants" })
     const [existing] = await db.select().from(tenants).where(and(eq(tenants.id, id), eq(tenants.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบผู้เช่า" }; }
 
+    // รูปเดิมของผู้ร่วมพักอาศัยที่มีอยู่จริงในฐานข้อมูลตอนนี้ — ใช้กรอง cr.image ที่ frontend ส่งกลับมาด้านล่าง
+    // (เหมือน pdfLinksToKeep ด้านบน) ห้ามเก็บ url ใดๆ ที่ client ยัดมาเองตรงๆ โดยไม่เช็คว่ามีอยู่จริงในรายการเดิม
+    const existingCoResidentImages = new Set(
+      j(existing.coResidents, []).map((cr: any) => cr?.image).filter(Boolean)
+    );
+
     const processed = await Promise.all(
       (coResidents ?? []).map(async (cr: any) => {
         if (cr.imageBase64) {
@@ -244,8 +258,11 @@ export const tenantsRoute = new Elysia({ prefix: "/tenants" })
           return { ...rest, image: url };
         }
         // ไม่มีรูปใหม่ = เก็บรูปเดิมไว้ — cr.image ที่ frontend ส่งมาอาจเป็น url "เซ็นแล้ว" (ได้จาก parseTenant
-        // ด้านบน) ต้องตัด ?sig=... ทิ้งก่อนเก็บกลับ เหมือน pdfLinksToKeep ด้านบน (ดู lib/encryption.ts)
-        return cr.image ? { ...cr, image: String(cr.image).split("?")[0] } : cr;
+        // ด้านบน) ต้องตัด ?sig=... ทิ้งก่อนเก็บกลับ เหมือน pdfLinksToKeep ด้านบน (ดู lib/encryption.ts) แล้วเช็ค
+        // ว่า path ที่เหลือ (หลังตัด ?sig=...) ตรงกับรูปเดิมของผู้ร่วมพักอาศัยรายนี้จริง ไม่งั้นทิ้งรูปนั้นไป
+        if (!cr.image) return cr;
+        const rawImage = String(cr.image).split("?")[0];
+        return existingCoResidentImages.has(rawImage) ? { ...cr, image: rawImage } : { ...cr, image: "" };
       })
     );
 

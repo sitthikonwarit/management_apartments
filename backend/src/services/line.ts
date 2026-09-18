@@ -789,7 +789,12 @@ export async function downloadLineContent(token: string, messageId: string, ext:
     const dir = resolve(process.cwd(), "uploads", "chat");
     await mkdir(dir, { recursive: true });
     const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "bin";
-    const fileName = `${messageId}.${safeExt}`;
+    // messageId มาจาก msg.id ใน webhook payload — ถึงจะยิงเข้ามาได้ก็ต่อเมื่อผ่านการตรวจ x-line-signature
+    // ด้วย channel secret ขององค์กรแล้วเท่านั้น (ดู routes/lineWebhook.ts) แต่ยังกันไว้เป็น defense-in-depth
+    // ชั้นเดียวกับตัว upload helper อื่นๆ ในไฟล์นี้ (uploadRoomImage/uploadVehicleImage/uploadChatAttachment
+    // ฯลฯ) ที่ sanitize ชื่อไฟล์ก่อนเขียนดิสก์เสมอ ไม่ปล่อยให้ path ดิบจากภายนอกไปกำหนดชื่อไฟล์ตรงๆ
+    const safeMessageId = String(messageId).replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fileName = `${safeMessageId}.${safeExt}`;
     await writeFile(resolve(dir, fileName), buffer);
     return `/uploads/chat/${fileName}`;
   } catch {

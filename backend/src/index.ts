@@ -90,7 +90,15 @@ const app = new Elysia()
       return { error: "File not found" };
     }
     try {
-      const filePath = resolve(process.cwd(), "uploads", (params as any)["*"]);
+      const uploadsDir = resolve(process.cwd(), "uploads");
+      const filePath = resolve(uploadsDir, (params as any)["*"]);
+      // กันสองชั้น (defense-in-depth): แม้ signUploadPath จะปฏิเสธ path ที่มี ".." ไปแล้วตั้งแต่ตอนเซ็นก็ตาม
+      // (ดู lib/encryption.ts) เช็คซ้ำตรงนี้อีกทีว่า path ที่ resolve แล้วยังอยู่ใต้โฟลเดอร์ uploads/ จริง ไม่งั้น
+      // ปฏิเสธไปเลย ไม่ยอมอ่านไฟล์นอกโฟลเดอร์นี้ไม่ว่ากรณีใด
+      if (!filePath.startsWith(uploadsDir)) {
+        set.status = 404;
+        return { error: "File not found" };
+      }
       const file = readFileSync(filePath);
       const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
       const mime: Record<string, string> = {

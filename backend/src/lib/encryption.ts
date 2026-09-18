@@ -58,9 +58,18 @@ export function decryptField(stored: string): string {
 // เช็คว่าเป็น string ก่อนเสมอ (typeof) — ข้อมูลเก่าบางฟิลด์ (เช่น vehicles.images ยุค Google Sheets/Drive
 // เดิม) เก็บเป็น array ของ object {id, url, viewUrl, name} ไม่ใช่ string ตรงๆ ถ้าไม่กันไว้จะ throw กลางทาง
 // (relativePath.startsWith is not a function) ทำให้ endpoint ทั้งเส้นพัง 500 แทนที่จะแค่ข้ามค่านั้นไป
+// ป้องกันชั้นที่สอง (defense-in-depth): ห้ามเซ็น path ที่มี ".." เป็น segment เด็ดขาด แม้ทุกจุดที่เรียกมาแล้ว
+// (routes/tenants.ts ฯลฯ) ควรกรอง path ให้ตรงกับของเดิมที่มีอยู่จริงในฐานข้อมูลก่อนอยู่แล้วก็ตาม — กันไว้เผื่อ
+// จุดเรียกใหม่ในอนาคตพลาดไม่ได้กรอง เพราะถ้าเซ็น path แบบ "/uploads/../../.env" ให้ผ่านไปได้ ตัว handler
+// GET /uploads/* ใน index.ts จะ resolve ออกนอกโฟลเดอร์ uploads/ จริง กลายเป็นอ่านไฟล์ใดๆ บนเครื่องเซิร์ฟเวอร์ได้
+function hasTraversalSegment(path: string): boolean {
+  return path.split("/").some((seg) => seg === "..");
+}
+
 export function signUploadPath(relativePath: unknown): string {
   if (typeof relativePath !== "string" || !relativePath || !relativePath.startsWith("/uploads/")) return relativePath as string;
   const cleanPath = relativePath.split("?")[0];
+  if (hasTraversalSegment(cleanPath)) return "";
   const sig = createHmac("sha256", SIGNING_KEY).update(cleanPath).digest("base64url");
   return `${cleanPath}?sig=${sig}`;
 }
