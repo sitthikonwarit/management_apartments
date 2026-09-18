@@ -1822,6 +1822,9 @@ export default function RoomsPage() {
       {loading ? (
         <div className="text-center p-5"><div className="spinner-border" style={{ color: "var(--color-primary)" }} /></div>
       ) : view === "grid" ? (
+        filtered.length === 0 ? (
+          <EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพักที่ตรงกัน" />
+        ) : (
         <div className="room-grid">
           {filtered.map((room) => {
             const tower = towers.find((t) => t.id === room.towerId);
@@ -1893,10 +1896,8 @@ export default function RoomsPage() {
               </div>
             );
           })}
-          {filtered.length === 0 && (
-            <div className="w-100"><EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพักที่ตรงกัน" /></div>
-          )}
         </div>
+        )
       ) : view === "table" ? (
         <RoomTableView
           data={filtered}

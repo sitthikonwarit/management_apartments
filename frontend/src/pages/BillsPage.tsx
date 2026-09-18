@@ -3016,10 +3016,11 @@ export default function BillsPage() {
               onBulkPrint={(groups) => openPrintConfig(groups.flatMap((g) => g.data.map((item) => ({ item, monthYear: g.monthYear }))))}
             />
           ) : groupViewMode === "grid" ? (
+            sortedBills.length === 0 ? (
+              <EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" />
+            ) : (
             <div className="room-grid">
-              {sortedBills.length === 0 ? (
-                <div className="w-100"><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" /></div>
-              ) : sortedBills.map((b) => {
+              {sortedBills.map((b) => {
                 const paidCount = b.data.filter((i) => i.status === "paid").length;
                 const total = b.data.reduce((s, i) => s + (Number(i.total) || 0), 0);
                 return (
@@ -3045,6 +3046,7 @@ export default function BillsPage() {
                 );
               })}
             </div>
+            )
           ) : (
             <div>
               {sortedBills.length === 0 ? (
@@ -3255,10 +3257,13 @@ export default function BillsPage() {
               bulkSendingLine={bulkSendingLine}
             />
           ) : roomViewMode === "grid" ? (
+            filteredData.length === 0 ? (
+              <div className="nicescrollbar" style={{ maxHeight: 600, overflow: "auto" }}>
+                <EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" />
+              </div>
+            ) : (
             <div className="room-grid nicescrollbar" style={{ maxHeight: 600, overflow: "auto" }}>
-              {filteredData.length === 0 ? (
-                <div className="w-100"><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" /></div>
-              ) : filteredData.map(({ item, idx }) => (
+              {filteredData.map(({ item, idx }) => (
                 <div key={item.roomId} className="room-card" style={{ cursor: "pointer" }} onClick={() => openDetail(idx)}>
                   <div className="room-card-header">
                     <h5>ห้อง {item.roomNumber}</h5>
@@ -3289,6 +3294,7 @@ export default function BillsPage() {
                 </div>
               ))}
             </div>
+            )
           ) : (
             <div className="nicescrollbar" style={{ maxHeight: 600, overflow: "auto" }}>
               {filteredData.length === 0 ? (
