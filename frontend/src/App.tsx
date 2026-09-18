@@ -36,6 +36,7 @@ import MetersPage from "./pages/MetersPage";
 import BillsPage from "./pages/BillsPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import SettingsPage from "./pages/SettingsPage";
+import OnboardingWizard from "./pages/OnboardingWizard";
 import LogPage from "./pages/LogPage";
 import ChatPage from "./pages/ChatPage";
 
@@ -94,12 +95,10 @@ function AuthenticatedShell() {
         <div id="content-wrapper">
           <Routes>
             {setupLocked ? (
-              // ยังไม่เสร็จสิ้นการตั้งค่าเริ่มต้น — บังคับทุก route ไปหน้า Settings ค้างไว้ (แม้พิมพ์ URL อื่น
-              // เองตรงๆ ก็เด้งกลับมาเสมอ) จนกว่าจะกดปุ่ม "เสร็จสิ้นการตั้งค่าเริ่มต้น" ใน SettingsPage.tsx
-              <>
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="*" element={<Navigate to="/settings" replace />} />
-              </>
+              // ยังไม่เสร็จสิ้นการตั้งค่าเริ่มต้น — บังคับทุก route ไปหน้า wizard ตั้งค่าเริ่มต้นค้างไว้เสมอ
+              // (แม้พิมพ์ URL อื่นเองตรงๆ ก็เด้งกลับมาเสมอ) เรียงลำดับบังคับทำทีละขั้น: รูปลักษณ์ → ค่าน้ำไฟ →
+              // สร้างตึก → สร้างห้อง จนกว่าจะกดปุ่ม "เริ่มใช้งานระบบ" ในขั้นสุดท้าย (ดู OnboardingWizard.tsx)
+              <Route path="*" element={<OnboardingWizard />} />
             ) : (
               <>
                 <Route path="/" element={<Navigate to="/tenants" replace />} />
