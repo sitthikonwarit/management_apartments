@@ -15,7 +15,7 @@ import { organizations, appConfig, rooms, tenants, users, superadminRichMenuConf
 import { ORG_SCOPED_TABLES } from "../db/orgScopedTables";
 import { signToken } from "../lib/jwt";
 import { superAdminDerive } from "../lib/superAdminDerive";
-import { revokeSessionsForOrg, revokeSessionsForUser } from "../lib/wsHub";
+import { revokeSessionsForOrg, revokeSessionsForUser, getOnlineOrgIds } from "../lib/wsHub";
 import { generateSlug } from "../lib/orgContext";
 import { getOrgStorageBytes, getUnattributedStorageBytes, UPLOAD_SUBDIRS } from "../lib/storageUsage";
 import { getOrgRequestRate, getGlobalRequestRate, getApiHealth } from "../lib/apiUsageTracker";
@@ -202,7 +202,9 @@ async function countWhereOrg(table: any, orgId: string): Promise<number> {
 }
 
 async function getOwnerUser(orgId: string) {
-  const [owner] = await db.select({ id: users.id, username: users.username, phone: users.phone, lineUserId: users.lineUserId }).from(users)
+  const [owner] = await db.select({
+    id: users.id, username: users.username, phone: users.phone, lineUserId: users.lineUserId, displayName: users.displayName,
+  }).from(users)
     .where(and(eq(users.orgId, orgId), eq(users.role, "owner")));
   return owner ?? null;
 }
@@ -271,6 +273,7 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
   })
   .get("/organizations", async () => {
     const orgs = await db.select().from(organizations);
+    const onlineOrgIds = getOnlineOrgIds();
     // คำนวณพื้นที่ใช้งาน (DB + ไฟล์อัปโหลด) ต่อองค์กรทุกครั้งที่โหลดรายการ — ยอมรับได้เพราะหน้านี้เปิดดูไม่บ่อย
     // (ดูคอมเมนต์ที่ lib/storageUsage.ts) ส่วนอัตราเรียก API ด้านล่างอ่านจาก in-memory ล้วนๆ เร็วมาก ไม่ได้แตะ DB
     const withDetails = await Promise.all(orgs.map(async (org) => {
@@ -288,7 +291,11 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
         },
         storage: await getOrgStorageBytes(org.id),
         apiUsage: getOrgRequestRate(org.id),
-        owner: { username: owner?.username ?? null, phone: owner?.phone ?? null, lineLinked: !!owner?.lineUserId },
+        online: onlineOrgIds.has(org.id),
+        owner: {
+          username: owner?.username ?? null, phone: owner?.phone ?? null,
+          displayName: owner?.displayName ?? null, lineLinked: !!owner?.lineUserId,
+        },
       };
     }));
     return withDetails;
@@ -300,7 +307,9 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     const orgs = await db.select({ id: organizations.id }).from(organizations);
     const perOrg: Record<string, { last1m: number; last5m: number }> = {};
     for (const org of orgs) perOrg[org.id] = getOrgRequestRate(org.id);
-    return { global: getGlobalRequestRate(), perOrg };
+    // แนบ "สถานะการใช้งานเว็บสด" (มีใครต่อ WebSocket ขององค์กรนี้ค้างอยู่ตอนนี้ไหม) มาในรอบ poll เบาๆ นี้ไปด้วย
+    // แทนที่จะให้หน้าเว็บต้องโหลด getOrganizations() ทั้งก้อนซ้ำ (หนักกว่ามาก) แค่เพื่อรีเฟรชสถานะออนไลน์
+    return { global: getGlobalRequestRate(), perOrg, onlineOrgIds: Array.from(getOnlineOrgIds()) };
   })
   // พื้นที่ไฟล์แนบแชท (uploads/chat/) ที่ยังแยกตามองค์กรไม่ได้ (ดูคอมเมนต์ที่ lib/storageUsage.ts) — แยก
   // endpoint ต่างหากจาก /organizations เพราะไม่ผูกกับองค์กรไหนโดยเฉพาะ ไว้โชว์แยกในหน้าเว็บอย่างโปร่งใส
@@ -334,6 +343,53 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
 
     console.log(`[superadmin] reset password for org=${params.id} (${org.name}) owner=${owner.id}`);
     return { username, password: newPassword };
+  })
+  // แก้ "รหัส (slug)" ขององค์กร และ/หรือ "เบอร์โทร" ของบัญชีเจ้าของ — ส่งมาเฉพาะฟิลด์ที่จะแก้ (ไม่ส่ง = ไม่แตะ)
+  // slug ใช้เป็น ?org= ใน LIFF URL ขององค์กรนี้ (ดู lib/orgContext.ts) เปลี่ยนแล้วต้องไปอัปเดต Endpoint URL ใน
+  // LINE Developers Console ของลูกค้าเองด้วย ไม่งั้น LIFF เดิมจะ resolve องค์กรไม่เจอ — เบอร์ใช้จับคู่ตอนเจ้าของ
+  // มากรอกที่หน้า Login เพื่อเชื่อม LINE ครั้งแรก (ดู routes/lineLogin.ts) แก้ได้แม้ผูก LINE ไปแล้วเผื่อพิมพ์ผิด/
+  // เปลี่ยนเบอร์ทีหลัง (ไม่กระทบการเชื่อม LINE ที่ทำไปแล้ว ใช้แค่ lineUserId เป็นตัวเช็คว่าเชื่อมหรือยัง ไม่ใช่เบอร์)
+  .patch("/organizations/:id", async ({ params, body, set }) => {
+    const b = body as any;
+    const [org] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, params.id));
+    if (!org) { set.status = 404; return { error: "ไม่พบองค์กร" }; }
+
+    let nextSlug: string | undefined;
+    if (b.slug !== undefined) {
+      nextSlug = String(b.slug ?? "").trim();
+      if (!nextSlug) { set.status = 400; return { error: "กรุณากรอกรหัส (slug)" }; }
+      if (!/^[a-z0-9-]+$/i.test(nextSlug)) { set.status = 400; return { error: "รหัส (slug) ใช้ได้แค่ตัวอักษร a-z, ตัวเลข, และ - เท่านั้น" }; }
+    }
+
+    let nextPhone: string | undefined;
+    if (b.phone !== undefined) {
+      nextPhone = normalizePhone(b.phone);
+      if (nextPhone.length < 9) { set.status = 400; return { error: "กรุณากรอกเบอร์โทรให้ครบ" }; }
+    }
+
+    try {
+      if (nextSlug !== undefined) {
+        await db.update(organizations).set({ slug: nextSlug, updatedAt: new Date().toISOString() }).where(eq(organizations.id, params.id));
+      }
+      if (nextPhone !== undefined) {
+        const owner = await getOwnerUser(params.id);
+        if (!owner) { set.status = 404; return { error: "ไม่พบบัญชีเจ้าของขององค์กรนี้" }; }
+        await db.update(users).set({ phone: nextPhone, updatedAt: new Date().toISOString() }).where(eq(users.id, owner.id));
+      }
+    } catch (e: any) {
+      if (e?.code === "23505" && e?.constraint_name === "organizations_slug_unique") {
+        set.status = 409;
+        return { error: "รหัส (slug) นี้ถูกใช้ไปแล้ว" };
+      }
+      if (e?.code === "23505" && e?.constraint_name === "users_phone_unique") {
+        set.status = 409;
+        return { error: "เบอร์นี้ถูกใช้กับองค์กรอื่นอยู่แล้ว" };
+      }
+      throw e;
+    }
+
+    console.log(`[superadmin] updated org=${params.id} (${org.name})${nextSlug !== undefined ? ` slug->${nextSlug}` : ""}${nextPhone !== undefined ? ` phone->${nextPhone}` : ""}`);
+    return { id: params.id, slug: nextSlug, phone: nextPhone };
   })
   .patch("/organizations/:id/status", async ({ params, body, set }) => {
     const status = String((body as any)?.status ?? "");

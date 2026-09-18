@@ -14,6 +14,13 @@ export function unregisterClient(ws: any) {
   clients.delete(ws);
 }
 
+// รายชื่อ orgId ที่มี client ต่อ WebSocket ค้างอยู่ตอนนี้อย่างน้อย 1 การเชื่อมต่อ — ใช้บอก "สถานะการใช้งานเว็บสด"
+// ในหน้าควบคุมแพลตฟอร์ม (ดู GET /superadmin/organizations) ว่าองค์กรนี้มีพนักงาน/เจ้าของเปิดหน้าเว็บอยู่จริง
+// ตอนนี้หรือไม่ (ไม่ใช่แค่ "เคยล็อกอินล่าสุดเมื่อไหร่" ซึ่งเป็นข้อมูลเก่า) — in-memory ล้วนๆ ไม่แตะ DB
+export function getOnlineOrgIds(): Set<string> {
+  return new Set(Array.from(clients.values(), (c) => c.orgId));
+}
+
 // เรียกจาก onAfterHandle ใน index.ts ทุกครั้งที่มี request แก้ไขข้อมูลสำเร็จ — ส่งให้ client ที่ต่อ
 // WebSocket อยู่ทุกคน "ในองค์กรเดียวกับ orgId ที่ระบุ" เท่านั้น (รวมถึงคนที่เพิ่งแก้ไขเองด้วย ไม่ได้กรองออก
 // เพื่อความง่าย ไม่มีผลเสียอะไรนอกจาก refetch ข้อมูลตัวเองซ้ำเฉยๆ) ให้รู้ว่าข้อมูลประเภทไหนเปลี่ยนไป จะได้ไปโหลดใหม่ทันที

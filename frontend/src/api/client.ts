@@ -440,7 +440,10 @@ export interface SuperAdminOrg {
   counts: { rooms: number; tenants: number; users: number };
   storage: { dbBytes: number; uploadBytes: number; totalBytes: number };
   apiUsage: SuperAdminRequestRate;
-  owner: { username: string | null; phone: string | null; lineLinked: boolean };
+  // มี client ต่อ WebSocket ขององค์กรนี้ค้างอยู่ตอนนี้อย่างน้อย 1 การเชื่อมต่อไหม (ดู getOnlineOrgIds ใน
+  // backend/src/lib/wsHub.ts) — ใช้โชว์ "สถานะการใช้งานเว็บสด" แยกจาก createdAt/สมัครเมื่อ ที่เป็นข้อมูลเก่า
+  online: boolean;
+  owner: { username: string | null; phone: string | null; displayName: string | null; lineLinked: boolean };
 }
 
 export const superAdminApi = {
@@ -451,7 +454,9 @@ export const superAdminApi = {
   getOrganizations: () => superAdminHttp.get("/superadmin/organizations").then((r) => r.data as SuperAdminOrg[]),
   // อัตราเรียก API สดๆ (ไม่แตะ DB ฝั่ง backend เลย — ดู lib/apiUsageTracker.ts) หน้าเว็บ poll endpoint นี้
   // ทุกๆ ~5 วินาทีแทนการโหลด getOrganizations() ทั้งก้อนซ้ำๆ (หนักกว่ามากเพราะต้องคำนวณพื้นที่ใช้งานด้วย)
-  getApiUsage: () => superAdminHttp.get("/superadmin/api-usage").then((r) => r.data as { global: SuperAdminRequestRate; perOrg: Record<string, SuperAdminRequestRate> }),
+  getApiUsage: () => superAdminHttp.get("/superadmin/api-usage").then((r) => r.data as {
+    global: SuperAdminRequestRate; perOrg: Record<string, SuperAdminRequestRate>; onlineOrgIds: string[];
+  }),
   // พื้นที่ไฟล์แนบแชทที่ยังแยกตามองค์กรไม่ได้ (ดูคอมเมนต์ที่ lib/storageUsage.ts ฝั่ง backend)
   getStorageSummary: () => superAdminHttp.get("/superadmin/storage-summary").then((r) => r.data as { unattributedBytes: number }),
   // ความเสถียรของระบบ (เครื่องเซิร์ฟ + API + ฐานข้อมูล) — poll เบาๆ ทุก ~5 วิ เหมือน getApiUsage
@@ -460,6 +465,10 @@ export const superAdminApi = {
     superAdminHttp.post("/superadmin/organizations", data).then((r) => r.data as { id: string; name: string; slug: string; status: string; ownerPhone: string }),
   updateOrgStatus: (id: string, status: "active" | "suspended") =>
     superAdminHttp.patch(`/superadmin/organizations/${id}/status`, { status }).then((r) => r.data as { id: string; status: string }),
+  // แก้ "รหัส (slug)" และ/หรือ "เบอร์โทรเจ้าของ" — ส่งมาเฉพาะฟิลด์ที่จะแก้ (ดู PATCH /superadmin/organizations/:id
+  // ฝั่ง backend) ใช้กับการแก้ไขแบบ inline ในตารางรายชื่อองค์กร
+  updateOrgDetails: (id: string, data: { slug?: string; phone?: string }) =>
+    superAdminHttp.patch(`/superadmin/organizations/${id}`, data).then((r) => r.data as { id: string; slug?: string; phone?: string }),
   deleteOrg: (id: string, confirmName: string) =>
     superAdminHttp.delete(`/superadmin/organizations/${id}`, { data: { confirmName } }).then((r) => r.data as { deleted: string }),
   // รีเซ็ตรหัสผ่านบัญชีเจ้าของ — คืนรหัสผ่านใหม่แบบ plaintext ครั้งเดียว (backend ไม่เก็บไว้ดูย้อนหลังได้อีก)

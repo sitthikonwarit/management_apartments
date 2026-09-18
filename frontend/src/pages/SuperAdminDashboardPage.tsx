@@ -44,6 +44,60 @@ function errorRateColor(ratePercent: number): string {
   return "var(--color-success)";
 }
 
+// ── ช่องแก้ไขแบบ inline ในตาราง (รหัส/slug, เบอร์โทร) — โชว์ค่า + ไอคอนดินสอ กดแล้วเปลี่ยนเป็นช่องกรอก
+// พร้อมปุ่มยืนยัน/ยกเลิก บันทึกจริงผ่าน onSave (โยน error กลับมาก็ยังอยู่ในโหมดแก้ไขให้แก้ต่อได้)
+function EditableField({ value, placeholder, width = 130, onSave }: {
+  value: string; placeholder?: string; width?: number; onSave: (v: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  function cancel() { setEditing(false); setDraft(value); }
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === value) { cancel(); return; }
+    setSaving(true);
+    try {
+      await onSave(trimmed);
+      setEditing(false);
+    } catch (e: any) {
+      toastError(e?.response?.data?.error ?? "บันทึกไม่สำเร็จ กรุณาลองใหม่");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span className="d-inline-flex align-items-center gap-1">
+        <span>{value || <span className="text-muted">-</span>}</span>
+        <button type="button" className="btn btn-sm btn-link p-0 text-muted" title="แก้ไข" onClick={() => setEditing(true)}>
+          <i className="fas fa-pen" style={{ fontSize: 11 }} />
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="d-inline-flex align-items-center gap-1">
+      <input className="form-control form-control-sm" style={{ width }} value={draft} placeholder={placeholder}
+        autoFocus disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); }} />
+      <button type="button" className="btn btn-sm btn-success py-0 px-1" disabled={saving} onClick={save} title="บันทึก">
+        {saving ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <i className="fas fa-check" style={{ fontSize: 11 }} />}
+      </button>
+      <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-1" disabled={saving} onClick={cancel} title="ยกเลิก">
+        <i className="fas fa-times" style={{ fontSize: 11 }} />
+      </button>
+    </span>
+  );
+}
+
 export default function SuperAdminDashboardPage() {
   const navigate = useNavigate();
   const [orgs, setOrgs] = useState<SuperAdminOrg[]>([]);
@@ -99,7 +153,8 @@ export default function SuperAdminDashboardPage() {
       try {
         const [usage, health] = await Promise.all([superAdminApi.getApiUsage(), superAdminApi.getSystemHealth()]);
         setGlobalUsage(usage.global);
-        setOrgs((prev) => prev.map((o) => ({ ...o, apiUsage: usage.perOrg[o.id] ?? o.apiUsage })));
+        const onlineSet = new Set(usage.onlineOrgIds);
+        setOrgs((prev) => prev.map((o) => ({ ...o, apiUsage: usage.perOrg[o.id] ?? o.apiUsage, online: onlineSet.has(o.id) })));
         setSystemHealth(health);
       } catch {
         // โพลพลาดรอบนี้ไม่เป็นไร รอบถัดไปลองใหม่ (ไม่ต้องแจ้งเตือนผู้ใช้ทุกครั้งที่พลาด)
@@ -132,6 +187,18 @@ export default function SuperAdminDashboardPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  // แก้ "รหัส (slug)" หรือ "เบอร์โทรเจ้าของ" แบบ inline ในตาราง (ดู EditableField ด้านบน) — โยน error กลับไปให้
+  // EditableField แสดงต่อ (เช่น slug/เบอร์นี้ถูกใช้ไปแล้ว) ถ้าสำเร็จค่อยอัปเดต state ตาราง ไม่ต้องโหลดทั้งหน้าใหม่
+  async function handleUpdateOrgField(org: SuperAdminOrg, field: "slug" | "phone", value: string) {
+    const result = await superAdminApi.updateOrgDetails(org.id, { [field]: value });
+    setOrgs((prev) => prev.map((o) => {
+      if (o.id !== org.id) return o;
+      if (field === "slug") return { ...o, slug: result.slug ?? value };
+      return { ...o, owner: { ...o.owner, phone: result.phone ?? value } };
+    }));
+    toastSuccess(field === "slug" ? "แก้ไขรหัส (slug) สำเร็จ" : "แก้ไขเบอร์โทรสำเร็จ");
   }
 
   function openDeleteModal(org: SuperAdminOrg) {
@@ -201,8 +268,9 @@ export default function SuperAdminDashboardPage() {
           id: result.id, name: result.name, slug: result.slug, status: result.status, createdAt: new Date().toISOString(),
           counts: { rooms: 0, tenants: 0, users: 1 },
           storage: { dbBytes: 0, uploadBytes: 0, totalBytes: 0 },
-          owner: { username: null, phone: result.ownerPhone, lineLinked: false },
+          owner: { username: null, phone: result.ownerPhone, displayName: newDisplayName.trim() || null, lineLinked: false },
           apiUsage: { last1m: 0, last5m: 0 },
+          online: false,
         },
         ...prev,
       ]);
@@ -338,18 +406,21 @@ export default function SuperAdminDashboardPage() {
           <div className="alert alert-light border text-center small mb-0">ยังไม่มีองค์กรในระบบ</div>
         ) : (
           <div className="table-responsive-wrapper nicescrollbar" style={{ overflow: "auto" }}>
-            <table className="table-mainstyle table-hover" style={{ minWidth: 760 }}>
+            <table className="table-mainstyle table-hover" style={{ minWidth: 1040 }}>
               <thead>
                 <tr>
                   <th>ชื่อองค์กร</th>
                   <th>รหัส (slug)</th>
-                  <th>เจ้าของบัญชี</th>
+                  <th>ชื่อเจ้าของ</th>
+                  <th>เบอร์</th>
+                  <th>บัญชี</th>
                   <th>สมัครเมื่อ</th>
                   <th className="text-center">ห้อง</th>
                   <th className="text-center">ผู้เช่า</th>
                   <th className="text-center">พนักงาน</th>
                   <th>พื้นที่ใช้ไป</th>
                   <th>API/นาที</th>
+                  <th>เว็บสด</th>
                   <th>สถานะ</th>
                   <th className="action-cell"></th>
                 </tr>
@@ -358,13 +429,19 @@ export default function SuperAdminDashboardPage() {
                 {orgs.map((org) => (
                   <tr key={org.id}>
                     <td className="namec-cell">{org.name}</td>
-                    <td><code className="small">{org.slug || "-"}</code></td>
+                    <td>
+                      <code className="small">
+                        <EditableField value={org.slug || ""} placeholder="slug" onSave={(v) => handleUpdateOrgField(org, "slug", v)} />
+                      </code>
+                    </td>
+                    <td className="small">{org.owner.displayName || <span className="text-muted">-</span>}</td>
+                    <td className="small">
+                      <EditableField value={org.owner.phone || ""} placeholder="เบอร์โทร" width={110} onSave={(v) => handleUpdateOrgField(org, "phone", v)} />
+                    </td>
                     <td className="small">
                       {org.owner.lineLinked
                         ? <span className="text-success"><i className="fab fa-line me-1" />เชื่อมแล้ว</span>
-                        : org.owner.phone
-                          ? <span className="text-muted"><i className="fas fa-phone me-1" />รอเชื่อม ({org.owner.phone})</span>
-                          : <span className="text-muted">-</span>}
+                        : <span className="text-muted">รอเชื่อม LINE</span>}
                       {org.owner.username && <div className="text-muted" style={{ fontSize: 11 }}>user: {org.owner.username}</div>}
                     </td>
                     <td className="small text-muted">{org.createdAt ? thaiDateOnlyString(new Date(org.createdAt)) : "-"}</td>
@@ -375,6 +452,11 @@ export default function SuperAdminDashboardPage() {
                     <td className="small">
                       {org.apiUsage.last1m > 0 && <span className="text-success me-1">●</span>}
                       {org.apiUsage.last1m}
+                    </td>
+                    <td className="small">
+                      {org.online
+                        ? <span className="text-success"><span className="me-1" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)" }} />ออนไลน์</span>
+                        : <span className="text-muted"><span className="me-1" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-light)" }} />ออฟไลน์</span>}
                     </td>
                     <td>
                       {org.status === "suspended"
