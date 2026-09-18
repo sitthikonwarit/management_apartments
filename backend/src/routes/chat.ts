@@ -6,6 +6,7 @@ import {
   getLineSettings, sendTextMessage, sendImageMessage, sendStickerMessage, sendFileLinkMessage,
   uploadChatAttachment, toPublicUrl, getLineProfile, cacheLineProfile, findTenantByLineUserId,
   getOutstandingBillsForTenant, pushLineMessage, buildBroadcastImageMessage, buildAnnouncementFlexMessage,
+  getMessageQuota,
 } from "../services/line";
 import { recordConfirmedPayment } from "../services/payments";
 import { authDerive } from "../lib/authDerive";
@@ -108,6 +109,14 @@ async function markInboundRead(orgId: string, lineUserId: string) {
 
 export const chatRoute = new Elysia({ prefix: "/chat" })
   .use(authDerive)
+  // โควตาข้อความ push/broadcast คงเหลือของรอบเดือนนี้ (แพลนฟรีของ LINE OA จำกัดจำนวนข้อความ/เดือน) — ให้หน้า
+  // แชทโชว์เตือนพนักงานก่อนจะส่งไม่ออกกลางคันเพราะโควตาหมด (ดู getMessageQuota ใน services/line.ts)
+  .get("/quota", async ({ authUser }) => {
+    const orgId = authUser!.orgId;
+    const settings = await getLineSettings(orgId);
+    if (!settings.enabled || !settings.token) return null;
+    return await getMessageQuota(settings.token);
+  })
   // รายชื่อการสนทนาทั้งหมด เรียงตามข้อความล่าสุดก่อน — group ข้อความทั้งตารางด้วย JS (ข้อมูลระดับหอพักเดียว
   // ไม่ใหญ่พอที่จะต้องทำ aggregate query เอง เหมือนที่ tenants.ts/settings.ts ก็โหลดทั้งตารางมาประมวลผลเอง)
   .get("/conversations", async ({ authUser }) => {

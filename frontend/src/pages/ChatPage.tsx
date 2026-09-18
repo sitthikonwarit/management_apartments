@@ -90,11 +90,16 @@ export default function ChatPage() {
   const [presence, setPresence] = useState<Map<string, string>>(new Map());
   const presenceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // โควตาข้อความ push/broadcast คงเหลือของรอบเดือนนี้ (แพลนฟรีของ LINE OA จำกัดจำนวนข้อความ/เดือน) —
+  // null = ยังไม่ได้ตั้งค่า LINE Messaging หรือเรียก LINE API ไม่สำเร็จ (ไม่โชว์แถบนี้เลยในกรณีนั้น)
+  const [quota, setQuota] = useState<{ type: "limited" | "none"; limit: number; used: number; remaining: number | null } | null>(null);
+
   function loadConversations() {
     chatApi.getConversations().then(setConversations).catch(() => {});
   }
 
   useEffect(() => { loadConversations(); }, []);
+  useEffect(() => { chatApi.getQuota().then(setQuota).catch(() => {}); }, []);
 
   // ฟังอีเวนต์ "chat:web-presence" (ยิงจาก useLiveSync.ts ทุกครั้งที่ backend ยิง heartbeat "กำลังใช้งานหน้า
   // ... ผ่าน web" มา — ดู startLiffPresenceHeartbeat ใน api/client.ts ที่ยิงซ้ำทุก 20 วิตราบใดที่ผู้เช่ายังเปิด
@@ -277,6 +282,29 @@ export default function ChatPage() {
             <i className="fas fa-bullhorn" />
           </button>
         </div>
+        {quota?.type === "limited" && (() => {
+          const pct = quota.limit > 0 ? Math.max(0, Math.min(100, ((quota.remaining ?? 0) / quota.limit) * 100)) : 0;
+          const color = pct <= 20 ? "var(--color-danger)" : pct <= 50 ? "#f7d060" : "var(--color-success)";
+          return (
+            <div className="px-2 pt-2 pb-1" style={{ borderBottom: "1px solid var(--color-light)" }}
+              title={`ใช้ไปแล้ว ${quota.used.toLocaleString()} จาก ${quota.limit.toLocaleString()} ข้อความในรอบเดือนนี้ (LINE Official Account แพลนฟรีจำกัดจำนวนข้อความ push/broadcast ต่อเดือน)`}>
+              <div className="d-flex justify-content-between align-items-center mb-1">
+                <span className="text-muted" style={{ fontSize: 11 }}>โควตาข้อความเดือนนี้</span>
+                <span className="small fw-bold" style={{ color }}>
+                  เหลือ {(quota.remaining ?? 0).toLocaleString()} / {quota.limit.toLocaleString()}
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: "var(--color-light)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: color, transition: "width 0.3s ease" }} />
+              </div>
+            </div>
+          );
+        })()}
+        {quota?.type === "none" && (
+          <div className="px-2 py-1 text-muted" style={{ fontSize: 11, borderBottom: "1px solid var(--color-light)" }}>
+            <i className="fas fa-infinity me-1" />ส่งข้อความไม่จำกัด — ใช้ไปแล้ว {quota.used.toLocaleString()} ข้อความเดือนนี้
+          </div>
+        )}
         {conversations.length === 0 && (
           <p className="text-muted small p-3 mb-0">ยังไม่มีข้อความเข้ามาจาก LINE</p>
         )}

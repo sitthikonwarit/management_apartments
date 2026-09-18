@@ -230,6 +230,36 @@ const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
 const LINE_PROFILE_URL = "https://api.line.me/v2/bot/profile";
 const LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message";
 const LINE_BOT_INFO_URL = "https://api.line.me/v2/bot/info";
+const LINE_QUOTA_URL = "https://api.line.me/v2/bot/message/quota";
+const LINE_QUOTA_CONSUMPTION_URL = "https://api.line.me/v2/bot/message/quota/consumption";
+
+// โควตาข้อความ push/broadcast ที่ส่งได้ในรอบเดือนนี้ของ LINE Official Account — แพลนฟรีจำกัดจำนวนข้อความ
+// ต่อเดือน (แพลนเสียเงินไม่จำกัด) ใช้บอกพนักงานในหน้าแชทว่าเหลือโควตาส่งได้อีกเท่าไหร่ กันส่งข้อความไม่ออก
+// กลางคันโดยไม่รู้ตัวว่าโควตาหมด — ยิง 2 endpoint พร้อมกัน (โควตารวม + ใช้ไปแล้วเท่าไหร่ในรอบเดือนนี้) ของ
+// LINE Messaging API เอง ไม่มีที่เก็บ/คำนวณเองฝั่งเรา (ตัวเลขที่ถูกต้องอยู่ฝั่ง LINE เท่านั้น)
+export async function getMessageQuota(token: string): Promise<{
+  type: "limited" | "none"; limit: number; used: number; remaining: number | null;
+} | null> {
+  try {
+    const [quotaRes, consumptionRes] = await Promise.all([
+      fetch(LINE_QUOTA_URL, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(LINE_QUOTA_CONSUMPTION_URL, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    if (!quotaRes.ok || !consumptionRes.ok) return null;
+    const quota = await quotaRes.json();
+    const consumption = await consumptionRes.json();
+    const used = Number(consumption?.totalUsage) || 0;
+    if (quota?.type === "limited") {
+      const limit = Number(quota?.value) || 0;
+      return { type: "limited", limit, used, remaining: Math.max(0, limit - used) };
+    }
+    // type "none" = แพลนเสียเงิน ไม่จำกัดโควตา — ยังคืนยอดที่ใช้ไปให้ดูได้เผื่ออยากรู้ แต่ remaining ไม่มีความหมาย
+    // (null แทน Infinity เพราะ JSON.stringify(Infinity) กลายเป็น null อยู่ดี เขียนตรงๆ ให้ frontend เช็คง่ายกว่า)
+    return { type: "none", limit: 0, used, remaining: null };
+  } catch {
+    return null;
+  }
+}
 
 // ดึง LINE User ID ของบอทเจ้าของ channel access token นี้เอง — เรียกตอนบันทึกการตั้งค่า LINE Messaging ใน
 // หน้า Settings (ดู routes/settings.ts) เพื่อแคชไว้ที่ appConfig.lineBotUserId ใช้จับคู่ payload.destination

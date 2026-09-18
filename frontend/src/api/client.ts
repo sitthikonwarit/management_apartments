@@ -222,6 +222,11 @@ export interface ChatMessage {
 }
 
 export const chatApi = {
+  // โควตาข้อความ push/broadcast คงเหลือของรอบเดือนนี้ (แพลนฟรีของ LINE OA จำกัดจำนวนข้อความ/เดือน) — null
+  // ถ้ายังไม่ได้ตั้งค่า LINE Messaging หรือเรียก LINE API ไม่สำเร็จ (ดู GET /chat/quota ฝั่ง backend)
+  getQuota: () => api.get("/chat/quota").then((r) => r.data as {
+    type: "limited" | "none"; limit: number; used: number; remaining: number | null;
+  } | null),
   getConversations: () => api.get("/chat/conversations").then((r) => r.data as ChatConversation[]),
   getMessages: (lineUserId: string) =>
     api.get(`/chat/conversations/${lineUserId}/messages`).then((r) => r.data as ChatMessage[]),
