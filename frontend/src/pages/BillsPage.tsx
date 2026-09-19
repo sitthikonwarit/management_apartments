@@ -1363,52 +1363,50 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
   const blankRows = Math.max(0, PRETTY_SLIP_MIN_ROWS - rows.length);
   const total = isSplitCopy ? (payerTotal as number) : item.total;
 
+  // 7 คอลัมน์ตลอดทั้งเอกสาร — แถวข้อมูลผู้เช่า/หมายเหตุ/ยอดรวม ใช้ colSpan รวมกันให้ครบ 7 เสมอ เพื่อให้เส้น
+  // ตารางต่อกันเป็นกล่องเดียวทั้งใบเหมือนแบบฟอร์มกระดาษจริง (ไม่ใช่หลายตารางแยกที่มีช่องว่างคั่นกลาง)
+  const noteText = `${dueDateLabel(item.overdueConfig ?? config.overdue)}${isSplitCopy ? ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน` : ""}`;
+
   return (
     <div className="bill-slip-pretty">
       <div className="bsp-header">
         {config.appIdentity.logoUrl && <img className="bsp-logo" src={config.appIdentity.logoUrl} alt="" />}
         <div className="bsp-org-name">{config.appIdentity.nameText || "-"}</div>
-        <div className="bsp-title">บิลชำระค่าเช่าห้องพัก</div>
       </div>
+      <div className="bsp-title">บิลชำระค่าเช่าห้องพักและที่ดิน</div>
 
-      <table className="bsp-meta">
+      <table className="bsp-doc">
         <tbody>
           <tr>
-            <td className="bsp-meta-label">รหัส</td>
-            <td>{item.roomNumber}</td>
-            <td className="bsp-meta-label">วันที่</td>
-            <td>{thaiDateOnlyString(new Date())}</td>
+            <td className="bsp-meta-label" colSpan={1}>รหัส</td>
+            <td colSpan={2}>{item.roomNumber}</td>
+            <td className="bsp-meta-label" colSpan={1}>วันที่</td>
+            <td colSpan={3}>{thaiDateOnlyString(new Date())}</td>
           </tr>
           <tr>
-            <td className="bsp-meta-label">ชื่อ</td>
-            <td>{isSplitCopy ? payerName : (item.tenantId ? `${item.tenantTitle} ${item.tenantName}` : item.tenantName)}</td>
-            <td className="bsp-meta-label">ห้องพัก</td>
-            <td>{item.roomNumber}</td>
+            <td className="bsp-meta-label" colSpan={1}>ชื่อ</td>
+            <td colSpan={2}>{isSplitCopy ? payerName : (item.tenantId ? `${item.tenantTitle} ${item.tenantName}` : item.tenantName)}</td>
+            <td className="bsp-meta-label" colSpan={1}>ห้องพัก</td>
+            <td colSpan={3}>{item.roomNumber}</td>
           </tr>
-        </tbody>
-      </table>
 
-      <table className="bsp-table">
-        <thead>
-          <tr>
+          <tr className="bsp-thead-row">
             <th className="bsp-col-no">ลำดับ</th>
             <th className="bsp-col-name">รายการ</th>
             <th>เลขครั้งก่อน</th>
             <th>เลขครั้งนี้</th>
-            <th>หน่วยที่ใช้</th>
-            <th>ราคา/หน่วย</th>
+            <th>หน่วยละ</th>
+            <th>จำนวนที่ใช้</th>
             <th className="bsp-col-amt">จำนวนเงิน</th>
           </tr>
-        </thead>
-        <tbody>
           {rows.map((r, i) => (
             <tr key={i}>
               <td className="bsp-col-no">{i + 1}</td>
               <td className="bsp-col-name">{r.name}</td>
               <td>{r.prev ?? ""}</td>
               <td>{r.curr ?? ""}</td>
-              <td>{r.unit ?? ""}</td>
               <td>{r.rate ? money(r.rate) : ""}</td>
+              <td>{r.unit ?? ""}</td>
               <td className="bsp-col-amt">{r.price < 0 ? "-" : ""}{money(Math.abs(r.price))}</td>
             </tr>
           ))}
@@ -1419,20 +1417,15 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
               <td /><td /><td /><td /><td className="bsp-col-amt" />
             </tr>
           ))}
-        </tbody>
-      </table>
 
-      <div className="bsp-note">
-        หมายเหตุ: {dueDateLabel(item.overdueConfig ?? config.overdue)}
-        {isSplitCopy && ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน`}
-      </div>
-
-      <table className="bsp-total">
-        <tbody>
           <tr>
-            <td className="bsp-total-label">รวมเป็นเงิน</td>
-            <td className="bsp-total-text">({thaiBahtText(total)})</td>
-            <td className="bsp-total-amt">{money(total)}</td>
+            <td className="bsp-meta-label" colSpan={1}>หมายเหตุ</td>
+            <td colSpan={6}>{noteText}</td>
+          </tr>
+          <tr>
+            <td className="bsp-total-label" colSpan={1}>รวมเป็นเงิน</td>
+            <td className="bsp-total-text" colSpan={4}>({thaiBahtText(total)})</td>
+            <td className="bsp-total-amt" colSpan={2}>{money(total)}</td>
           </tr>
         </tbody>
       </table>
@@ -1440,15 +1433,16 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
       <div className="bsp-footer">
         <div className="bsp-footer-left">
           {config.richMenu.contactPhone && <div>สามารถติดต่อสอบถามได้ที่เบอร์ {config.richMenu.contactPhone}</div>}
-          <div className="bsp-signature">ลายเซ็นผู้เช่า .......................................................</div>
         </div>
-        {config.payment.qrImage && (
-          <div className="bsp-footer-qr">
-            <img src={config.payment.qrImage} alt="QR ชำระเงิน" />
-            <div>สแกนเพื่อชำระเงิน</div>
-          </div>
-        )}
+        <div className="bsp-signature">ลายเซ็น .......................................................<div>ผู้เช่า</div></div>
       </div>
+
+      {config.payment.qrImage && (
+        <div className="bsp-footer-qr">
+          <img src={config.payment.qrImage} alt="QR ชำระเงิน" />
+          <div>สแกนเพื่อชำระเงิน</div>
+        </div>
+      )}
     </div>
   );
 }
