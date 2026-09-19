@@ -1656,10 +1656,14 @@ export default function SettingsPage() {
                                 <span className="badge bg-success">
                                   <i className="fab fa-line me-1" />เชื่อมแล้ว
                                 </span>
-                              ) : u.phone ? (
-                                // เปิดในแท็บใหม่เสมอ — ถ้ากดในแท็บเดิมตอนล็อกอินเป็นแอดมินอยู่ จะโดน OAuth
-                                // สลับ session ไปเป็นบัญชีที่กดเชื่อม LINE แทนทันที (ดู GET /auth/line/authorize
-                                // ใน backend/src/routes/lineLogin.ts — ออก token ใหม่ให้บัญชีที่ผูกสำเร็จเลย)
+                              ) : !u.phone ? (
+                                <span className="text-muted small">ยังไม่มีเบอร์โทร</span>
+                              ) : currentUser?.id === u.id ? (
+                                // เชื่อม LINE ให้ "ตัวเอง" เท่านั้น — ปุ่มนี้ขึ้นเฉพาะแถวของบัญชีที่ล็อกอินอยู่
+                                // จริงๆ (เทียบ currentUser.id) เพราะ endpoint /auth/line/authorize?phone=
+                                // ไม่ได้เช็ค token คนกดเลย (ออกแบบให้ใช้ได้ตอนยังไม่ล็อกอินด้วยซ้ำ) แอดมินจึง
+                                // กดเชื่อมแทนคนอื่นไม่ได้ที่ชั้น UI — ต้องให้เจ้าของบัญชีนั้นมาล็อกอินแล้วกดเอง
+                                // เปิดแท็บใหม่เสมอ กันไม่ให้ OAuth สลับ session ไปเป็นบัญชีอื่นในแท็บเดิม
                                 <a href={`/api/auth/line/authorize?phone=${encodeURIComponent(u.phone)}`}
                                   target="_blank" rel="noopener noreferrer"
                                   className="btn btn-sm btn-outline-success"
@@ -1667,7 +1671,7 @@ export default function SettingsPage() {
                                   <i className="fab fa-line me-1" />เชื่อม LINE
                                 </a>
                               ) : (
-                                <span className="text-muted small">ยังไม่มีเบอร์โทร</span>
+                                <span className="text-muted small">รอเจ้าของบัญชีเข้าสู่ระบบแล้วกดเชื่อมเอง</span>
                               )}
                             </td>
                             <td className="small text-muted">
