@@ -2171,11 +2171,16 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
             <button type="button" className="btn btn-sm btn-secondary" title="พิมพ์" onClick={(e) => { e.stopPropagation(); onPrint(item); }}>
               <i className="fas fa-print" />
             </button>
-            <button type="button" className={`btn btn-sm ${item.status === "paid" ? "btn-warning" : "btn-success"}`}
-              title={item.status === "paid" ? "ยกเลิกการชำระ" : "บันทึกว่าจ่ายแล้ว"}
-              onClick={(e) => { e.stopPropagation(); onToggleStatus(idx); }}>
-              <i className={`fas ${item.status === "paid" ? "fa-undo" : "fa-check"}`} />
-            </button>
+            {/* เอาปุ่ม "ยกเลิกการชำระ" ออกจากแถบไอคอนย่อในตาราง (เคยกดแล้วย้อนสถานะเป็นยังไม่จ่ายตรงๆ ทันที
+                ไม่ผ่านการเลือกว่าจะยกเลิกรายการชำระไหน/เหตุผลอะไร) บิลที่จ่ายแล้วต้องกด "แก้ไข" เข้าไปดู
+                รายละเอียดแล้วยกเลิกยอดที่จ่ายจากประวัติการชำระ (PaymentHistoryList) แทน ซึ่งบันทึกเหตุผลและ
+                ยกเลิกได้ทีละรายการ — ปุ่มนี้เหลือไว้ใช้แค่ "บันทึกว่าจ่ายแล้ว" ตอนบิลยังไม่จ่ายเท่านั้น */}
+            {item.status !== "paid" && (
+              <button type="button" className="btn btn-sm btn-success" title="บันทึกว่าจ่ายแล้ว"
+                onClick={(e) => { e.stopPropagation(); onToggleStatus(idx); }}>
+                <i className="fas fa-check" />
+              </button>
+            )}
           </div>
         );
       }
