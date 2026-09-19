@@ -9,6 +9,9 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import TenantTableView from "../components/TenantTableView";
 import EmptyState from "../components/EmptyState";
 import ContractStatusBadge from "../components/ContractStatusBadge";
+import PrivacyMask from "../components/PrivacyMask";
+import PrivacyAvatar from "../components/PrivacyAvatar";
+import { usePrivacyMode } from "../context/PrivacyModeContext";
 import { getContractStatus, CONTRACT_WARNING_DAYS } from "../utils/tenantContract";
 import TenantFormView from "../components/TenantFormView";
 import TenantEditView from "../components/TenantEditView";
@@ -81,6 +84,7 @@ function TenantDetailView({
 }) {
   const navigate = useNavigate();
   const { config } = useAppConfig();
+  const { enabled: privacyModeEnabled } = usePrivacyMode();
   const room = rooms.find((r) => String(r.id) === String(tenant.idRoom) || String(r.number) === String(tenant.idRoom));
   const roomNumber = room ? String(room.number) : (tenant.idRoom ? String(tenant.idRoom) : "");
   const allRoomsLabel = getTenantRoomsLabel(rooms, tenant); // ห้องหลัก + ห้องเพิ่มเติมทั้งหมด
@@ -396,7 +400,7 @@ function TenantDetailView({
             <i className="fas fa-chevron-left" />
           </button>
           <div className="tenant-detail-profile-center">
-            <img
+            <PrivacyAvatar
               className="profile-image"
               src={imgSrc}
               alt={tenant.firstName}
@@ -435,11 +439,11 @@ function TenantDetailView({
           <div className="detail-grid">
             <div className="detail-item">
               <i className="fas fa-phone-alt" />
-              <div><div className="label">เบอร์โทรศัพท์</div><div className="value">{tenant.tel || "-"}</div></div>
+              <div><div className="label">เบอร์โทรศัพท์</div><PrivacyMask value={tenant.tel} className="value" inline={false} /></div>
             </div>
             <div className="detail-item">
               <i className="fab fa-line" style={{ color: "#06C755" }} />
-              <div><div className="label">Line ID</div><div className="value">{tenant.idLine || "-"}</div></div>
+              <div><div className="label">Line ID</div><PrivacyMask value={tenant.idLine} className="value" inline={false} /></div>
             </div>
           </div>
 
@@ -463,7 +467,7 @@ function TenantDetailView({
           <div className="detail-grid">
             <div className="detail-item">
               <i className="fas fa-id-card" />
-              <div><div className="label">เลขบัตรประชาชน</div><div className="value">{tenant.idLicense || "-"}</div></div>
+              <div><div className="label">เลขบัตรประชาชน</div><PrivacyMask value={tenant.idLicense} className="value" inline={false} /></div>
             </div>
             <div className="detail-item">
               <i className="fas fa-users" />
@@ -476,7 +480,7 @@ function TenantDetailView({
             {fullAddress && (
               <div className="detail-item" style={{ gridColumn: "1 / -1" }}>
                 <i className="fas fa-map-marker-alt" />
-                <div><div className="label">ที่อยู่ตามทะเบียนบ้าน</div><div className="value">{fullAddress}</div></div>
+                <div><div className="label">ที่อยู่ตามทะเบียนบ้าน</div><PrivacyMask value={fullAddress} className="value" inline={false} /></div>
               </div>
             )}
           </div>
@@ -525,7 +529,7 @@ function TenantDetailView({
             <div className="d-flex flex-wrap gap-2">
               {coResidents.map((cr: any, i: number) => (
                 <div key={i} className="co-resident-card" style={{ position: "relative" }}>
-                  <img
+                  <PrivacyAvatar
                     className="co-resident-avatar"
                     src={cr.image || AVATAR}
                     onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
@@ -535,10 +539,10 @@ function TenantDetailView({
                   />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>คุณ {cr.name}</div>
-                    <small className="text-muted">
-                      {cr.phone && <><i className="fas fa-phone-alt me-1" />{cr.phone}</>}
+                    <small className="text-muted d-flex align-items-center gap-1">
+                      {cr.phone && <><i className="fas fa-phone-alt me-1" /><PrivacyMask value={cr.phone} /></>}
                       {cr.phone && cr.lineId && <span className="mx-1">|</span>}
-                      {cr.lineId && <><i className="fab fa-line me-1 text-success" />{cr.lineId}</>}
+                      {cr.lineId && <><i className="fab fa-line me-1 text-success" /><PrivacyMask value={cr.lineId} /></>}
                     </small>
                   </div>
                   <button
@@ -753,19 +757,26 @@ function TenantDetailView({
           )}
         </div>
 
-        {/* ─── PDF Attachments ─── */}
+        {/* ─── PDF Attachments (มักเป็นสำเนาบัตรประชาชน/เอกสารส่วนตัว — ถือเป็นข้อมูลอ่อนไหวสุดในหน้านี้)
+             โหมดความเป็นส่วนตัว: ไม่ให้เปิดลิงก์เอกสารได้เลย ไม่ใช่แค่ซ่อนชื่อไฟล์ ── */}
         <div className="detail-section">
           <h6><i className="fas fa-paperclip me-2" />เอกสารแนบ</h6>
           {pdfs.length > 0 ? (
-            <div className="file-view-container">
-              {pdfs.map((file: any, i: number) => (
-                <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="file-view-item">
-                  <i className="fas fa-file-pdf file-icon text-danger" />
-                  <span className="file-name">{file.name || "เปิดเอกสาร"}</span>
-                  <i className="fas fa-external-link-alt open-icon" />
-                </a>
-              ))}
-            </div>
+            privacyModeEnabled ? (
+              <div className="file-view-empty" title="ซ่อนอยู่ในโหมดความเป็นส่วนตัว">
+                <i className="fas fa-eye-slash me-2 text-muted" />ซ่อนเอกสารแนบ {pdfs.length} รายการอยู่ในโหมดความเป็นส่วนตัว
+              </div>
+            ) : (
+              <div className="file-view-container">
+                {pdfs.map((file: any, i: number) => (
+                  <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="file-view-item">
+                    <i className="fas fa-file-pdf file-icon text-danger" />
+                    <span className="file-name">{file.name || "เปิดเอกสาร"}</span>
+                    <i className="fas fa-external-link-alt open-icon" />
+                  </a>
+                ))}
+              </div>
+            )
           ) : (
             <div className="file-view-empty"><i className="fas fa-file-slash me-2 text-muted" />ไม่มีเอกสารแนบ</div>
           )}
@@ -2089,7 +2100,7 @@ export default function TenantsPage() {
                 {view === "grid" ? (
                   <div>
                     <div className="tenant-grid-header">
-                      <img className="tenant-list-avatar"
+                      <PrivacyAvatar className="tenant-list-avatar"
                         src={getDriveImgSrc(t.driveImageUrl)}
                         onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
                         alt={t.firstName} />
@@ -2100,11 +2111,11 @@ export default function TenantsPage() {
                     </div>
                     <ContractStatusBadge contractEndDate={t.contractEndDate} className="d-inline-block mt-2" />
                     <hr />
-                    <small><i className="fas fa-phone me-1 text-muted" />{t.tel}</small>
+                    <small><i className="fas fa-phone me-1 text-muted" /><PrivacyMask value={t.tel} /></small>
                   </div>
                 ) : (
                   <div className="d-flex align-items-center gap-3 py-1">
-                    <img className="tenant-list-avatar"
+                    <PrivacyAvatar className="tenant-list-avatar"
                       src={getDriveImgSrc(t.driveImageUrl)}
                       onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
                       alt={t.firstName} />
@@ -2115,7 +2126,7 @@ export default function TenantsPage() {
                       </div>
                       <div className="d-flex gap-3 mt-1">
                         <small><i className="fas fa-door-open me-1 text-muted" />ห้อง {getTenantRoomsLabel(rooms, t) || "-"}</small>
-                        <small><i className="fas fa-phone me-1 text-muted" />{t.tel}</small>
+                        <small><i className="fas fa-phone me-1 text-muted" /><PrivacyMask value={t.tel} /></small>
                         {t.checkInDate && <small><i className="fas fa-calendar me-1 text-muted" />{formatCheckInDate(t.checkInDate)}</small>}
                       </div>
                     </div>

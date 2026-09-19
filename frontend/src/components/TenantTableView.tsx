@@ -4,6 +4,9 @@ import { formatCheckInDate } from "../utils/yearFormat";
 import ColResizeHandle from "./ColResizeHandle";
 import EmptyState from "./EmptyState";
 import ContractStatusBadge from "./ContractStatusBadge";
+import PrivacyMask from "./PrivacyMask";
+import PrivacyAvatar from "./PrivacyAvatar";
+import { usePrivacyMode } from "../context/PrivacyModeContext";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 
@@ -231,6 +234,7 @@ export default function TenantTableView({
   onDelete: (tenant: any) => Promise<void>;
   onDeleteBulk: (tenants: any[]) => Promise<void>;
 }) {
+  const { enabled: privacyModeEnabled } = usePrivacyMode();
   const [cols, setCols] = useState<ColDef[]>(INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
@@ -349,7 +353,7 @@ export default function TenantTableView({
       case "id": return tenant.id;
       case "image":
         return (
-          <img
+          <PrivacyAvatar
             src={getDriveImgSrc(tenant.driveImageUrl)}
             className="tenant-list-avatar"
             style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }}
@@ -360,8 +364,8 @@ export default function TenantTableView({
       case "title":     return tenant.title || "-";
       case "firstName": return tenant.firstName || "-";
       case "lastName":  return tenant.lastName || "-";
-      case "phone":     return tenant.tel || "-";
-      case "idLine":    return tenant.idLine || "-";
+      case "phone":     return <PrivacyMask value={tenant.tel} />;
+      case "idLine":    return <PrivacyMask value={tenant.idLine} />;
       case "lineConnect":
         return tenant.lineUserId
           ? <i className="fas fa-check-circle text-success" title="เชื่อมต่อแล้ว" />
@@ -370,14 +374,14 @@ export default function TenantTableView({
         return rNum
           ? <span className="fw-bold">ห้อง {rNum}</span>
           : <span className="text-muted">-</span>;
-      case "houseNo":     return tenant.houseNo || "-";
-      case "soi":         return tenant.soi || "-";
-      case "road":        return tenant.road || "-";
-      case "province":    return tenant.province || "-";
-      case "amphoe":      return tenant.amphoe || "-";
-      case "tambon":      return tenant.tambon || "-";
-      case "zipcode":     return tenant.zipcode || "-";
-      case "address":     return tenant.address || "-";
+      case "houseNo":     return <PrivacyMask value={tenant.houseNo} />;
+      case "soi":         return <PrivacyMask value={tenant.soi} />;
+      case "road":        return <PrivacyMask value={tenant.road} />;
+      case "province":    return <PrivacyMask value={tenant.province} />;
+      case "amphoe":      return <PrivacyMask value={tenant.amphoe} />;
+      case "tambon":      return <PrivacyMask value={tenant.tambon} />;
+      case "zipcode":     return <PrivacyMask value={tenant.zipcode} />;
+      case "address":     return <PrivacyMask value={tenant.address} />;
       case "checkInDate": return formatCheckInDate(tenant.checkInDate);
       case "contractEndDate":
         return tenant.contractEndDate ? (
@@ -388,6 +392,13 @@ export default function TenantTableView({
         ) : <span className="text-muted">-</span>;
       case "pdf":
         if (!pdfs.length) return <span className="text-muted">-</span>;
+        if (privacyModeEnabled)
+          return (
+            <span className="btn btn-sm btn-outline-secondary pdf-icon-btn" title="ซ่อนอยู่ในโหมดความเป็นส่วนตัว">
+              <i className="fas fa-eye-slash" />
+              {pdfs.length > 1 && <span className="badge bg-secondary ms-1">{pdfs.length}</span>}
+            </span>
+          );
         if (pdfs.length === 1)
           return (
             <a href={pdfs[0].url} target="_blank" rel="noopener noreferrer"

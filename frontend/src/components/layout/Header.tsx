@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useBreadcrumb } from "../../context/BreadcrumbContext";
 import { useTheme } from "../../context/ThemeContext";
+import { usePrivacyMode } from "../../context/PrivacyModeContext";
 import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { timeAgo } from "../../utils/timeAgo";
@@ -25,6 +26,7 @@ export default function Header({ titles, onMenuClick }: HeaderProps) {
   const { pathname } = useLocation();
   const { items } = useBreadcrumb();
   const { theme, toggle } = useTheme();
+  const { enabled: privacyEnabled, toggle: togglePrivacy } = usePrivacyMode();
   const { user, logout } = useAuth();
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const navigate = useNavigate();
@@ -104,6 +106,15 @@ export default function Header({ titles, onMenuClick }: HeaderProps) {
               </div>
             )}
           </div>
+          {/* ปุ่มลัดโหมดความเป็นส่วนตัว — ปิดบังข้อมูลอ่อนไหวของผู้เช่า (เลขบัตร ปชช./ที่อยู่/เบอร์โทร/รูป)
+              ทั่วเว็บทันที ไว้กดก่อนแคป/แชร์หน้าจอ (ดูคอมเมนต์ข้อจำกัดที่ context/PrivacyModeContext.tsx —
+              เว็บตรวจจับการแคป/แชร์จอเองไม่ได้ ต้องกดเปิด/ปิดเอง) ตั้งค่าเดียวกับสวิตช์ในหน้า Settings */}
+          <button className="theme-toggle-btn"
+            onClick={togglePrivacy}
+            style={privacyEnabled ? { color: "var(--color-danger)" } : undefined}
+            title={privacyEnabled ? "ปิดโหมดความเป็นส่วนตัว (แสดงข้อมูลผู้เช่าตามปกติ)" : "เปิดโหมดความเป็นส่วนตัว (ซ่อนข้อมูลผู้เช่าก่อนแคป/แชร์จอ)"}>
+            <span className="material-icons-sharp">{privacyEnabled ? "visibility_off" : "visibility"}</span>
+          </button>
           <button className="theme-toggle-btn"
             onClick={(e) => toggle({ x: e.clientX, y: e.clientY })}
             title={theme === "dark" ? "เปลี่ยนเป็น Light Mode" : "เปลี่ยนเป็น Dark Mode"}>

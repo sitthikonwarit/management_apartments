@@ -4,6 +4,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import { BreadcrumbProvider } from "./context/BreadcrumbContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { PrivacyModeProvider } from "./context/PrivacyModeContext";
 import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -131,6 +132,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
+      <PrivacyModeProvider>
       <AuthProvider>
       <NotificationProvider>
       <AppConfigProvider>
@@ -163,6 +165,7 @@ export default function App() {
       </AppConfigProvider>
       </NotificationProvider>
       </AuthProvider>
+      </PrivacyModeProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

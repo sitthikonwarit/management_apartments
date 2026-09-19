@@ -4,6 +4,7 @@ import { settingsApi, authApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig, DEFAULT_APP_CONFIG, NAME_CHAR_DEFAULT, type AppConfig } from "../context/AppConfigContext";
 import { useAuth } from "../context/AuthContext";
+import { usePrivacyMode } from "../context/PrivacyModeContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import { thaiDateOnlyString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
@@ -220,6 +221,9 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const { setBreadcrumb } = useBreadcrumb();
   const { config, setConfig, refresh: refreshConfig } = useAppConfig();
+  // โหมดความเป็นส่วนตัว — ค่าเก็บที่เครื่อง/เบราว์เซอร์นี้เอง (localStorage) ไม่ใช่ค่าองค์กร จึงอ่าน/เขียนจาก
+  // context ตรงๆ ทันทีที่กดสวิตช์ ไม่ต้องรอกดปุ่ม "บันทึกการตั้งค่าทั้งหมด" เหมือนฟิลด์อื่นในหน้านี้
+  const { enabled: privacyModeEnabled, setEnabled: setPrivacyModeEnabled } = usePrivacyMode();
 
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
   const [search, setSearch] = useState("");
@@ -1190,6 +1194,25 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <p className="text-muted small mb-0">ดึงข้อมูลจากมิเตอร์อัจฉริยะแบบเรียลไทม์ และแสดงปุ่ม "Live Meter" ในหน้าจดมิเตอร์</p>
+                  </div>
+                </Searchable>
+
+                <Searchable query={q} keywords="โหมดความเป็นส่วนตัว privacy mode ซ่อนข้อมูล แคปหน้าจอ screenshot แชร์หน้าจอ screen share บันทึกหน้าจอ เลขบัตรประชาชน ที่อยู่">
+                  <div className="detail-section" style={CATEGORY_CARD_STYLE}>
+                    <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid var(--color-danger)", paddingBottom: 8 }}>
+                      <h6 className="mb-0" style={{ fontWeight: 700, color: "var(--color-danger)", border: "none", padding: 0, margin: 0 }}>
+                        <i className="fas fa-user-shield me-2" />โหมดความเป็นส่วนตัว
+                      </h6>
+                      <div className="form-check form-switch mb-0">
+                        <input className="form-check-input" type="checkbox"
+                          checked={privacyModeEnabled} onChange={(e) => setPrivacyModeEnabled(e.target.checked)} />
+                      </div>
+                    </div>
+                    <p className="text-muted small mb-0">
+                      เปิดแล้วซ่อนข้อมูลอ่อนไหวของผู้เช่า (เลขบัตร ปชช./ที่อยู่/เบอร์โทร/รูปโปรไฟล์) ทั่วทั้งเว็บทันที เหมาะกับตอนจะแคปหน้าจอ/แชร์หน้าจอ/อัดวิดีโอ
+                      — ค่านี้เป็นของเครื่อง/เบราว์เซอร์นี้เท่านั้น ไม่ซิงก์ไปเครื่องอื่น และมีปุ่มลัดเปิด/ปิดเร็วๆ ที่แถบด้านบนของทุกหน้าด้วย (ไอคอนรูปตา)
+                      <br /><strong>ข้อจำกัด:</strong> เว็บเบราว์เซอร์ไม่มีทางรู้ได้เองว่ากำลังถูกแคป/แชร์/อัดหน้าจออยู่ ต้องกดเปิดสวิตช์นี้เองก่อนแคป/แชร์ แล้วกดปิดเองทีหลัง
+                    </p>
                   </div>
                 </Searchable>
 
