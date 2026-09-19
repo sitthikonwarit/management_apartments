@@ -781,6 +781,13 @@ main { padding-top: 1.4rem; min-width: 0; }
 .col-resize-handle:hover, .col-resize-handle:active { background-color: rgba(108,155,207,0.5); }
 body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
 
+/* เส้นไกด์ลอยตามเมาส์ระหว่างลากปรับขนาดคอลัมน์ (ดู startResize ใน useColumnWidths.ts) — ไม่แตะ DOM ของ
+   ตารางเลยระหว่างลาก กันตารางแถวเยอะๆ กระตุก */
+.col-resize-guide {
+  position: fixed; width: 2px; background-color: var(--color-primary);
+  z-index: 9999; pointer-events: none; opacity: 0.8;
+}
+
 /* Sticky pinned columns */
 .table-mainstyle th.pinned,
 .table-mainstyle td.pinned {

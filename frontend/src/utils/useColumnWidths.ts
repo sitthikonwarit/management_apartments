@@ -35,24 +35,47 @@ export function useColumnWidths(storageKey: string, defaults: Record<string, num
   }
 
   // ลากขอบคอลัมน์เพื่อปรับความกว้าง — วาง onMouseDown นี้ไว้ใน handle ที่อยู่ในสุดของ <th>
+  // เดิม set th.style.width ทุก mousemove ตรงๆ ทำให้ตารางทั้งตาราง (ทุกแถว) reflow ใหม่หลายสิบครั้ง/วินาที
+  // ระหว่างลาก — ตารางที่มีแถวเยอะ (เช่นยานพาหนะ/บิลที่มีหลายสิบห้อง) จะกระตุกเห็นชัด เปลี่ยนมาใช้เส้นไกด์บางๆ
+  // (แค่ div ลอย ไม่แตะ DOM ของตารางเลย) ตามเมาส์แทนระหว่างลาก มี requestAnimationFrame คุมไม่ให้วาดถี่เกิน
+  // เฟรมจอ แล้วค่อย set width จริงทีเดียวตอนปล่อยเมาส์ (mouseup) — reflow แค่ครั้งเดียวจบ ลื่นเท่ากันไม่ว่า
+  // ตารางจะมีกี่แถว
   function startResize(colKey: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     const th = (e.currentTarget as HTMLElement).closest("th");
     if (!th) return;
+    const table = th.closest("table");
     const startX = e.clientX;
     const startWidth = th.getBoundingClientRect().width;
     document.body.classList.add("col-resizing");
 
-    function onMove(ev: MouseEvent) {
-      const w = Math.max(50, Math.round(startWidth + (ev.clientX - startX)));
-      (th as HTMLElement).style.width = `${w}px`;
+    const tableRect = table?.getBoundingClientRect();
+    const guide = document.createElement("div");
+    guide.className = "col-resize-guide";
+    guide.style.left = `${e.clientX}px`;
+    guide.style.top = `${tableRect?.top ?? 0}px`;
+    guide.style.height = `${tableRect?.height ?? window.innerHeight}px`;
+    document.body.appendChild(guide);
+
+    let rafId = 0;
+    let latestX = e.clientX;
+    function paintGuide() {
+      guide.style.left = `${latestX}px`;
+      rafId = 0;
     }
-    function onUp() {
+    function onMove(ev: MouseEvent) {
+      latestX = ev.clientX;
+      if (!rafId) rafId = requestAnimationFrame(paintGuide);
+    }
+    function onUp(ev: MouseEvent) {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       document.body.classList.remove("col-resizing");
-      const finalWidth = Math.round((th as HTMLElement).getBoundingClientRect().width);
+      if (rafId) cancelAnimationFrame(rafId);
+      guide.remove();
+      const finalWidth = Math.max(50, Math.round(startWidth + (ev.clientX - startX)));
+      (th as HTMLElement).style.width = `${finalWidth}px`;
       persist((prev) => ({ ...prev, [colKey]: finalWidth }));
     }
     window.addEventListener("mousemove", onMove);
