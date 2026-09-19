@@ -66,10 +66,12 @@ export function useColumnWidths(storageKey: string, defaults: Record<string, num
   return { widths, startResize, resetWidths };
 }
 
-// ── เก็บว่าคอลัมน์ไหนเปิด/ปิดอยู่ (ติ๊กในดรอปดาวน์ "แสดง N / M คอลัมน์") ต่อผู้ใช้ต่อเครื่องเหมือนกัน
-// รับ "นิยามคอลัมน์เริ่มต้น" (มี key/visible ค่าเริ่มต้นติดมากับตัว col def อยู่แล้ว) แล้วคืน state
-// รายการคอลัมน์ที่ overlay ค่า visible จาก localStorage ทับค่าเริ่มต้น + ฟังก์ชันสลับเปิด/ปิดที่ persist ให้เอง
-export function useColumnVisibility<T extends { key: string; visible: boolean }>(
+// ── เก็บว่าคอลัมน์ไหนเปิด/ปิดอยู่ (ติ๊กในดรอปดาวน์ "แสดง N / M คอลัมน์") + ปักหมุดซ้าย/ขวาไว้ตรงไหน ต่อผู้ใช้
+// ต่อเครื่องเหมือนกัน — รับ "นิยามคอลัมน์เริ่มต้น" (มี key/visible/pin ค่าเริ่มต้นติดมากับตัว col def อยู่แล้ว)
+// แล้วคืน state รายการคอลัมน์ที่ overlay ค่า visible/pin จาก localStorage ทับค่าเริ่มต้น + setCols ที่ persist
+// ให้เองทุกครั้งที่เรียก (ใช้ร่วมกันทั้งตอนติ๊กเปิด/ปิดคอลัมน์ และตอนกดปักหมุดจากเมนู PinMenuPopup)
+type StoredColState = { visible: boolean; pin?: unknown };
+export function useColumnVisibility<T extends { key: string; visible: boolean; pin?: unknown }>(
   storageKey: string,
   defaultCols: T[]
 ) {
@@ -80,8 +82,14 @@ export function useColumnVisibility<T extends { key: string; visible: boolean }>
     try {
       const raw = localStorage.getItem(lsKey);
       if (!raw) return base;
-      const stored: Record<string, boolean> = JSON.parse(raw);
-      return base.map((c) => (c.key in stored ? { ...c, visible: stored[c.key] } : c));
+      // ค่าเก่าก่อนรองรับปักหมุด เก็บเป็น boolean ล้วน (แค่ visible) — ยังอ่านเข้ากันได้อยู่ ไม่ต้อง migrate
+      const stored: Record<string, boolean | StoredColState> = JSON.parse(raw);
+      return base.map((c) => {
+        const s = stored[c.key];
+        if (s === undefined) return c;
+        if (typeof s === "boolean") return { ...c, visible: s };
+        return { ...c, visible: s.visible ?? c.visible, pin: s.pin !== undefined ? s.pin : c.pin };
+      });
     } catch {
       return base;
     }
@@ -91,8 +99,8 @@ export function useColumnVisibility<T extends { key: string; visible: boolean }>
 
   function persist(next: T[]) {
     try {
-      const map: Record<string, boolean> = {};
-      next.forEach((c) => { map[c.key] = c.visible; });
+      const map: Record<string, StoredColState> = {};
+      next.forEach((c) => { map[c.key] = { visible: c.visible, pin: c.pin }; });
       localStorage.setItem(lsKey, JSON.stringify(map));
     } catch {}
   }
