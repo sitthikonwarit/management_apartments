@@ -1097,13 +1097,14 @@ body.dark-mode .bill-received-panel { background: rgba(25,135,84,0.12); border-c
    คนละสไตล์กับ .bill-slip แนวยาวด้านบน (เลือกได้อีกแบบในตัวเลือก "ต่อแผ่น A4" ตอนพิมพ์) ────────────── */
 .bill-slip-pretty { width: 186mm; margin: 0 auto; background: #fff; font-family: 'Sarabun', Tahoma, sans-serif; color: #000; page-break-inside: avoid; break-inside: avoid; padding: 4mm 0; }
 .bsp-header { text-align: center; }
-.bsp-logo { width: 16mm; height: 16mm; object-fit: contain; margin-bottom: 1mm; }
+.bsp-logo { display: block; width: 26mm; height: 26mm; object-fit: contain; margin: 0 auto 1.5mm; }
 .bsp-org-name { font-size: 13pt; font-weight: 800; }
 .bsp-title { font-size: 10.5pt; font-weight: 700; text-align: center; margin: 2mm 0 3mm; }
 /* กล่องเอกสารทั้งใบ — แต่ละส่วน (meta/table/note/total) เป็นคนละ <table> ที่มีสัดส่วนคอลัมน์ของตัวเอง
    (ไม่ต้องเทียบ colSpan ข้ามตารางให้ครบเลขเท่ากัน) แต่ยังดูเป็นกล่องเดียวต่อเนื่องเพราะกรอบนอกอยู่ที่ .bsp-box
-   ใบเดียว ส่วนเส้นแบ่งระหว่างตารางแต่ละอันใช้ border-top (ยกเว้นตารางแรกที่ไม่ต้องมี) */
-.bsp-box { border: 1px solid #333; font-size: 9pt; }
+   ใบเดียว ส่วนเส้นแบ่งระหว่างตารางแต่ละอันใช้ border-top (ยกเว้นตารางแรกที่ไม่ต้องมี) — border-radius +
+   overflow:hidden ทำให้มุมกล่องโค้งมน (ตารางปกติมุมเหลี่ยม ต้องครอบ overflow:hidden ถึงจะโค้งตามกรอบนอกได้) */
+.bsp-box { border: 1px solid #333; border-radius: 3mm; overflow: hidden; font-size: 9pt; }
 .bsp-box table { width: 100%; border-collapse: collapse; }
 .bsp-box table + table { border-top: 1px solid #333; }
 .bsp-box td, .bsp-box th { padding: 1.5mm 2mm; border-right: 1px solid #999; }
