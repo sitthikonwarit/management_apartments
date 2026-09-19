@@ -196,6 +196,9 @@ export default function TenantTableView({
   const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // เปิดป็อปอัพแสดงรายชื่อไฟล์แนบทั้งหมดของผู้เช่าคนนั้น (กดที่ไอคอนโฟลเดอร์ในคอลัมน์ "ไฟล์เอกสาร" ตอนมี
+  // มากกว่า 1 ไฟล์ — เดิมไม่มี onClick เลย กดแล้วไม่มีอะไรเกิดขึ้น)
+  const [pdfListModal, setPdfListModal] = useState<{ name: string; url: string }[] | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("tenants", {
@@ -385,10 +388,12 @@ export default function TenantTableView({
             </a>
           );
         return (
-          <span className="btn btn-sm btn-outline-primary pdf-icon-btn">
+          <button type="button" className="btn btn-sm btn-outline-primary pdf-icon-btn"
+            title="ดูรายการไฟล์แนบทั้งหมด"
+            onClick={(e) => { e.stopPropagation(); setPdfListModal(pdfs); }}>
             <i className="fas fa-folder-open" />
             <span className="badge bg-secondary ms-1">{pdfs.length}</span>
-          </span>
+          </button>
         );
       case "actions":
         return (
@@ -531,6 +536,29 @@ export default function TenantTableView({
                   ? <><span className="spinner-border spinner-border-sm me-2" />กำลังลบ...</>
                   : <><i className="fas fa-trash-alt me-1" />ลบ</>}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* รายการไฟล์แนบทั้งหมด — กดที่ไอคอนโฟลเดอร์ในคอลัมน์ "ไฟล์เอกสาร" ตอนมีมากกว่า 1 ไฟล์ */}
+      {pdfListModal && (
+        <div className="confirm-overlay" onClick={() => setPdfListModal(null)}>
+          <div className="confirm-dialog" style={{ maxWidth: 420, textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h6 className="confirm-title mb-0" style={{ textAlign: "left" }}>
+                <i className="fas fa-folder-open me-2 text-primary" />ไฟล์แนบ ({pdfListModal.length})
+              </h6>
+              <button type="button" className="btn-close" onClick={() => setPdfListModal(null)} />
+            </div>
+            <div className="file-view-container">
+              {pdfListModal.map((file, i) => (
+                <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="file-view-item">
+                  <i className="fas fa-file-pdf file-icon text-danger" />
+                  <span className="file-name">{file.name || `เอกสาร ${i + 1}`}</span>
+                  <i className="fas fa-external-link-alt open-icon" />
+                </a>
+              ))}
             </div>
           </div>
         </div>
