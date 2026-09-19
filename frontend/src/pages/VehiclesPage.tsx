@@ -19,7 +19,7 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { roomsOfTenant } from "../utils/tenantRoom";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
@@ -905,7 +905,7 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
   vehicles: any[]; types: any[]; tenants: any[]; rooms: any[];
   onViewDetail: (v: any) => void; onEdit: (v: any) => void; onDeleted: (ids: string[]) => void;
 }) {
-  const [cols, setCols] = useState<ColDef[]>(VEHICLE_TABLE_COLS);
+  const [cols, setCols] = useColumnVisibility("vehicles", VEHICLE_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting, setDeleting] = useState(false);

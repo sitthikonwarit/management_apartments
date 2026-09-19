@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Select, { components, StylesConfig } from "react-select";
 import ColResizeHandle from "./ColResizeHandle";
 import EmptyState from "./EmptyState";
-import { useColumnWidths } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom, roomHasTenant, findBookingForRoom } from "../utils/tenantRoom";
 
@@ -154,7 +154,7 @@ export default function RoomTableView({
   onTenantsUpdate?: (updater: (prev: any[]) => any[]) => void;
 }) {
   const navigate = useNavigate();
-  const [cols, setCols] = useState<ColDef[]>(INITIAL_COLS);
+  const [cols, setCols] = useColumnVisibility("rooms", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);

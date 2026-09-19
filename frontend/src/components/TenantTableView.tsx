@@ -7,7 +7,7 @@ import ContractStatusBadge from "./ContractStatusBadge";
 import PrivacyMask from "./PrivacyMask";
 import PrivacyAvatar from "./PrivacyAvatar";
 import { usePrivacyMode } from "../context/PrivacyModeContext";
-import { useColumnWidths } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 
 export const AVATAR_URL = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
@@ -235,7 +235,7 @@ export default function TenantTableView({
   onDeleteBulk: (tenants: any[]) => Promise<void>;
 }) {
   const { enabled: privacyModeEnabled } = usePrivacyMode();
-  const [cols, setCols] = useState<ColDef[]>(INITIAL_COLS);
+  const [cols, setCols] = useColumnVisibility("tenants", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);

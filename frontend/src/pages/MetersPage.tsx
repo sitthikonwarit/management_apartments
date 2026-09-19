@@ -9,7 +9,7 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom } from "../utils/tenantRoom";
 import { toDisplayYear, thaiDateTimeString, thaiDateOnlyString, normalizeYearToCE } from "../utils/yearFormat";
@@ -393,7 +393,7 @@ function ImportModal({ file, rooms, allRecords, onClose, onImport }: {
 
 // ── Column-pin hook ───────────────────────────────────────────────────────────
 function usePinTable(initial: ColDef[], storageKey: string, widthDefaults: Record<string, number>) {
-  const [cols, setCols] = useState<ColDef[]>(initial);
+  const [cols, setCols] = useColumnVisibility(storageKey, initial);
   const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const { widths, startResize } = useColumnWidths(storageKey, widthDefaults);
@@ -1477,7 +1477,7 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
   onDeleted: (ids: string[]) => void;
   onPrintSelected: (monthYears: string[]) => void;
 }) {
-  const [cols, setCols] = useState<ColDef[]>(METER_TABLE_COLS);
+  const [cols, setCols] = useColumnVisibility("meters-list", METER_TABLE_COLS);
   const [selectedRows, setSelectedRows]   = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting,      setDeleting]      = useState(false);

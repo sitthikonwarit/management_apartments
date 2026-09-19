@@ -19,7 +19,7 @@ import {
   reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -1991,7 +1991,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   onSendLineBulk: (roomIds: string[]) => void;
   bulkSendingLine: boolean;
 }) {
-  const [cols, setCols] = useState<BillColDef[]>(BILL_TABLE_COLS);
+  const [cols, setCols] = useColumnVisibility("bills-room", BILL_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<BillPinMenu | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -2274,7 +2274,7 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
   onDelete: (g: BillGroup) => void;
   onBulkPrint: (groups: BillGroup[]) => void;
 }) {
-  const [cols, setCols] = useState<BillColDef[]>(BILL_GROUP_TABLE_COLS);
+  const [cols, setCols] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<BillPinMenu | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
