@@ -1883,6 +1883,9 @@ const BILL_TABLE_COLS: BillColDef[] = [
   { key: "water",       header: "ค่าน้ำ",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "electric",    header: "ค่าไฟ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "vehicle",     header: "ค่าจอดรถ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "roomTag",     header: "Tag ห้อง",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "tenantTag",   header: "Tag ผู้เช่า",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "discount",    header: "ส่วนลด",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "other",       header: "อื่นๆ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "outstanding", header: "ค้างชำระ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "ownMonth",    header: "ยอดเดือนนี้",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
@@ -1996,7 +1999,8 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
     checkbox: 40, room: 90, tenant: 160, priceRoom: 100, water: 100,
-    electric: 100, vehicle: 100, other: 100, outstanding: 130, ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
+    electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, outstanding: 130,
+    ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
 
   const visible = cols.filter((c) => c.visible);
@@ -2066,21 +2070,47 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
       case "electric":
         return <>{money(item.priceElectric)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterElectric.unit} หน่วย</div></>;
       case "vehicle": return item.priceVehicle > 0 ? money(item.priceVehicle) : "-";
+      // Tag ห้อง/Tag ผู้เช่า/ส่วนลด แยกเป็นคอลัมน์ของตัวเอง (เดิมรวมอยู่ใน "อื่นๆ" ก้อนเดียว) แสดงเป็น chip
+      // ไอคอน + ชื่อ + ยอด ต่อรายการ (ทรงเดียวกับ .bill-tag-chip ในหน้าแก้ไขบิล ไม่มีปุ่มลบตรงนี้)
+      case "roomTag":
+        return item.billTagItems.length > 0 ? (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            {item.billTagItems.map((t, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": t.color || "#6c757d" } as React.CSSProperties}>
+                <i className="fas fa-tag" style={{ fontSize: 10 }} />{t.name} ({money(t.price)})
+              </span>
+            ))}
+          </div>
+        ) : "-";
+      case "tenantTag":
+        return item.billTenantTagItems.length > 0 ? (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            {item.billTenantTagItems.map((t, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": t.color || "#6C9BCF" } as React.CSSProperties}>
+                <i className="fas fa-user" style={{ fontSize: 10 }} />{t.name} ({money(t.price)})
+              </span>
+            ))}
+          </div>
+        ) : "-";
+      case "discount":
+        return item.discountItems.length > 0 ? (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            {item.discountItems.map((d, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": "#dc3545" } as React.CSSProperties}>
+                <i className="fas fa-tag" style={{ fontSize: 10 }} />{d.name} (-{money(d.price)})
+              </span>
+            ))}
+          </div>
+        ) : "-";
       case "other": {
-        // แยกค่าจอดรถออกไปเป็นคอลัมน์ของตัวเองแล้ว (key "vehicle" ด้านบน) เหลือแค่แท็ก/รายการเพิ่มเติม/
-        // ส่วนลดในคอลัมน์นี้ — โชว์ชื่อรายการที่รวมกันเป็นยอดนี้ไว้ใต้ตัวเลขด้วย เหมือนคอลัมน์ "ค้างชำระ"
-        const otherAmount = otherChargesTotal(item) - item.priceVehicle;
-        if (!(otherAmount !== 0)) return "-";
-        const names = [
-          ...item.billTagItems.map((t) => t.name),
-          ...item.billTenantTagItems.map((t) => t.name),
-          ...item.customItems.map((c) => c.name),
-          ...item.discountItems.map((d) => `ส่วนลด: ${d.name}`),
-        ];
+        // เหลือแค่ "รายการอื่นๆ/เพิ่มเติม" (customItems) ล้วนๆ — ค่าจอดรถ/Tag ห้อง/Tag ผู้เช่า/ส่วนลด
+        // แยกออกไปเป็นคอลัมน์ของตัวเองหมดแล้วด้านบน
+        const customTotal = item.customItems.reduce((s, c) => s + (Number(c.price) || 0), 0);
+        if (item.customItems.length === 0) return "-";
         return (
           <>
-            {money(otherAmount)}
-            {names.length > 0 && <div className="text-muted" style={{ fontSize: 11 }}>{names.join(", ")}</div>}
+            {money(customTotal)}
+            <div className="text-muted" style={{ fontSize: 11 }}>{item.customItems.map((c) => c.name).join(", ")}</div>
           </>
         );
       }
