@@ -20,7 +20,7 @@ import {
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
-import { thaiDateTimeString, thaiDateOnlyString } from "../utils/yearFormat";
+import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 import { setUnsavedGuard, clearUnsavedGuard, guardNavigation } from "../utils/unsavedGuard";
@@ -1365,7 +1365,7 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
 
   // ทุกตารางด้านล่างมีคอลัมน์ของตัวเองอิสระต่อกัน (ไม่ต้องเทียบ colSpan ข้ามตารางให้ตรงกัน) — ที่ยังดูเป็น
   // กล่องเดียวต่อเนื่องกันได้เพราะห่อด้วย .bsp-box (มีกรอบนอกใบเดียว) แล้วแต่ละตารางมีแค่เส้นคั่นบน/ล่างเอง
-  const noteText = `${dueDateLabel(item.overdueConfig ?? config.overdue)}${isSplitCopy ? ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน` : ""}`;
+  const noteText = `บิลค่าเช่าประจำเดือน ${monthYearLabel(monthYear)} · ${dueDateLabel(item.overdueConfig ?? config.overdue)}${isSplitCopy ? ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน` : ""}`;
 
   return (
     <div className="bill-slip-pretty">
@@ -1383,7 +1383,7 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
               <td className="bsp-meta-label">รหัส</td>
               <td>{item.roomNumber}</td>
               <td className="bsp-meta-label">วันที่</td>
-              <td>{thaiDateOnlyString(new Date())}</td>
+              <td>{thaiFullDateString(new Date())}</td>
             </tr>
             <tr>
               <td className="bsp-meta-label">ชื่อ</td>

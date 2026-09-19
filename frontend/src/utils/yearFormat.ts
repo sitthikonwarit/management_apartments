@@ -42,6 +42,12 @@ export function thaiDateOnlyString(d: Date): string {
 
 const THAI_MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 
+// วันที่เต็ม "D เดือนไทย ปี" (เช่น "2 มีนาคม 2569") ต่างจาก thaiDateOnlyString ด้านบนที่ได้ตัวเลขล้วน
+// (เช่น "2/3/2569") — ใช้บนเอกสารพิมพ์ที่อยากให้อ่านง่ายเป็นทางการ (เช่น BillSlipPretty ใน BillsPage.tsx)
+export function thaiFullDateString(d: Date): string {
+  return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${toDisplayYear(d.getFullYear(), "CE")}`;
+}
+
 // checkInDate ของผู้เช่า: ปัจจุบัน backend เก็บเป็น ISO (ค.ศ.) เหมือน contract date แต่ข้อมูลเก่าที่
 // import จาก Google Sheets เก็บเป็น "D/M/YYYY" หรือ "D/M/YYYY, H:MM:SS" (ปีเป็น ค.ศ. อยู่แล้ว) — รองรับ
 // ทั้งคู่ แปลงปีตามที่ตั้งค่าไว้ (พ.ศ./ค.ศ.) แค่ตอนแสดงผล ฟอร์แมตที่ parse ไม่ได้จะโชว์ข้อความเดิมแทนการเดาให้ผิด
