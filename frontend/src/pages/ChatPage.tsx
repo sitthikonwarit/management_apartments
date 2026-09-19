@@ -7,6 +7,7 @@ import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastError, toastSuccess } from "../utils/toast";
 import { LINE_STICKERS, stickerThumbUrl } from "../utils/lineStickers";
 import { AVATAR_URL } from "../components/TenantTableView";
+import PrivacyAvatar from "../components/PrivacyAvatar";
 import ChatDetailModal, { type ChatDetailTab } from "../components/ChatDetailModal";
 import ImageLightbox from "../components/ImageLightbox";
 import { ChatBillMessage } from "../components/ChatBillCard";
@@ -20,7 +21,7 @@ import CustomSelect2 from "../components/CustomSelect2";
 function PresenceAvatar({ src, size, active, title }: { src: string; size: number; active: boolean; title?: string }) {
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }} title={title}>
-      <img
+      <PrivacyAvatar
         src={src} alt="" referrerPolicy="no-referrer"
         style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }}
         onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
@@ -746,7 +747,7 @@ function BroadcastModal({ conversations, onClose, onSent }: {
               {filtered.map((c) => (
                 <label key={c.lineUserId} className="d-flex align-items-center gap-2 px-2 py-1" style={{ cursor: "pointer", borderBottom: "1px solid var(--color-light)" }}>
                   <input type="checkbox" className="form-check-input" checked={selectedIds.has(c.lineUserId)} onChange={() => toggle(c.lineUserId)} />
-                  <img src={c.pictureUrl || AVATAR_URL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                  <PrivacyAvatar src={c.pictureUrl || AVATAR_URL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
                     onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }} />
                   <span className="small text-truncate">
                     {c.displayName}{c.roomNumber ? ` · ห้อง ${c.roomNumber}` : ""}
