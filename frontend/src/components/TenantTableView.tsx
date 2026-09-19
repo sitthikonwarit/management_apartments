@@ -8,7 +8,7 @@ import ContractStatusBadge from "./ContractStatusBadge";
 import PrivacyMask from "./PrivacyMask";
 import PrivacyAvatar from "./PrivacyAvatar";
 import { usePrivacyMode } from "../context/PrivacyModeContext";
-import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 
 export const AVATAR_URL = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
@@ -197,6 +197,9 @@ export default function TenantTableView({
     lineConnect: 110, roomNumber: 90, houseNo: 110, soi: 110, road: 110, province: 110,
     amphoe: 110, tambon: 110, zipcode: 110, address: 200, checkInDate: 150, pdf: 110, actions: 130,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("tenants", data, (t: any) => String(t.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   async function doDelete() {
     if (!confirmDelete) return;
@@ -295,10 +298,19 @@ export default function TenantTableView({
     switch (col.key) {
       case "checkbox":
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(tenant.id)}
-            onChange={() => toggleRow(tenant.id)}
-            onClick={(e) => e.stopPropagation()} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(tenant.id)); setDraggingRowKey(String(tenant.id)); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(tenant.id)}
+              onChange={() => toggleRow(tenant.id)}
+              onClick={(e) => e.stopPropagation()} />
+          </>
         );
       case "id": return tenant.id;
       case "image":
@@ -431,20 +443,27 @@ export default function TenantTableView({
             </tr>
           </thead>
           <tbody>
-            {data.map((tenant) => (
-              <tr key={tenant.id}>
-                {ordered.map((col) => {
-                  const pinClass =
-                    col.pin === "left" ? "pinned pinned-left" :
-                    col.pin === "right" ? "pinned pinned-right" : "";
-                  return (
-                    <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>
-                      {renderCell(col, tenant)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {rowOrdered.map((tenant) => {
+              const rowKey = String(tenant.id);
+              return (
+                <tr key={tenant.id}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pinClass =
+                      col.pin === "left" ? "pinned pinned-left" :
+                      col.pin === "right" ? "pinned pinned-right" : "";
+                    return (
+                      <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>
+                        {renderCell(col, tenant)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
             {data.length === 0 && (
               <tr>
                 <td colSpan={ordered.length}><EmptyState icon="fa-user" text="ไม่พบข้อมูล" compact /></td>

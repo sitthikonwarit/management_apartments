@@ -10,7 +10,7 @@ import ColResizeHandle from "../components/ColResizeHandle";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom } from "../utils/tenantRoom";
 import { toDisplayYear, thaiDateTimeString, thaiDateOnlyString, normalizeYearToCE } from "../utils/yearFormat";
@@ -579,6 +579,9 @@ function MeterDetailView({ record, rooms, tenants, allRecords, towers, onEdit, o
     return r.number.toLowerCase().includes(q) ||
       (tenant ? `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(q) : false);
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("meters-detail", displayed, (r: any) => String(r.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   function renderCell(colKey: string, room: any) {
     const d        = record.data?.[room.number]     ?? record.data?.[room.id]     ?? {};
@@ -604,10 +607,19 @@ function MeterDetailView({ record, rooms, tenants, allRecords, towers, onEdit, o
     const off = <span className="meter-disabled-text">ปิดใช้งาน</span>;
     switch (colKey) {
       case "room":   return (
-        <span style={{ fontWeight: 700, color: room.isDeleted ? "var(--color-danger)" : "var(--color-primary)" }}>
-          ห้อง {room.number}
-          {room.isDeleted && <i className="fas fa-trash-alt ms-1" style={{ fontSize: "0.75em" }} title="ห้องนี้ถูกลบออกจากระบบแล้ว" />}
-        </span>
+        <>
+          <span className="row-drag-handle" draggable
+            onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(room.id)); setDraggingRowKey(String(room.id)); }}
+            onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+            title="ลากเพื่อสลับลำดับแถว">
+            <i className="fas fa-grip-vertical" />
+          </span>
+          <span style={{ fontWeight: 700, color: room.isDeleted ? "var(--color-danger)" : "var(--color-primary)" }}>
+            ห้อง {room.number}
+            {room.isDeleted && <i className="fas fa-trash-alt ms-1" style={{ fontSize: "0.75em" }} title="ห้องนี้ถูกลบออกจากระบบแล้ว" />}
+          </span>
+        </>
       );
       case "tenant": return tenantDisplay
         ? <span style={{ color: "var(--color-dark)" }}>{tenantDisplay}</span>
@@ -730,14 +742,21 @@ function MeterDetailView({ record, rooms, tenants, allRecords, towers, onEdit, o
           <tbody id="meter-detail-table-container">
             {displayed.length === 0 ? (
               <tr><td colSpan={ordered.length} className="text-center text-muted p-5">ไม่พบข้อมูลบันทึก</td></tr>
-            ) : displayed.map((room) => (
-              <tr key={room.id}>
-                {ordered.map((col) => {
-                  const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col.key, room)}</td>;
-                })}
-              </tr>
-            ))}
+            ) : rowOrdered.map((room) => {
+              const rowKey = String(room.id);
+              return (
+                <tr key={room.id}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col.key, room)}</td>;
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1192,10 +1211,10 @@ function MeterFormView({ record, rooms, tenants, allRecords, towers, onSave, onB
   // กด Enter แล้วโฟกัสไปช่องเดียวกัน (ไฟก่อน/ไฟนี้/น้ำก่อน/น้ำนี้) ของห้องถัดไปในตาราง
   // ข้ามห้องที่ปิดใช้งานมิเตอร์ประเภทนั้น (ไม่มี input ให้โฟกัส) ไปหาห้องถัดไปที่มีจริง
   function focusNextRoomField(colKey: string, currentRoomNumber: string) {
-    const idx = displayed.findIndex((r) => r.number === currentRoomNumber);
+    const idx = rowOrdered.findIndex((r) => r.number === currentRoomNumber);
     if (idx === -1) return;
-    for (let i = idx + 1; i < displayed.length; i++) {
-      const el = document.getElementById(`meter-input-${colKey}-${displayed[i].number}`) as HTMLInputElement | null;
+    for (let i = idx + 1; i < rowOrdered.length; i++) {
+      const el = document.getElementById(`meter-input-${colKey}-${rowOrdered[i].number}`) as HTMLInputElement | null;
       if (el) { el.focus(); el.select(); return; }
     }
   }
@@ -1211,6 +1230,9 @@ function MeterFormView({ record, rooms, tenants, allRecords, towers, onSave, onB
     return r.number.toLowerCase().includes(q) ||
       (tenant ? `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(q) : false);
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("meters-form", displayed, (r: any) => String(r.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   async function handleSave() {
     if (!targetMY) { toastError("กรุณาเลือกเดือนและปี"); return; }
@@ -1263,10 +1285,19 @@ function MeterFormView({ record, rooms, tenants, allRecords, towers, onSave, onB
 
     switch (colKey) {
       case "room":   return (
-        <span style={{ fontWeight: 700, color: room.isDeleted ? "var(--color-danger)" : "var(--color-primary)" }}>
-          ห้อง {room.number}
-          {room.isDeleted && <i className="fas fa-trash-alt ms-1" style={{ fontSize: "0.75em" }} title="ห้องนี้ถูกลบออกจากระบบแล้ว" />}
-        </span>
+        <>
+          <span className="row-drag-handle" draggable
+            onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(room.id)); setDraggingRowKey(String(room.id)); }}
+            onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+            title="ลากเพื่อสลับลำดับแถว">
+            <i className="fas fa-grip-vertical" />
+          </span>
+          <span style={{ fontWeight: 700, color: room.isDeleted ? "var(--color-danger)" : "var(--color-primary)" }}>
+            ห้อง {room.number}
+            {room.isDeleted && <i className="fas fa-trash-alt ms-1" style={{ fontSize: "0.75em" }} title="ห้องนี้ถูกลบออกจากระบบแล้ว" />}
+          </span>
+        </>
       );
       case "tenant": {
         const t = findTenantForRoom(tenants, room);
@@ -1410,14 +1441,21 @@ function MeterFormView({ record, rooms, tenants, allRecords, towers, onSave, onB
               <tr><td colSpan={ordered.length} className="text-center text-muted p-5">
                 กำลังโหลดข้อมูลห้องพัก...
               </td></tr>
-            ) : displayed.map((room) => (
-              <tr key={room.id} data-room-id={room.id}>
-                {ordered.map((col) => {
-                  const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col.key, room)}</td>;
-                })}
-              </tr>
-            ))}
+            ) : rowOrdered.map((room) => {
+              const rowKey = String(room.id);
+              return (
+                <tr key={room.id} data-room-id={room.id}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col.key, room)}</td>;
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1467,6 +1505,9 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
   const { widths, startResize } = useColumnWidths("meters-list", {
     checkbox: 40, monthYear: 130, status: 120, filled: 120, progress: 150, recordDate: 130, updatedAt: 160, actions: 150,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("meters-list", meters, (m: any) => String(m.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const allSelected  = meters.length > 0 && selectedRows.size === meters.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
@@ -1543,10 +1584,19 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
     switch (col.key) {
       case "checkbox":
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(m.id)}
-            onChange={() => toggleRow(m.id)}
-            onClick={(e) => e.stopPropagation()} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(m.id)); setDraggingRowKey(String(m.id)); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(m.id)}
+              onChange={() => toggleRow(m.id)}
+              onClick={(e) => e.stopPropagation()} />
+          </>
         );
       case "monthYear":
         return <span style={{ fontWeight: 600, color: "var(--color-primary)" }}>{monthYearLabel(m.monthYear)}</span>;
@@ -1677,14 +1727,21 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
             </tr>
           </thead>
           <tbody>
-            {meters.map((m) => (
-              <tr key={m.id}>
-                {ordered.map((col) => {
-                  const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col, m)}</td>;
-                })}
-              </tr>
-            ))}
+            {rowOrdered.map((m) => {
+              const rowKey = String(m.id);
+              return (
+                <tr key={m.id}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col, m)}</td>;
+                  })}
+                </tr>
+              );
+            })}
             {meters.length === 0 && (
               <tr><td colSpan={ordered.length}><EmptyState icon="fa-tachometer-alt" text="ไม่พบรายการจดมิเตอร์" compact /></td></tr>
             )}

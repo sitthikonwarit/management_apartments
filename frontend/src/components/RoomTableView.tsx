@@ -4,7 +4,7 @@ import Select, { components, StylesConfig } from "react-select";
 import ColResizeHandle from "./ColResizeHandle";
 import PinMenuPopup, { type PinMenuState } from "./PinMenuPopup";
 import EmptyState from "./EmptyState";
-import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { findTenantForRoom, roomHasTenant, findBookingForRoom } from "../utils/tenantRoom";
 
@@ -150,6 +150,9 @@ export default function RoomTableView({
     checkbox: 40, number: 100, tower: 110, floor: 80, status: 110, price: 120, dailyPrice: 110,
     meterElectric: 110, meterWater: 110, roomActive: 110, tenant: 160, detail: 200, tags: 160, actions: 130,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("rooms", data, (r: any) => String(r.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!blockMsg) return;
@@ -284,10 +287,19 @@ export default function RoomTableView({
     switch (col.key) {
       case "checkbox":
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(room.id)}
-            onChange={() => toggleRow(room.id)}
-            onClick={(e) => e.stopPropagation()} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(room.id)); setDraggingRowKey(String(room.id)); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(room.id)}
+              onChange={() => toggleRow(room.id)}
+              onClick={(e) => e.stopPropagation()} />
+          </>
         );
       case "number":
         return (
@@ -475,18 +487,25 @@ export default function RoomTableView({
             </tr>
           </thead>
           <tbody>
-            {data.map((room) => (
-              <tr key={room.id} style={{ opacity: room.isActive === false ? 0.6 : 1 }}>
-                {ordered.map((col) => {
-                  const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return (
-                    <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>
-                      {renderCell(col, room)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {rowOrdered.map((room) => {
+              const rowKey = String(room.id);
+              return (
+                <tr key={room.id} style={{ opacity: room.isActive === false ? 0.6 : 1 }}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return (
+                      <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>
+                        {renderCell(col, room)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
             {data.length === 0 && (
               <tr><td colSpan={ordered.length}><EmptyState icon="fa-door-open" text="ไม่พบข้อมูลห้องพัก" compact /></td></tr>
             )}

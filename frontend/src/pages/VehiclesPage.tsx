@@ -20,7 +20,7 @@ import ColResizeHandle from "../components/ColResizeHandle";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 import { roomsOfTenant } from "../utils/tenantRoom";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
@@ -895,6 +895,9 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
   const { widths, startResize } = useColumnWidths("vehicles", {
     checkbox: 40, type: 110, plate: 130, brand: 130, color: 90, owner: 150, room: 90, phone: 130, fee: 110, actions: 130,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("vehicles", vehicles, (v: any) => String(v.id));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const allSelected  = vehicles.length > 0 && selectedRows.size === vehicles.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
@@ -961,14 +964,23 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
     switch (col.key) {
       case "checkbox":
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(v.id)}
-            onClick={(e) => e.stopPropagation()}
-            onChange={() => setSelectedRows((prev) => {
-              const n = new Set(prev);
-              n.has(v.id) ? n.delete(v.id) : n.add(v.id);
-              return n;
-            })} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(v.id)); setDraggingRowKey(String(v.id)); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(v.id)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => setSelectedRows((prev) => {
+                const n = new Set(prev);
+                n.has(v.id) ? n.delete(v.id) : n.add(v.id);
+                return n;
+              })} />
+          </>
         );
       case "type":
         return <span><i className={`${typeInfo.icon} me-1`} />{typeInfo.name}</span>;
@@ -1097,14 +1109,21 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
             </tr>
           </thead>
           <tbody>
-            {vehicles.map((v) => (
-              <tr key={v.id}>
-                {ordered.map((col) => {
-                  const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col, v)}</td>;
-                })}
-              </tr>
-            ))}
+            {rowOrdered.map((v) => {
+              const rowKey = String(v.id);
+              return (
+                <tr key={v.id}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pc}`}>{renderCell(col, v)}</td>;
+                  })}
+                </tr>
+              );
+            })}
             {vehicles.length === 0 && (
               <tr><td colSpan={ordered.length}><EmptyState icon="fa-car" text="ไม่พบรายการยานพาหนะ" compact /></td></tr>
             )}

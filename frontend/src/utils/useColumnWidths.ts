@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
 const WIDTHS_PREFIX = "colWidths:";
 const VISIBILITY_PREFIX = "colVisible:";
+const ROW_ORDER_PREFIX = "rowOrder:";
 
 // ── เก็บความกว้าง/การซ่อน-แสดงคอลัมน์ที่ผู้ใช้ปรับเองไว้ใน localStorage "ต่อผู้ใช้ต่อเครื่อง" (ใส่ user id
 // ต่อท้าย key เสมอ) — ไม่งั้นถ้าใช้เครื่องเดียวกันหลายคน (สลับบัญชีพนักงาน) การปรับของคนหนึ่งจะไปทับ/ปนกับ
@@ -114,4 +115,59 @@ export function useColumnVisibility<T extends { key: string; visible: boolean; p
   }
 
   return [cols, setCols] as const;
+}
+
+// ── ลากสลับลำดับแถวในตาราง — จำลำดับที่ลากไว้ต่อผู้ใช้ต่อเครื่องเหมือนความกว้าง/การซ่อนคอลัมน์ (เก็บแค่
+// "ลำดับ id" ใน localStorage ไม่แก้ลำดับจริงในฐานข้อมูล จึงไม่กระทบคนอื่นที่ดูตารางเดียวกัน) รับรายการข้อมูล
+// ดิบ (ตามลำดับที่ backend ส่งมา) + ฟังก์ชันดึง key เฉพาะของแต่ละแถว แล้วคืนรายการที่เรียงตามลำดับที่บันทึกไว้
+// (รายการใหม่ที่ยังไม่เคยลากจัดลำดับ จะต่อท้ายตามลำดับเดิมของมันเสมอ ไม่ได้หายไปไหน)
+export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T) => string) {
+  const scope = useUserScope();
+  const lsKey = `${ROW_ORDER_PREFIX}${storageKey}:${scope}`;
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(lsKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const ordered = useMemo(() => {
+    if (order.length === 0) return items;
+    const byKey = new Map(items.map((it) => [getKey(it), it]));
+    const result: T[] = [];
+    order.forEach((k) => {
+      const it = byKey.get(k);
+      if (it) { result.push(it); byKey.delete(k); }
+    });
+    // รายการที่เหลือ (ใหม่/ไม่เคยอยู่ในลำดับที่บันทึกไว้) ต่อท้ายตามลำดับเดิมของมันเอง
+    items.forEach((it) => { if (byKey.has(getKey(it))) result.push(it); });
+    return result;
+  }, [items, order]);
+
+  function persist(next: string[]) {
+    setOrder(next);
+    try { localStorage.setItem(lsKey, JSON.stringify(next)); } catch {}
+  }
+
+  // ลากแถว draggedKey ไปวางที่ตำแหน่งของแถว targetKey — อ้างอิงจากลำดับที่แสดงผลอยู่ปัจจุบัน (ordered)
+  // ไม่ใช่ลำดับดิบจาก backend เพื่อให้ตรงกับที่ผู้ใช้เห็นบนจอจริงๆ
+  function moveRow(draggedKey: string, targetKey: string) {
+    if (draggedKey === targetKey) return;
+    const keys = ordered.map(getKey);
+    const from = keys.indexOf(draggedKey);
+    const to = keys.indexOf(targetKey);
+    if (from === -1 || to === -1) return;
+    const next = [...keys];
+    next.splice(from, 1);
+    next.splice(to, 0, draggedKey);
+    persist(next);
+  }
+
+  function resetRowOrder() {
+    persist([]);
+  }
+
+  return { ordered, moveRow, resetRowOrder };
 }

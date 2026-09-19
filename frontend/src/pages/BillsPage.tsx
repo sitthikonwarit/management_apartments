@@ -20,7 +20,7 @@ import {
   reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
 import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -1986,6 +1986,9 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
     electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, outstanding: 130,
     ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("bills-room", data, (d) => String(d.item.roomId));
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const visible = cols.filter((c) => c.visible);
   const ordered = [
@@ -2040,9 +2043,18 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
     switch (col.key) {
       case "checkbox":
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(item.roomId)} onChange={() => toggleRow(item.roomId)}
-            onClick={(e) => e.stopPropagation()} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(item.roomId)); setDraggingRowKey(String(item.roomId)); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(item.roomId)} onChange={() => toggleRow(item.roomId)}
+              onClick={(e) => e.stopPropagation()} />
+          </>
         );
       case "room": return <span className="fw-bold">ห้อง {item.roomNumber}</span>;
       case "tenant": return item.tenantId
@@ -2231,14 +2243,21 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
           <tbody>
             {data.length === 0 ? (
               <tr><td colSpan={ordered.length}><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" compact /></td></tr>
-            ) : data.map(({ item, idx }) => (
-              <tr key={item.roomId}>
-                {ordered.map((col) => {
-                  const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>{renderCell(col, item, idx)}</td>;
-                })}
-              </tr>
-            ))}
+            ) : rowOrdered.map(({ item, idx }) => {
+              const rowKey = String(item.roomId);
+              return (
+                <tr key={item.roomId}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>{renderCell(col, item, idx)}</td>;
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -2275,6 +2294,9 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
   const { widths, startResize } = useColumnWidths("bills-group", {
     checkbox: 40, month: 130, rooms: 110, paid: 130, total: 120, scheduled: 130, updated: 160, actions: 130,
   });
+  const { ordered: rowOrdered, moveRow } = useRowOrder("bills-group", data, (g) => g.id ?? g.monthYear);
+  const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const visible = cols.filter((c) => c.visible);
   const ordered = [
@@ -2329,12 +2351,23 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
     const paidCount = g.data.filter((i) => i.status === "paid").length;
     const total = g.data.reduce((s, i) => s + (Number(i.total) || 0), 0);
     switch (col.key) {
-      case "checkbox":
+      case "checkbox": {
+        const rowKey = g.id ?? g.monthYear;
         return (
-          <input type="checkbox" className="form-check-input row-checkbox"
-            checked={selectedRows.has(g.id!)} onChange={() => toggleRow(g.id!)}
-            onClick={(e) => e.stopPropagation()} />
+          <>
+            <span className="row-drag-handle" draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", rowKey); setDraggingRowKey(rowKey); }}
+              onDragEnd={() => { setDraggingRowKey(null); setDropTargetKey(null); }}
+              title="ลากเพื่อสลับลำดับแถว">
+              <i className="fas fa-grip-vertical" />
+            </span>
+            <input type="checkbox" className="form-check-input row-checkbox"
+              checked={selectedRows.has(g.id!)} onChange={() => toggleRow(g.id!)}
+              onClick={(e) => e.stopPropagation()} />
+          </>
         );
+      }
       case "month": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{monthYearLabel(g.monthYear)}</span>;
       case "rooms": return g.data.length;
       case "paid": return `${paidCount}/${g.data.length}`;
@@ -2405,14 +2438,21 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
           <tbody>
             {data.length === 0 ? (
               <tr><td colSpan={ordered.length}><EmptyState icon="fa-file-invoice" text="ไม่พบข้อมูล" compact /></td></tr>
-            ) : data.map((g) => (
-              <tr key={g.id}>
-                {ordered.map((col) => {
-                  const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
-                  return <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>{renderCell(col, g)}</td>;
-                })}
-              </tr>
-            ))}
+            ) : rowOrdered.map((g) => {
+              const rowKey = g.id ?? g.monthYear;
+              return (
+                <tr key={g.id ?? g.monthYear}
+                  className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
+                  onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveRow(dragged, rowKey); setDraggingRowKey(null); setDropTargetKey(null); }}>
+                  {ordered.map((col) => {
+                    const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                    return <td key={col.key} className={`${col.tdClass ?? ""} ${pinClass}`}>{renderCell(col, g)}</td>;
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

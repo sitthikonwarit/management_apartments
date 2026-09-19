@@ -781,6 +781,17 @@ main { padding-top: 1.4rem; min-width: 0; }
 .col-resize-handle:hover, .col-resize-handle:active { background-color: rgba(108,155,207,0.5); }
 body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
 
+/* ปุ่มจับลากสลับลำดับแถว (ดู useRowOrder ใน useColumnWidths.ts) — วางไว้ในช่องเดียวกับ checkbox ของแต่ละ
+   แถว ลากได้เฉพาะไอคอนนี้เท่านั้น (ไม่ใช่ทั้งแถว) กันชนกับคลิกแถวเพื่อเปิดรายละเอียด/ลากเลือกข้อความ */
+.row-drag-handle {
+  cursor: grab; color: var(--color-dark-variant); opacity: 0.5; margin-right: 6px;
+  display: inline-flex; align-items: center;
+}
+.row-drag-handle:hover { opacity: 1; }
+.row-drag-handle:active { cursor: grabbing; }
+.table-mainstyle tbody tr.row-dragging { opacity: 0.4; }
+.table-mainstyle tbody tr.row-drop-target { box-shadow: inset 0 2px 0 var(--color-primary); }
+
 /* Sticky pinned columns */
 .table-mainstyle th.pinned,
 .table-mainstyle td.pinned {
