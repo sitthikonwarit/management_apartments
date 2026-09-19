@@ -455,9 +455,10 @@ function PinMenuPopup({ menu, cols, onPin, onClose }: {
   return (
     <ul className="pinning-menu" style={{ position: "fixed", top: menu.y, left: menu.x }}
       onClick={(e) => e.stopPropagation()}>
-      {cur !== "left"  && <li onClick={() => { onPin(menu.colKey, "left");  onClose(); }}><i className="fas fa-chevron-left fa-fw" />ปักหมุดซ้าย</li>}
-      {cur !== "right" && <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}><i className="fas fa-chevron-right fa-fw" />ปักหมุดขวา</li>}
-      {cur && <><hr className="my-1" /><li onClick={() => { onPin(menu.colKey, false); onClose(); }}><i className="fas fa-times fa-fw" />ปลดหมุด</li></>}
+      {cur && <li className="disabled"><i className="fas fa-thumbtack" />{cur === "left" ? "ปักหมุดซ้าย (ใช้อยู่)" : "ปักหมุดขวา (ใช้อยู่)"}</li>}
+      {cur !== "left"  && <li onClick={() => { onPin(menu.colKey, "left");  onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-primary)" }} />ปักหมุดซ้าย</li>}
+      {cur !== "right" && <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-danger)" }} />ปักหมุดขวา</li>}
+      {cur && <li onClick={() => { onPin(menu.colKey, false); onClose(); }}><i className="fas fa-times" />เลิกปักหมุด</li>}
     </ul>
   );
 }
