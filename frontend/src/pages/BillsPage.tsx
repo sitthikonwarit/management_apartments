@@ -2152,12 +2152,15 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
         return (
           <div className="btn-group" role="group">
             {/* เดิมเป็นปุ่ม "ดูสลิป" (เปิด lightbox รูปสลิปล่าสุด เฉพาะบิลที่มีสลิปแนบ) — เปลี่ยนเป็นปุ่มลูกตา
-                เปิดป็อปอัพ "บันทึกการชำระเงิน" (PaymentModal) แทน โชว์ทุกบิลเสมอ ไม่ต้องรอมีสลิปก่อน ในนั้น
-                มีทั้งประวัติการชำระ (ดูสลิปได้เหมือนเดิม) + ปุ่มยกเลิกรายการชำระทีละรายการอยู่แล้ว */}
-            <button type="button" className="btn btn-sm btn-outline-primary" title="บันทึกการชำระเงิน"
-              onClick={(e) => { e.stopPropagation(); onOpenPayment(idx); }}>
-              <i className="fas fa-eye" />
-            </button>
+                เปิดป็อปอัพ "บันทึกการชำระเงิน" (PaymentModal) แทน ในนั้นมีทั้งประวัติการชำระ (ดูสลิปได้เหมือนเดิม)
+                + ปุ่มยกเลิกรายการชำระทีละรายการอยู่แล้ว — โชว์เฉพาะบิลที่มีเงินเข้าแล้ว (paidAmount > 0 ไม่ว่า
+                จะจ่ายครบหรือจ่ายบางส่วน) บิลที่ยังไม่มีเงินเข้าเลยไม่มีอะไรให้ดู/ยกเลิก จึงไม่โชว์ปุ่มนี้ */}
+            {item.paidAmount > 0 && (
+              <button type="button" className="btn btn-sm btn-outline-primary" title="บันทึกการชำระเงิน"
+                onClick={(e) => { e.stopPropagation(); onOpenPayment(idx); }}>
+                <i className="fas fa-eye" />
+              </button>
+            )}
             {lineEnabled && (
               <button type="button" className="btn btn-sm btn-outline-success" disabled={sendingLineIdx === idx}
                 title={item.sendLogs?.[0] ? sendLogSummary(item.sendLogs[0]) : "ส่งบิลทาง LINE"}
@@ -3085,6 +3088,11 @@ export default function BillsPage() {
         const draft = JSON.parse(JSON.stringify(billData[idx])) as BillItem;
         draft.paidAmount = Math.max(0, (draft.paidAmount || 0) - amount);
         draft.status = draft.paidAmount >= draft.total - 0.005 ? "paid" : "unpaid";
+        // ยกเลิกยอดชำระแล้ว = ยกเลิกการลดหย่อนค่าปรับที่เคยให้ไว้ตอนบันทึกการชำระครั้งนั้นด้วย (ดู
+        // fineWaiveAmount ใน handleConfirmPayment ด้านบน ที่บวกเข้า fineWaived ไว้) ไม่งั้นค่าปรับจะค้าง
+        // ถูกหัก/เป็น 0 อยู่ต่อไปทั้งที่การชำระที่แลกมาด้วยการลดค่าปรับนั้นถูกยกเลิกไปแล้ว — เคลียร์กลับเป็น 0
+        // ให้ recalcItem คิดค่าปรับตามปกติ (อัตโนมัติเต็มจำนวน) ใหม่ทั้งหมด
+        draft.fineWaived = 0;
         recalcItem(draft, config, defaults, editingMonthYear);
         const nextBillData = billData.map((it, i) => (i === idx ? draft : it));
         const saved = editingId
