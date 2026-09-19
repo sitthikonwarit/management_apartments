@@ -1902,6 +1902,7 @@ export default function RoomsPage() {
       ) : view === "table" ? (
         <RoomTableView
           data={filtered}
+          isFiltered={!!search.trim() || !!towerFilter || !!statusFilter}
           allRooms={rooms}
           towers={towers}
           tenants={tenants}

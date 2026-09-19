@@ -176,16 +176,19 @@ function ColVisibilityDropdown({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TenantTableView({
-  data, rooms, onViewDetail, onDelete, onDeleteBulk,
+  data, isFiltered = false, rooms, onViewDetail, onDelete, onDeleteBulk,
 }: {
   data: any[];
+  // true ตอนหน้ากำลังค้นหา/กรองอยู่ (ดู comment ที่ useRowOrder ใน useColumnWidths.ts) — ลำดับที่ลากจัดไว้
+  // จะไม่ถูกใช้ตอนนี้ กันสับสนกับตัวกรอง กลับไปใช้ลำดับที่ลากไว้ทันทีที่เลิกกรอง
+  isFiltered?: boolean;
   rooms: any[];
   onViewDetail: (t: any) => void;
   onDelete: (tenant: any) => Promise<void>;
   onDeleteBulk: (tenants: any[]) => Promise<void>;
 }) {
   const { enabled: privacyModeEnabled } = usePrivacyMode();
-  const [cols, setCols] = useColumnVisibility("tenants", INITIAL_COLS);
+  const [cols, setCols, moveColumn] = useColumnVisibility("tenants", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
@@ -197,8 +200,10 @@ export default function TenantTableView({
     lineConnect: 110, roomNumber: 90, houseNo: 110, soi: 110, road: 110, province: 110,
     amphoe: 110, tambon: 110, zipcode: 110, address: 200, checkInDate: 150, pdf: 110, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("tenants", data, (t: any) => String(t.id));
+  const { ordered: rowOrdered, moveRow } = useRowOrder("tenants", data, (t: any) => String(t.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   async function doDelete() {
@@ -423,8 +428,16 @@ export default function TenantTableView({
                 const pinClass =
                   col.pin === "left" ? "pinned pinned-left" :
                   col.pin === "right" ? "pinned pinned-right" : "";
+                const canDragCol = col.key !== "checkbox";
                 return (
-                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass}`} style={{ width: widths[col.key] }}>
+                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass} ${draggingColKey === col.key ? "col-dragging" : ""} ${dropTargetColKey === col.key ? "col-drop-target" : ""}`}
+                    style={{ width: widths[col.key] }}
+                    draggable={canDragCol}
+                    onDragStart={canDragCol ? (e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", col.key); setDraggingColKey(col.key); } : undefined}
+                    onDragEnd={() => { setDraggingColKey(null); setDropTargetColKey(null); }}
+                    onDragOver={canDragCol ? (e) => { e.preventDefault(); if (draggingColKey && draggingColKey !== col.key) setDropTargetColKey(col.key); } : undefined}
+                    onDragLeave={() => setDropTargetColKey((k) => (k === col.key ? null : k))}
+                    onDrop={canDragCol ? (e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveColumn(dragged, col.key); setDraggingColKey(null); setDropTargetColKey(null); } : undefined}>
                     {col.key === "checkbox" ? (
                       <input ref={selectAllRef} type="checkbox" className="form-check-input"
                         checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} />

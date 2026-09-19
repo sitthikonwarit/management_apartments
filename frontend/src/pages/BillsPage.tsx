@@ -1960,8 +1960,9 @@ function BillColVisibilityDropdown({ cols, onChange }: { cols: BillColDef[]; onC
 
 // (BillPinMenuPopup ถูกย้ายไปใช้ shared component แล้ว — ดู components/PinMenuPopup.tsx)
 
-function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onOpenPayment, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
+function BillTableView({ data, isFiltered = false, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onOpenPayment, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
   data: { item: BillItem; idx: number }[];
+  isFiltered?: boolean;
   payments: any[];
   monthYear: string;
   allBills: BillGroup[];
@@ -1976,7 +1977,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   onSendLineBulk: (roomIds: string[]) => void;
   bulkSendingLine: boolean;
 }) {
-  const [cols, setCols] = useColumnVisibility("bills-room", BILL_TABLE_COLS);
+  const [cols, setCols, moveColumn] = useColumnVisibility("bills-room", BILL_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -1986,9 +1987,11 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
     electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, outstanding: 130,
     ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("bills-room", data, (d) => String(d.item.roomId));
+  const { ordered: rowOrdered, moveRow } = useRowOrder("bills-room", data, (d) => String(d.item.roomId), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
 
   const visible = cols.filter((c) => c.visible);
   const ordered = [
@@ -2224,8 +2227,16 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
             <tr>
               {ordered.map((col) => {
                 const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                const canDragCol = col.key !== "checkbox";
                 return (
-                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass}`} style={{ width: widths[col.key] }}>
+                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass} ${draggingColKey === col.key ? "col-dragging" : ""} ${dropTargetColKey === col.key ? "col-drop-target" : ""}`}
+                    style={{ width: widths[col.key] }}
+                    draggable={canDragCol}
+                    onDragStart={canDragCol ? (e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", col.key); setDraggingColKey(col.key); } : undefined}
+                    onDragEnd={() => { setDraggingColKey(null); setDropTargetColKey(null); }}
+                    onDragOver={canDragCol ? (e) => { e.preventDefault(); if (draggingColKey && draggingColKey !== col.key) setDropTargetColKey(col.key); } : undefined}
+                    onDragLeave={() => setDropTargetColKey((k) => (k === col.key ? null : k))}
+                    onDrop={canDragCol ? (e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveColumn(dragged, col.key); setDraggingColKey(null); setDropTargetColKey(null); } : undefined}>
                     {col.key === "checkbox"
                       ? <input ref={selectAllRef} type="checkbox" className="form-check-input"
                           checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} />
@@ -2286,7 +2297,7 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
   onDelete: (g: BillGroup) => void;
   onBulkPrint: (groups: BillGroup[]) => void;
 }) {
-  const [cols, setCols] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
+  const [cols, setCols, moveColumn] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -2297,6 +2308,8 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
   const { ordered: rowOrdered, moveRow } = useRowOrder("bills-group", data, (g) => g.id ?? g.monthYear);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
 
   const visible = cols.filter((c) => c.visible);
   const ordered = [
@@ -2419,8 +2432,16 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
             <tr>
               {ordered.map((col) => {
                 const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                const canDragCol = col.key !== "checkbox";
                 return (
-                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass}`} style={{ width: widths[col.key] }}>
+                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass} ${draggingColKey === col.key ? "col-dragging" : ""} ${dropTargetColKey === col.key ? "col-drop-target" : ""}`}
+                    style={{ width: widths[col.key] }}
+                    draggable={canDragCol}
+                    onDragStart={canDragCol ? (e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", col.key); setDraggingColKey(col.key); } : undefined}
+                    onDragEnd={() => { setDraggingColKey(null); setDropTargetColKey(null); }}
+                    onDragOver={canDragCol ? (e) => { e.preventDefault(); if (draggingColKey && draggingColKey !== col.key) setDropTargetColKey(col.key); } : undefined}
+                    onDragLeave={() => setDropTargetColKey((k) => (k === col.key ? null : k))}
+                    onDrop={canDragCol ? (e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveColumn(dragged, col.key); setDraggingColKey(null); setDropTargetColKey(null); } : undefined}>
                     {col.key === "checkbox"
                       ? <input ref={selectAllRef} type="checkbox" className="form-check-input"
                           checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} />
@@ -3489,6 +3510,7 @@ export default function BillsPage() {
           {roomViewMode === "table" ? (
             <BillTableView
               data={filteredData}
+              isFiltered={!!search.trim() || statusFilter !== "all"}
               payments={payments}
               monthYear={editingMonthYear}
               allBills={bills}

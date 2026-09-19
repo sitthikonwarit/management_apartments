@@ -85,12 +85,22 @@ export function useColumnVisibility<T extends { key: string; visible: boolean; p
       if (!raw) return base;
       // ค่าเก่าก่อนรองรับปักหมุด เก็บเป็น boolean ล้วน (แค่ visible) — ยังอ่านเข้ากันได้อยู่ ไม่ต้อง migrate
       const stored: Record<string, boolean | StoredColState> = JSON.parse(raw);
-      return base.map((c) => {
+      const withOverrides = base.map((c) => {
         const s = stored[c.key];
         if (s === undefined) return c;
         if (typeof s === "boolean") return { ...c, visible: s };
         return { ...c, visible: s.visible ?? c.visible, pin: s.pin !== undefined ? s.pin : c.pin };
       });
+      // จัดลำดับคอลัมน์ตามลำดับ key ที่เคยบันทึกไว้ — persist() เขียน object ตามลำดับ array ตอนนั้นเสมอ พอ
+      // JSON.stringify/parse ของ object ที่ key เป็น string ธรรมดา (ไม่ใช่ตัวเลข) ลำดับ key จะถูกรักษาไว้เป๊ะ
+      // จึงยืมลำดับ key ของ map เดิมมาใช้เป็น "ลำดับคอลัมน์ที่ลากจัดไว้" ได้เลย ไม่ต้องเก็บ field แยกต่างหาก
+      // คอลัมน์ใหม่ที่ยังไม่เคยอยู่ใน map (เพิ่งเพิ่มเข้ามาทีหลังในโค้ด) ต่อท้ายตามลำดับเดิมของมันเอง
+      const storedKeys = Object.keys(stored);
+      const byKey = new Map(withOverrides.map((c) => [c.key, c]));
+      const result: T[] = [];
+      storedKeys.forEach((k) => { const c = byKey.get(k); if (c) { result.push(c); byKey.delete(k); } });
+      withOverrides.forEach((c) => { if (byKey.has(c.key)) result.push(c); });
+      return result;
     } catch {
       return base;
     }
@@ -114,14 +124,36 @@ export function useColumnVisibility<T extends { key: string; visible: boolean; p
     });
   }
 
-  return [cols, setCols] as const;
+  // ลากหัวคอลัมน์ (th) เพื่อสลับตำแหน่งคอลัมน์ — draggedKey ไปแทนที่ตำแหน่งของ targetKey ใน array ดิบ
+  // (ก่อนแบ่งกลุ่มซ้าย/ไม่ปักหมุด/ขวา) แต่ละหน้ายังคงแบ่งกลุ่มตาม pin เหมือนเดิมตอน render ดังนั้นลากข้ามกลุ่ม
+  // ปักหมุดจะแค่เปลี่ยนตำแหน่งภายในกลุ่มเดิมของมันเอง ไม่ได้ย้ายข้ามไปปักหมุดใหม่ให้ (ต้องกดปักหมุดแยกต่างหาก)
+  function moveColumn(draggedKey: string, targetKey: string) {
+    if (draggedKey === targetKey) return;
+    setCols((prev) => {
+      const from = prev.findIndex((c) => c.key === draggedKey);
+      const to = prev.findIndex((c) => c.key === targetKey);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  return [cols, setCols, moveColumn] as const;
 }
 
 // ── ลากสลับลำดับแถวในตาราง — จำลำดับที่ลากไว้ต่อผู้ใช้ต่อเครื่องเหมือนความกว้าง/การซ่อนคอลัมน์ (เก็บแค่
 // "ลำดับ id" ใน localStorage ไม่แก้ลำดับจริงในฐานข้อมูล จึงไม่กระทบคนอื่นที่ดูตารางเดียวกัน) รับรายการข้อมูล
 // ดิบ (ตามลำดับที่ backend ส่งมา) + ฟังก์ชันดึง key เฉพาะของแต่ละแถว แล้วคืนรายการที่เรียงตามลำดับที่บันทึกไว้
 // (รายการใหม่ที่ยังไม่เคยลากจัดลำดับ จะต่อท้ายตามลำดับเดิมของมันเสมอ ไม่ได้หายไปไหน)
-export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T) => string) {
+//
+// bypass (ค่าเริ่มต้น false): ตั้งเป็น true ตอนหน้ากำลังค้นหา/กรองข้อมูลอยู่ (เช่น พิมพ์ในช่องค้นหา หรือติ๊ก
+// ตัวกรองสถานะ) — ลำดับที่ลากไว้เอาไปใช้กับ "ทุกแถวแบบไม่กรอง" เท่านั้น ถ้าเอาไปใช้กับชุดข้อมูลที่ถูกกรอง
+// เหลือแค่บางส่วน ตำแหน่งจะสับสน (ตำแหน่งที่ 3 หมายถึงคนละแถวกันระหว่างตอนกรอง/ไม่กรอง) ผลคือดูเหมือน
+// "ตัวกรองใช้ไม่ได้" เพราะลำดับเพี้ยนไปจากที่ควรจะกรองได้ — ตอน bypass=true จะคืนรายการตามลำดับเดิมจาก
+// backend ตรงๆ (ไม่จัดเรียงตาม order ที่บันทึกไว้) ทันทีที่เลิกกรอง (bypass=false) จะกลับไปใช้ลำดับที่ลากไว้เหมือนเดิม
+export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T) => string, bypass = false) {
   const scope = useUserScope();
   const lsKey = `${ROW_ORDER_PREFIX}${storageKey}:${scope}`;
   const [order, setOrder] = useState<string[]>(() => {
@@ -134,7 +166,7 @@ export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T)
   });
 
   const ordered = useMemo(() => {
-    if (order.length === 0) return items;
+    if (bypass || order.length === 0) return items;
     const byKey = new Map(items.map((it) => [getKey(it), it]));
     const result: T[] = [];
     order.forEach((k) => {
@@ -144,7 +176,7 @@ export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T)
     // รายการที่เหลือ (ใหม่/ไม่เคยอยู่ในลำดับที่บันทึกไว้) ต่อท้ายตามลำดับเดิมของมันเอง
     items.forEach((it) => { if (byKey.has(getKey(it))) result.push(it); });
     return result;
-  }, [items, order]);
+  }, [items, order, bypass]);
 
   function persist(next: string[]) {
     setOrder(next);

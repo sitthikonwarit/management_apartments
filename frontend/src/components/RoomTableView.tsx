@@ -120,9 +120,10 @@ function statusClass(s: string) {
 
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function RoomTableView({
-  data, allRooms, towers, tenants, bookings = [], onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
+  data, isFiltered = false, allRooms, towers, tenants, bookings = [], onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
 }: {
   data: any[];
+  isFiltered?: boolean;
   allRooms: any[];
   towers: any[];
   tenants: any[];
@@ -135,7 +136,7 @@ export default function RoomTableView({
   onTenantsUpdate?: (updater: (prev: any[]) => any[]) => void;
 }) {
   const navigate = useNavigate();
-  const [cols, setCols] = useColumnVisibility("rooms", INITIAL_COLS);
+  const [cols, setCols, moveColumn] = useColumnVisibility("rooms", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
@@ -150,9 +151,11 @@ export default function RoomTableView({
     checkbox: 40, number: 100, tower: 110, floor: 80, status: 110, price: 120, dailyPrice: 110,
     meterElectric: 110, meterWater: 110, roomActive: 110, tenant: 160, detail: 200, tags: 160, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("rooms", data, (r: any) => String(r.id));
+  const { ordered: rowOrdered, moveRow } = useRowOrder("rooms", data, (r: any) => String(r.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!blockMsg) return;
@@ -469,8 +472,16 @@ export default function RoomTableView({
             <tr>
               {ordered.map((col) => {
                 const pinClass = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                const canDragCol = col.key !== "checkbox";
                 return (
-                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass}`} style={{ width: widths[col.key] }}>
+                  <th key={col.key} className={`${col.thClass ?? ""} ${pinClass} ${draggingColKey === col.key ? "col-dragging" : ""} ${dropTargetColKey === col.key ? "col-drop-target" : ""}`}
+                    style={{ width: widths[col.key] }}
+                    draggable={canDragCol}
+                    onDragStart={canDragCol ? (e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", col.key); setDraggingColKey(col.key); } : undefined}
+                    onDragEnd={() => { setDraggingColKey(null); setDropTargetColKey(null); }}
+                    onDragOver={canDragCol ? (e) => { e.preventDefault(); if (draggingColKey && draggingColKey !== col.key) setDropTargetColKey(col.key); } : undefined}
+                    onDragLeave={() => setDropTargetColKey((k) => (k === col.key ? null : k))}
+                    onDrop={canDragCol ? (e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveColumn(dragged, col.key); setDraggingColKey(null); setDropTargetColKey(null); } : undefined}>
                     {col.key === "checkbox"
                       ? <input ref={selectAllRef} type="checkbox" className="form-check-input"
                           checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} />

@@ -881,11 +881,11 @@ function VehicleDetailView({
 }
 
 // ── VehicleTableView ──────────────────────────────────────────────────────────
-function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdit, onDeleted }: {
-  vehicles: any[]; types: any[]; tenants: any[]; rooms: any[];
+function VehicleTableView({ vehicles, isFiltered = false, types, tenants, rooms, onViewDetail, onEdit, onDeleted }: {
+  vehicles: any[]; isFiltered?: boolean; types: any[]; tenants: any[]; rooms: any[];
   onViewDetail: (v: any) => void; onEdit: (v: any) => void; onDeleted: (ids: string[]) => void;
 }) {
-  const [cols, setCols] = useColumnVisibility("vehicles", VEHICLE_TABLE_COLS);
+  const [cols, setCols, moveColumn] = useColumnVisibility("vehicles", VEHICLE_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -895,9 +895,11 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
   const { widths, startResize } = useColumnWidths("vehicles", {
     checkbox: 40, type: 110, plate: 130, brand: 130, color: 90, owner: 150, room: 90, phone: 130, fee: 110, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("vehicles", vehicles, (v: any) => String(v.id));
+  const { ordered: rowOrdered, moveRow } = useRowOrder("vehicles", vehicles, (v: any) => String(v.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
 
   const allSelected  = vehicles.length > 0 && selectedRows.size === vehicles.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
@@ -1090,8 +1092,16 @@ function VehicleTableView({ vehicles, types, tenants, rooms, onViewDetail, onEdi
             <tr>
               {ordered.map((col) => {
                 const pc = col.pin === "left" ? "pinned pinned-left" : col.pin === "right" ? "pinned pinned-right" : "";
+                const canDragCol = col.key !== "checkbox";
                 return (
-                  <th key={col.key} className={`${col.thClass ?? ""} ${pc}`} style={{ width: widths[col.key] }}>
+                  <th key={col.key} className={`${col.thClass ?? ""} ${pc} ${draggingColKey === col.key ? "col-dragging" : ""} ${dropTargetColKey === col.key ? "col-drop-target" : ""}`}
+                    style={{ width: widths[col.key] }}
+                    draggable={canDragCol}
+                    onDragStart={canDragCol ? (e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", col.key); setDraggingColKey(col.key); } : undefined}
+                    onDragEnd={() => { setDraggingColKey(null); setDropTargetColKey(null); }}
+                    onDragOver={canDragCol ? (e) => { e.preventDefault(); if (draggingColKey && draggingColKey !== col.key) setDropTargetColKey(col.key); } : undefined}
+                    onDragLeave={() => setDropTargetColKey((k) => (k === col.key ? null : k))}
+                    onDrop={canDragCol ? (e) => { e.preventDefault(); const dragged = e.dataTransfer.getData("text/plain"); if (dragged) moveColumn(dragged, col.key); setDraggingColKey(null); setDropTargetColKey(null); } : undefined}>
                     {col.key === "checkbox"
                       ? <input ref={selectAllRef} type="checkbox" className="form-check-input"
                           checked={allSelected}
@@ -1482,6 +1492,7 @@ export default function VehiclesPage() {
       ) : view === "table" ? (
         <VehicleTableView
           vehicles={filtered}
+          isFiltered={!!search.trim() || !!typeFilter}
           types={types}
           tenants={tenants}
           rooms={rooms}
