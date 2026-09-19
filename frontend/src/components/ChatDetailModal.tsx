@@ -5,6 +5,8 @@ import { thaiDateTimeString } from "../utils/yearFormat";
 import { toastError, toastSuccess } from "../utils/toast";
 import { AVATAR_URL } from "./TenantTableView";
 import ImageLightbox from "./ImageLightbox";
+import PrivacyMask from "./PrivacyMask";
+import PrivacyAvatar from "./PrivacyAvatar";
 
 export type ChatDetailTab = "info" | "bills" | "images" | "files" | "search";
 
@@ -97,7 +99,7 @@ function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; 
   return (
     <div>
       <div className="d-flex flex-column align-items-center text-center mb-3">
-        <img
+        <PrivacyAvatar
           src={picture || AVATAR_URL} alt="" referrerPolicy="no-referrer"
           style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover" }}
           onError={(e) => { (e.target as HTMLImageElement).src = AVATAR_URL; }}
@@ -109,7 +111,7 @@ function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; 
       <div className="d-flex justify-content-between align-items-center py-2" style={{ borderTop: "1px solid var(--color-light)" }}>
         <div>
           <div className="text-muted" style={{ fontSize: 11 }}>LINE UID</div>
-          <div className="small text-truncate" style={{ maxWidth: 320 }}>{lineUserId}</div>
+          <div className="small text-truncate" style={{ maxWidth: 320 }}><PrivacyMask value={lineUserId} /></div>
         </div>
         <button type="button" className="btn btn-sm btn-outline-secondary" title="คัดลอก UID" onClick={copyUid}>
           <i className="fas fa-copy" />
@@ -124,7 +126,7 @@ function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; 
         <div className="py-2" style={{ borderTop: "1px solid var(--color-light)" }}>
           <div className="text-muted mb-1" style={{ fontSize: 11 }}>ผู้เช่า</div>
           <div className="small">{info.tenant.fullName || "-"}</div>
-          {info.tenant.tel && <div className="small text-muted">โทร {info.tenant.tel}</div>}
+          {info.tenant.tel && <div className="small text-muted">โทร <PrivacyMask value={info.tenant.tel} /></div>}
         </div>
       )}
 
