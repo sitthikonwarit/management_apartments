@@ -16,7 +16,7 @@ import {
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
   adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
-  reconcileOutstandingItems,
+  reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths } from "../utils/useColumnWidths";
@@ -69,7 +69,8 @@ function scheduledDateSafe(s?: string) {
 // ── พิมพ์บิลสำหรับห้องที่มีผู้ร่วมพักหลายคน: เอาแค่ใบหลัก / แยกใบตามคนหารราคา / เอาทั้งคู่ ──
 type BillSplitMode = "main" | "split" | "both";
 // จำนวนใบบิล (slip) ที่พิมพ์ต่อแผ่น A4 หนึ่งแผ่น — "auto" = ปล่อยขยายอัตโนมัติตามเนื้อหาเหมือนเดิม
-type BillSlipLayout = "auto" | "1" | "2" | "3" | "4";
+// "pretty" = ใบแบบสวยเต็มแผ่น 1 ใบ/หน้าเสมอ (BillSlipPretty) คนละแบบกับใบแนวยาว (BillSlip) ที่ใช้กับ auto/1-4
+type BillSlipLayout = "auto" | "1" | "2" | "3" | "4" | "pretty";
 const DEFAULT_SLIP_LINE_KEYS = new Set(["room", "water", "electric", "outstanding"]);
 type PrintEntry = {
   item: BillItem; monthYear: string;
@@ -1319,6 +1320,139 @@ function BillSlip({ item, monthYear, config, payerName, payerIndex, payerCount, 
   );
 }
 
+// จำนวนแถวขั้นต่ำในตารางของใบแบบสวย — เติมแถวว่างให้ครบถ้ารายการจริงน้อยกว่านี้ (ให้หน้าตาเหมือนแบบฟอร์ม
+// กระดาษพิมพ์ล่วงหน้าที่มีเส้นตารางครบ ไม่ใช่ตารางสั้นๆ ห้วนๆ) — ถ้ารายการจริงเกินก็แสดงตามจริง ไม่ตัดทิ้ง
+const PRETTY_SLIP_MIN_ROWS = 8;
+
+// ── บิลกระดาษแบบสวย 1 ใบเต็มแผ่น (A4 แนวตั้ง) — โลโก้ + ตารางรายการพร้อมเลขมิเตอร์ก่อน/หลัง + ยอดรวมเป็น
+// ตัวหนังสือ + ช่องเซ็นชื่อ + QR ชำระเงิน (ถ้าตั้งค่าไว้) ทางเลือกเพิ่มจากใบแนวยาวเดิม (BillSlip) สำหรับคนที่
+// อยากได้ใบที่ดูเป็นทางการ พิมพ์แจกทีละใบต่อห้อง (ไม่รองรับหลายใบ/แผ่นเหมือนโหมดอื่น เพราะเนื้อหาใหญ่เต็มหน้าอยู่แล้ว)
+function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerCount, payerTotal, lineKeys }: {
+  item: BillItem; monthYear: string; config: AppConfig;
+  payerName?: string; payerIndex?: number; payerCount?: number; payerTotal?: number;
+  lineKeys?: Set<string>;
+}) {
+  const isSplitCopy = payerTotal !== undefined;
+  const showWater = !lineKeys || lineKeys.has("water");
+  const showElectric = !lineKeys || lineKeys.has("electric");
+  const showRoom = !lineKeys || lineKeys.has("room");
+  const showOutstanding = !lineKeys || lineKeys.has("outstanding");
+
+  type PrettyRow = { name: string; prev?: number; curr?: number; unit?: number; rate?: number; price: number };
+  const waterElectricRows: PrettyRow[] = buildWaterElectricRows(item)
+    .filter((r) => (r.kind === "water" || r.kind === "waterFee" ? showWater : showElectric))
+    .map((r) => ({
+      name: r.label,
+      prev: r.kind === "electric" ? item.meterElectric.prev : r.kind === "water" ? item.meterWater.prev : undefined,
+      curr: r.kind === "electric" ? item.meterElectric.curr : r.kind === "water" ? item.meterWater.curr : undefined,
+      unit: r.unit,
+      rate: r.rate,
+      price: r.price,
+    }));
+  const rows: PrettyRow[] = [
+    ...(showRoom ? [{ name: "ค่าห้องพัก", price: item.priceRoom }] : []),
+    ...waterElectricRows,
+    ...item.billTagItems.map((t) => ({ name: t.name, price: t.price })),
+    ...item.billTenantTagItems.map((t) => ({ name: t.name, price: t.price })),
+    ...item.billVehicleItems.map((v) => ({ name: v.name, price: v.price })),
+    ...item.customItems.map((c) => ({ name: c.name, price: c.price })),
+    ...(showOutstanding ? [{ name: "ค้างชำระยกมา", price: item.outstandingAmount }] : []),
+    ...(item.fineAmount ? [{ name: item.overdueDays > 0 ? `ค่าปรับ (${item.overdueDays} วัน)` : "ค่าปรับล่าช้า", price: item.fineAmount }] : []),
+    ...item.discountItems.map((d) => ({ name: `ส่วนลด: ${d.name}`, price: -d.price })),
+  ];
+  const blankRows = Math.max(0, PRETTY_SLIP_MIN_ROWS - rows.length);
+  const total = isSplitCopy ? (payerTotal as number) : item.total;
+
+  return (
+    <div className="bill-slip-pretty">
+      <div className="bsp-header">
+        {config.appIdentity.logoUrl && <img className="bsp-logo" src={config.appIdentity.logoUrl} alt="" />}
+        <div className="bsp-org-name">{config.appIdentity.nameText || "-"}</div>
+        <div className="bsp-title">บิลชำระค่าเช่าห้องพัก</div>
+      </div>
+
+      <table className="bsp-meta">
+        <tbody>
+          <tr>
+            <td className="bsp-meta-label">รหัส</td>
+            <td>{item.roomNumber}</td>
+            <td className="bsp-meta-label">วันที่</td>
+            <td>{thaiDateOnlyString(new Date())}</td>
+          </tr>
+          <tr>
+            <td className="bsp-meta-label">ชื่อ</td>
+            <td>{isSplitCopy ? payerName : (item.tenantId ? `${item.tenantTitle} ${item.tenantName}` : item.tenantName)}</td>
+            <td className="bsp-meta-label">ห้องพัก</td>
+            <td>{item.roomNumber}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table className="bsp-table">
+        <thead>
+          <tr>
+            <th className="bsp-col-no">ลำดับ</th>
+            <th className="bsp-col-name">รายการ</th>
+            <th>เลขครั้งก่อน</th>
+            <th>เลขครั้งนี้</th>
+            <th>หน่วยที่ใช้</th>
+            <th>ราคา/หน่วย</th>
+            <th className="bsp-col-amt">จำนวนเงิน</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td className="bsp-col-no">{i + 1}</td>
+              <td className="bsp-col-name">{r.name}</td>
+              <td>{r.prev ?? ""}</td>
+              <td>{r.curr ?? ""}</td>
+              <td>{r.unit ?? ""}</td>
+              <td>{r.rate ? money(r.rate) : ""}</td>
+              <td className="bsp-col-amt">{r.price < 0 ? "-" : ""}{money(Math.abs(r.price))}</td>
+            </tr>
+          ))}
+          {Array.from({ length: blankRows }).map((_, i) => (
+            <tr key={`blank-${i}`}>
+              <td className="bsp-col-no">{rows.length + i + 1}</td>
+              <td className="bsp-col-name">&nbsp;</td>
+              <td /><td /><td /><td /><td className="bsp-col-amt" />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="bsp-note">
+        หมายเหตุ: {dueDateLabel(item.overdueConfig ?? config.overdue)}
+        {isSplitCopy && ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน`}
+      </div>
+
+      <table className="bsp-total">
+        <tbody>
+          <tr>
+            <td className="bsp-total-label">รวมเป็นเงิน</td>
+            <td className="bsp-total-text">({thaiBahtText(total)})</td>
+            <td className="bsp-total-amt">{money(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="bsp-footer">
+        <div className="bsp-footer-left">
+          {config.richMenu.contactPhone && <div>สามารถติดต่อสอบถามได้ที่เบอร์ {config.richMenu.contactPhone}</div>}
+          <div className="bsp-signature">ลายเซ็นผู้เช่า .......................................................</div>
+        </div>
+        {config.payment.qrImage && (
+          <div className="bsp-footer-qr">
+            <img src={config.payment.qrImage} alt="QR ชำระเงิน" />
+            <div>สแกนเพื่อชำระเงิน</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── ตัวเลือกห้อง/ตัวกรองก่อนพิมพ์บิล — ทรงเดียวกับหน้าจดมิเตอร์ ────────────────
 function billEntryKey(monthYear: string, roomId: string) { return `${monthYear}::${roomId}`; }
 
@@ -1447,10 +1581,10 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
             ))}
             <span style={{ width: 1, height: 16, background: "var(--color-light)", margin: "0 2px", flexShrink: 0 }} />
             <span style={{ fontSize: "0.72rem", color: "var(--color-dark-variant)", flexShrink: 0 }}><i className="fas fa-th-large me-1" />ต่อแผ่น A4:</span>
-            {(["auto", "1", "2", "3", "4"] as const).map((v) => (
+            {(["auto", "1", "2", "3", "4", "pretty"] as const).map((v) => (
               <button key={v} type="button" className={`pcp-chip${slipLayout === v ? " active" : ""}`} onClick={() => setSlipLayout(v)}
-                title={v === "auto" ? "ปล่อยขยายอัตโนมัติตามเนื้อหา (เดิม)" : `บังคับขนาดตายตัว ${v} ใบต่อแผ่น`}>
-                {v === "auto" ? "อัตโนมัติ" : `${v} ใบ`}
+                title={v === "auto" ? "ปล่อยขยายอัตโนมัติตามเนื้อหา (เดิม)" : v === "pretty" ? "ใบแบบสวยเต็มแผ่น 1 ใบต่อหน้า พร้อมตารางเลขมิเตอร์/ยอดเป็นตัวหนังสือ/QR ชำระเงิน" : `บังคับขนาดตายตัว ${v} ใบต่อแผ่น`}>
+                {v === "auto" ? "อัตโนมัติ" : v === "pretty" ? "1 ใบแบบสวย" : `${v} ใบ`}
               </button>
             ))}
           </div>
@@ -1685,9 +1819,11 @@ function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenan
   entries: PrintEntry[]; config: AppConfig; mode: "slip" | "record"; colKeys: Set<string>;
   lineKeys: Set<string>; layout: BillSlipLayout; tenants: any[];
 }) {
-  const perPage = layout === "auto" ? 0 : Number(layout);
+  const isPretty = layout === "pretty";
+  const perPage = layout === "auto" || isPretty ? 0 : Number(layout);
   const heightMm = perPage > 0 ? A4_PORTRAIT_USABLE_MM / perPage : undefined;
-  const pages = perPage > 0 ? chunkArray(entries, perPage) : [entries];
+  // โหมด "1 ใบแบบสวย" บังคับ 1 ใบ/หน้าเสมอ (เนื้อหาใหญ่เต็มหน้าอยู่แล้ว ไม่มีที่ว่างให้อีกใบมาแชร์หน้าเดียวกัน)
+  const pages = isPretty ? entries.map((e) => [e]) : perPage > 0 ? chunkArray(entries, perPage) : [entries];
   return (
     <div className="bill-print-only">
       <style>{`@media print { @page { size: A4 ${mode === "record" ? "landscape" : "portrait"}; margin: 12mm; } }`}</style>
@@ -1697,11 +1833,17 @@ function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenan
           // @page เพื่อให้ใบที่มีรายการเยอะ (แท็ก/รถ/ส่วนลด ฯลฯ) ขยายสูงขึ้นได้เองโดยไม่ถูกตัดขาดกลางใบ
           // โหมดตายตัว (1-4 ใบ/แผ่น): บังคับความสูงเท่ากันทุกใบ + ขึ้นหน้าใหม่ทุกๆ N ใบเสมอ
           <div key={pi} className="bill-print-page" style={pi > 0 ? { pageBreakBefore: "always" } : undefined}>
-            {pageEntries.map(({ item, monthYear, payerName, payerIndex, payerCount, payerTotal }) => (
-              <BillSlip key={`${item.roomId}-${payerIndex ?? "main"}`} item={item} monthYear={monthYear} config={config}
-                payerName={payerName} payerIndex={payerIndex} payerCount={payerCount} payerTotal={payerTotal}
-                lineKeys={lineKeys} heightMm={heightMm} />
-            ))}
+            {pageEntries.map(({ item, monthYear, payerName, payerIndex, payerCount, payerTotal }) =>
+              isPretty ? (
+                <BillSlipPretty key={`${item.roomId}-${payerIndex ?? "main"}`} item={item} monthYear={monthYear} config={config}
+                  payerName={payerName} payerIndex={payerIndex} payerCount={payerCount} payerTotal={payerTotal}
+                  lineKeys={lineKeys} />
+              ) : (
+                <BillSlip key={`${item.roomId}-${payerIndex ?? "main"}`} item={item} monthYear={monthYear} config={config}
+                  payerName={payerName} payerIndex={payerIndex} payerCount={payerCount} payerTotal={payerTotal}
+                  lineKeys={lineKeys} heightMm={heightMm} />
+              )
+            )}
           </div>
         ))
       ) : (

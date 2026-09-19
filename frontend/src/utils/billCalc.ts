@@ -798,3 +798,33 @@ export function syncTenantForItem(item: BillItem, ctx: GenCtx, monthYear: string
   recalcItem(item, ctx.config, defaults, monthYear, tenant);
   return item;
 }
+
+// ── แปลงจำนวนเงินเป็นตัวหนังสือไทย ("บาทถ้วน") — ใช้บนใบพิมพ์บิลแบบสวย (BillSlipPretty ใน BillsPage.tsx) ──
+const THAI_DIGITS = ["", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+const THAI_PLACES = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน", "ล้าน"];
+function thaiIntegerText(n: number): string {
+  if (n === 0) return "ศูนย์";
+  let result = "";
+  const numStr = String(n);
+  const len = numStr.length;
+  for (let i = 0; i < len; i++) {
+    const digit = Number(numStr[i]);
+    const placeFromRight = len - i - 1;
+    if (digit === 0) continue;
+    const place = placeFromRight % 6; // ทุก 6 หลักวนกลับมา "ล้าน" ใหม่ (ล้านล้าน ฯลฯ)
+    if (place === 0 && digit === 1 && len > 1) result += "เอ็ด";
+    else if (place === 1 && digit === 1) result += "สิบ";
+    else if (place === 1 && digit === 2) result += "ยี่สิบ";
+    else result += THAI_DIGITS[digit] + THAI_PLACES[place];
+    if (placeFromRight > 0 && placeFromRight % 6 === 0) result += "ล้าน";
+  }
+  return result;
+}
+export function thaiBahtText(amount: number): string {
+  const n = Math.max(0, Number(amount) || 0);
+  const baht = Math.floor(n);
+  const satang = Math.round((n - baht) * 100);
+  const bahtText = thaiIntegerText(baht) + "บาท";
+  if (satang === 0) return bahtText + "ถ้วน";
+  return bahtText + thaiIntegerText(satang) + "สตางค์";
+}
