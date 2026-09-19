@@ -1976,7 +1976,7 @@ function BillPinMenuPopup({ menu, cols, onPin, onClose }: { menu: BillPinMenu; c
   );
 }
 
-function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
+function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onOpenPayment, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
   data: { item: BillItem; idx: number }[];
   payments: any[];
   monthYear: string;
@@ -1984,6 +1984,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   onEdit: (idx: number) => void;
   onPrint: (item: BillItem) => void;
   onToggleStatus: (idx: number) => void;
+  onOpenPayment: (idx: number) => void;
   onBulkPrint: (items: BillItem[]) => void;
   lineEnabled: boolean;
   onSendLine: (idx: number) => void;
@@ -1994,7 +1995,6 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   const [cols, setCols] = useColumnVisibility("bills-room", BILL_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [pinMenu, setPinMenu] = useState<BillPinMenu | null>(null);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
@@ -2149,15 +2149,15 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
       }
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
-        const slipUrl = getLatestSlipUrl(payments, item.roomId, monthYear);
         return (
           <div className="btn-group" role="group">
-            {slipUrl && (
-              <button type="button" className="btn btn-sm btn-outline-primary" title="ดูสลิป"
-                onClick={(e) => { e.stopPropagation(); setLightboxSrc(slipUrl); }}>
-                <i className="fas fa-receipt" />
-              </button>
-            )}
+            {/* เดิมเป็นปุ่ม "ดูสลิป" (เปิด lightbox รูปสลิปล่าสุด เฉพาะบิลที่มีสลิปแนบ) — เปลี่ยนเป็นปุ่มลูกตา
+                เปิดป็อปอัพ "บันทึกการชำระเงิน" (PaymentModal) แทน โชว์ทุกบิลเสมอ ไม่ต้องรอมีสลิปก่อน ในนั้น
+                มีทั้งประวัติการชำระ (ดูสลิปได้เหมือนเดิม) + ปุ่มยกเลิกรายการชำระทีละรายการอยู่แล้ว */}
+            <button type="button" className="btn btn-sm btn-outline-primary" title="บันทึกการชำระเงิน"
+              onClick={(e) => { e.stopPropagation(); onOpenPayment(idx); }}>
+              <i className="fas fa-eye" />
+            </button>
             {lineEnabled && (
               <button type="button" className="btn btn-sm btn-outline-success" disabled={sendingLineIdx === idx}
                 title={item.sendLogs?.[0] ? sendLogSummary(item.sendLogs[0]) : "ส่งบิลทาง LINE"}
@@ -2257,13 +2257,6 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
       </div>
 
       {pinMenu && <BillPinMenuPopup menu={pinMenu} cols={cols} onPin={handlePin} onClose={() => setPinMenu(null)} />}
-
-      {lightboxSrc && (
-        <div className="lightbox-overlay" onClick={() => setLightboxSrc(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxSrc(null)}><i className="fas fa-times" /></button>
-          <img className="lightbox-img" src={lightboxSrc} alt="สลิป" onClick={(e) => e.stopPropagation()} />
-        </div>
-      )}
     </div>
   );
 }
@@ -3475,6 +3468,7 @@ export default function BillsPage() {
               onToggleStatus={(idx) => billData[idx].status === "paid"
                 ? updateItem(idx, (d) => { d.status = "unpaid"; })
                 : openPaymentModal(idx)}
+              onOpenPayment={openPaymentModal}
               onBulkPrint={(items) => openPrintConfig(
                 billData.map((it) => ({ item: it, monthYear: editingMonthYear })),
                 new Set(items.map((it) => billEntryKey(editingMonthYear, it.roomId))),
