@@ -771,8 +771,13 @@ main { padding-top: 1.4rem; min-width: 0; }
 .table-hover tbody tr:hover { background-color: rgba(108,155,207,0.07) !important; }
 
 /* ตารางที่ปรับความกว้างคอลัมน์ได้ — ต้อง table-layout: fixed ไม่งั้นความกว้างที่ลากปรับจะไม่ยึดตาม
-   (auto layout จะขยายคอลัมน์ตามเนื้อหาเสมอ ไม่ว่าจะตั้ง width ไว้เท่าไหร่ก็ตาม) */
-.table-resizable { table-layout: fixed; }
+   (auto layout จะขยายคอลัมน์ตามเนื้อหาเสมอ ไม่ว่าจะตั้ง width ไว้เท่าไหร่ก็ตาม)
+   ต้อง width: auto ทับ .table-mainstyle (width: 100%) ด้วย — ไม่งั้น table-layout:fixed จะเอาผลรวม
+   ความกว้างคอลัมน์ทั้งหมดมา "ยืด/บีบ" ตามสัดส่วนให้เท่ากับ 100% ของกล่องเสมอ (ค่าที่ set ไว้จาก state จะไม่
+   ตรงกับที่ render จริง) ทำให้ตอนปล่อยเมาส์หลังลาก คอลัมน์ที่ได้ "ดึงกลับ" ไม่ตรงกับตำแหน่งเส้นไกด์ที่ลากไว้
+   (ดู .col-resize-guide/startResize ใน useColumnWidths.ts) — width: auto ให้ตารางกว้างเท่าผลรวมคอลัมน์จริง
+   เป๊ะๆ เสมอ ถ้าน้อยกว่ากล่อง minWidth ที่ตั้งไว้ต่อตารางจะเป็นตัวกันไม่ให้แคบเกินไปแทน */
+.table-resizable { table-layout: fixed; width: auto; }
 .table-resizable th, .table-resizable td { overflow: hidden; text-overflow: ellipsis; }
 .col-resize-handle {
   position: absolute; top: 0; right: 0; width: 6px; height: 100%;
