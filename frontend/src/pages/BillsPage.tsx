@@ -2122,13 +2122,21 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
           ? reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems)
           : { settledAmount: 0 };
         const cleared = item.status === "paid" || settledAmount >= item.outstandingAmount - 0.005;
-        // รายชื่อเดือนที่ยอดค้างก้อนนี้รวมมาจาก (outstandingItems แต่ละรายการมี monthYear ของบิลต้นทาง)
-        const months = item.outstandingItems.map((o) => monthYearLabel(o.monthYear)).filter(Boolean);
+        const chipColor = cleared ? "#198754" : "#dc3545";
+        // แสดงเป็น chip แยกต่อเดือนที่มายอดค้าง (ทรงเดียวกับ Tag ห้อง/Tag ผู้เช่า/ส่วนลด) แทนตัวเลขก้อนเดียว
+        // + รายชื่อเดือนแบบ text — ข้อมูลเก่าก่อนมีระบบ outstandingItems (breakdown รายเดือน) ไม่มี list นี้
+        // เลย ตกกลับไปโชว์ chip เดียวไม่ระบุเดือน กันพังกับบิลเก่า
+        const chips = item.outstandingItems.length > 0
+          ? item.outstandingItems.map((o) => ({ label: monthYearLabel(o.monthYear), amount: o.amount }))
+          : [{ label: "ยอดยกมา", amount: item.outstandingAmount }];
         return (
-          <>
-            <span className={cleared ? "text-success" : "text-danger"}>{money(item.outstandingAmount)}</span>
-            {months.length > 0 && <div className="text-muted" style={{ fontSize: 11 }}>{months.join(", ")}</div>}
-          </>
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            {chips.map((c, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": chipColor } as React.CSSProperties}>
+                <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{c.label} ({money(c.amount)})
+              </span>
+            ))}
+          </div>
         );
       }
       case "ownMonth": return money(Math.max(0, item.total - (item.outstandingAmount || 0)));
