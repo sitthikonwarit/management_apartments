@@ -8,6 +8,8 @@ import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import TenantTableView from "../components/TenantTableView";
 import EmptyState from "../components/EmptyState";
+import ContractStatusBadge from "../components/ContractStatusBadge";
+import { getContractStatus, CONTRACT_WARNING_DAYS } from "../utils/tenantContract";
 import TenantFormView from "../components/TenantFormView";
 import TenantEditView from "../components/TenantEditView";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
@@ -1737,9 +1739,23 @@ export default function TenantsPage() {
       case "checkInDate_asc": list = [...list].sort((a, b) => (a.checkInDate || "") > (b.checkInDate || "") ? 1 : -1); break;
       case "name_asc": list = [...list].sort((a, b) => `${a.firstName}${a.lastName}`.localeCompare(`${b.firstName}${b.lastName}`, "th")); break;
       case "name_desc": list = [...list].sort((a, b) => `${b.firstName}${b.lastName}`.localeCompare(`${a.firstName}${a.lastName}`, "th")); break;
+      // ไม่มีวันหมดสัญญาเลย = ไม่รีบ ต้องอยู่ท้ายสุดเสมอ ไม่ใช่ปนอยู่กลางๆ (ค่าว่างเทียบสตริงจะโผล่มาก่อนวันที่จริง)
+      case "contractEndDate_asc":
+        list = [...list].sort((a, b) => {
+          if (!a.contractEndDate && !b.contractEndDate) return 0;
+          if (!a.contractEndDate) return 1;
+          if (!b.contractEndDate) return -1;
+          return a.contractEndDate > b.contractEndDate ? 1 : -1;
+        });
+        break;
     }
     return list;
   }, [tenants, rooms, search, sort, towerFilter]);
+
+  // นับจำนวนคนที่ใกล้หมดสัญญา/หมดสัญญาไปแล้วในผลลัพธ์ที่กรองอยู่ตอนนี้ — โชว์เป็นสรุปสั้นๆ เหนือรายชื่อ ให้เห็น
+  // ภาพรวมได้ทันทีโดยไม่ต้องไล่สโครลหาทีละคน (ดู ContractStatusBadge ที่ badge ต่อรายการด้านล่าง)
+  const contractSoonCount = useMemo(() => filtered.filter((t) => getContractStatus(t.contractEndDate)?.kind === "soon").length, [filtered]);
+  const contractExpiredCount = useMemo(() => filtered.filter((t) => getContractStatus(t.contractEndDate)?.kind === "expired").length, [filtered]);
 
   function downloadTenantCsvTemplate() {
     const lines: string[] = [
@@ -1982,10 +1998,17 @@ export default function TenantsPage() {
         <div className="col-12 col-md-auto">
           <CustomSelect2
             inputId="sortTenant"
-            value={{ value: sort, label: { checkInDate_desc: "เข้าพักล่าสุดก่อน", checkInDate_asc: "เข้าพักเก่าสุดก่อน", name_asc: "ชื่อ (ก-ฮ)", name_desc: "ชื่อ (ฮ-ก)" }[sort] }}
+            value={{
+              value: sort,
+              label: {
+                checkInDate_desc: "เข้าพักล่าสุดก่อน", checkInDate_asc: "เข้าพักเก่าสุดก่อน",
+                name_asc: "ชื่อ (ก-ฮ)", name_desc: "ชื่อ (ฮ-ก)", contractEndDate_asc: "ใกล้หมดสัญญาก่อน",
+              }[sort],
+            }}
             options={[
               { value: "checkInDate_desc", label: "เข้าพักล่าสุดก่อน" },
               { value: "checkInDate_asc", label: "เข้าพักเก่าสุดก่อน" },
+              { value: "contractEndDate_asc", label: "ใกล้หมดสัญญาก่อน" },
               { value: "name_asc", label: "ชื่อ (ก-ฮ)" },
               { value: "name_desc", label: "ชื่อ (ฮ-ก)" },
             ]}
@@ -2008,7 +2031,17 @@ export default function TenantsPage() {
         </div>
       </div>
 
-      <div className="text-muted mb-2" style={{ fontSize: "0.85rem" }}>ทั้งหมด {filtered.length} รายการ</div>
+      <div className="d-flex align-items-center flex-wrap gap-3 mb-2" style={{ fontSize: "0.85rem" }}>
+        <span className="text-muted">ทั้งหมด {filtered.length} รายการ</span>
+        {contractExpiredCount > 0 && (
+          <span className="text-danger fw-bold"><i className="fas fa-circle-exclamation me-1" />หมดสัญญาแล้ว {contractExpiredCount} คน</span>
+        )}
+        {contractSoonCount > 0 && (
+          <span className="fw-bold" style={{ color: "#b8860b" }}>
+            <i className="fas fa-clock me-1" />ใกล้หมดสัญญา {contractSoonCount} คน (ภายใน {CONTRACT_WARNING_DAYS} วัน)
+          </span>
+        )}
+      </div>
 
       {loading ? (
         <div className="text-center p-5"><div className="spinner-border" style={{ color: "var(--color-primary)" }} /></div>
@@ -2065,6 +2098,7 @@ export default function TenantsPage() {
                         <small className="text-muted">ห้อง {getTenantRoomsLabel(rooms, t) || "-"}</small>
                       </div>
                     </div>
+                    <ContractStatusBadge contractEndDate={t.contractEndDate} className="d-inline-block mt-2" />
                     <hr />
                     <small><i className="fas fa-phone me-1 text-muted" />{t.tel}</small>
                   </div>
@@ -2075,7 +2109,10 @@ export default function TenantsPage() {
                       onError={(e) => { (e.target as HTMLImageElement).src = AVATAR; }}
                       alt={t.firstName} />
                     <div className="flex-grow-1">
-                      <strong>{tenantDisplayName(t)}</strong>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <strong>{tenantDisplayName(t)}</strong>
+                        <ContractStatusBadge contractEndDate={t.contractEndDate} />
+                      </div>
                       <div className="d-flex gap-3 mt-1">
                         <small><i className="fas fa-door-open me-1 text-muted" />ห้อง {getTenantRoomsLabel(rooms, t) || "-"}</small>
                         <small><i className="fas fa-phone me-1 text-muted" />{t.tel}</small>

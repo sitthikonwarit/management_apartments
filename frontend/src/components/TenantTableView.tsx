@@ -3,6 +3,7 @@ import Select, { components, StylesConfig } from "react-select";
 import { formatCheckInDate } from "../utils/yearFormat";
 import ColResizeHandle from "./ColResizeHandle";
 import EmptyState from "./EmptyState";
+import ContractStatusBadge from "./ContractStatusBadge";
 import { useColumnWidths } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
 
@@ -62,6 +63,7 @@ const INITIAL_COLS: ColDef[] = [
   { key: "zipcode",     header: "รหัสไปรษณีย์",         visible: false, pinnable: true,  pin: false },
   { key: "address",     header: "ลายละเอียดเพิ่มเติม",   visible: false, pinnable: true,  pin: false },
   { key: "checkInDate", header: "วันที่ลงทะเบียน",       visible: true,  pinnable: true,  pin: false },
+  { key: "contractEndDate", header: "หมดอายุสัญญา",      visible: true,  pinnable: true,  pin: false },
   { key: "pdf",         header: "ไฟล์เอกสาร",           visible: true,  pinnable: true,  pin: false,  thClass: "text-center", tdClass: "text-center" },
   { key: "actions",     header: "จัดการ",               visible: true,  pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
@@ -377,6 +379,13 @@ export default function TenantTableView({
       case "zipcode":     return tenant.zipcode || "-";
       case "address":     return tenant.address || "-";
       case "checkInDate": return formatCheckInDate(tenant.checkInDate);
+      case "contractEndDate":
+        return tenant.contractEndDate ? (
+          <div className="d-flex flex-column gap-1">
+            <span>{formatCheckInDate(tenant.contractEndDate)}</span>
+            <ContractStatusBadge contractEndDate={tenant.contractEndDate} />
+          </div>
+        ) : <span className="text-muted">-</span>;
       case "pdf":
         if (!pdfs.length) return <span className="text-muted">-</span>;
         if (pdfs.length === 1)
