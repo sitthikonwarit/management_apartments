@@ -7,6 +7,7 @@ import { useAppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
+import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import EmptyState from "../components/EmptyState";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
@@ -24,7 +25,6 @@ interface ColDef {
   key: string; header: string; visible: boolean;
   pinnable: boolean; pin: PinDir; thClass?: string; tdClass?: string;
 }
-interface PinMenu { colKey: string; x: number; y: number }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const THAI_MONTHS = [
@@ -394,7 +394,7 @@ function ImportModal({ file, rooms, allRecords, onClose, onImport }: {
 // ── Column-pin hook ───────────────────────────────────────────────────────────
 function usePinTable(initial: ColDef[], storageKey: string, widthDefaults: Record<string, number>) {
   const [cols, setCols] = useColumnVisibility(storageKey, initial);
-  const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const { widths, startResize } = useColumnWidths(storageKey, widthDefaults);
 
@@ -440,28 +440,7 @@ function usePinTable(initial: ColDef[], storageKey: string, widthDefaults: Recor
   return { tableRef, cols, ordered, pinMenu, setPinMenu, openMenu, pin, widths, startResize };
 }
 
-// ── PinMenuPopup ──────────────────────────────────────────────────────────────
-function PinMenuPopup({ menu, cols, onPin, onClose }: {
-  menu: PinMenu; cols: ColDef[];
-  onPin: (k: string, d: PinDir) => void; onClose: () => void;
-}) {
-  const col = cols.find((c) => c.key === menu.colKey);
-  const cur = col?.pin ?? false;
-  useEffect(() => {
-    const close = () => onClose();
-    setTimeout(() => window.addEventListener("click", close), 0);
-    return () => window.removeEventListener("click", close);
-  }, []);
-  return (
-    <ul className="pinning-menu" style={{ position: "fixed", top: menu.y, left: menu.x }}
-      onClick={(e) => e.stopPropagation()}>
-      {cur && <li className="disabled"><i className="fas fa-thumbtack" />{cur === "left" ? "ปักหมุดซ้าย (ใช้อยู่)" : "ปักหมุดขวา (ใช้อยู่)"}</li>}
-      {cur !== "left"  && <li onClick={() => { onPin(menu.colKey, "left");  onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-primary)" }} />ปักหมุดซ้าย</li>}
-      {cur !== "right" && <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-danger)" }} />ปักหมุดขวา</li>}
-      {cur && <li onClick={() => { onPin(menu.colKey, false); onClose(); }}><i className="fas fa-times" />เลิกปักหมุด</li>}
-    </ul>
-  );
-}
+// ── PinMenuPopup (shared component — ดู components/PinMenuPopup.tsx) ──────────
 
 // ── UnitCell ──────────────────────────────────────────────────────────────────
 function UnitCell({ units, prevUnits }: { units: number | null; prevUnits: number | null }) {
@@ -1482,7 +1461,7 @@ function MeterTableView({ meters, filledCount, roomCount, onView, onEdit, onDele
   const [selectedRows, setSelectedRows]   = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting,      setDeleting]      = useState(false);
-  const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const tableRef     = useRef<HTMLTableElement>(null);
   const { widths, startResize } = useColumnWidths("meters-list", {

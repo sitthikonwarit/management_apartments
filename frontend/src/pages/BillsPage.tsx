@@ -10,6 +10,7 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import ThaiDatePicker from "../components/ThaiDatePicker";
 import EmptyState from "../components/EmptyState";
+import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   monthYearLabel, myScore, prevMY,
@@ -1957,24 +1958,7 @@ function BillColVisibilityDropdown({ cols, onChange }: { cols: BillColDef[]; onC
   );
 }
 
-interface BillPinMenu { colKey: string; x: number; y: number }
-function BillPinMenuPopup({ menu, cols, onPin, onClose }: { menu: BillPinMenu; cols: BillColDef[]; onPin: (k: string, d: PinDir) => void; onClose: () => void }) {
-  const col = cols.find((c) => c.key === menu.colKey);
-  const cur = col?.pin ?? false;
-  useEffect(() => {
-    const close = () => onClose();
-    setTimeout(() => window.addEventListener("click", close), 0);
-    return () => window.removeEventListener("click", close);
-  }, []);
-  return (
-    <ul className="pinning-menu" style={{ position: "fixed", top: menu.y, left: menu.x }} onClick={(e) => e.stopPropagation()}>
-      {cur && <li className="disabled"><i className="fas fa-thumbtack" />{cur === "left" ? "ปักหมุดซ้าย (ใช้อยู่)" : "ปักหมุดขวา (ใช้อยู่)"}</li>}
-      {cur !== "left"  && <li onClick={() => { onPin(menu.colKey, "left");  onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-primary)" }} />ปักหมุดซ้าย</li>}
-      {cur !== "right" && <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-danger)" }} />ปักหมุดขวา</li>}
-      {cur && <li onClick={() => { onPin(menu.colKey, false); onClose(); }}><i className="fas fa-times" />เลิกปักหมุด</li>}
-    </ul>
-  );
-}
+// (BillPinMenuPopup ถูกย้ายไปใช้ shared component แล้ว — ดู components/PinMenuPopup.tsx)
 
 function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, onToggleStatus, onOpenPayment, onBulkPrint, lineEnabled, onSendLine, sendingLineIdx, onSendLineBulk, bulkSendingLine }: {
   data: { item: BillItem; idx: number }[];
@@ -1994,7 +1978,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
 }) {
   const [cols, setCols] = useColumnVisibility("bills-room", BILL_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [pinMenu, setPinMenu] = useState<BillPinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
@@ -2259,7 +2243,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
         </table>
       </div>
 
-      {pinMenu && <BillPinMenuPopup menu={pinMenu} cols={cols} onPin={handlePin} onClose={() => setPinMenu(null)} />}
+      {pinMenu && <PinMenuPopup menu={pinMenu} cols={cols} onPin={handlePin} onClose={() => setPinMenu(null)} />}
     </div>
   );
 }
@@ -2285,7 +2269,7 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
 }) {
   const [cols, setCols] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [pinMenu, setPinMenu] = useState<BillPinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-group", {
@@ -2433,7 +2417,7 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
         </table>
       </div>
 
-      {pinMenu && <BillPinMenuPopup menu={pinMenu} cols={cols} onPin={handlePin} onClose={() => setPinMenu(null)} />}
+      {pinMenu && <PinMenuPopup menu={pinMenu} cols={cols} onPin={handlePin} onClose={() => setPinMenu(null)} />}
     </div>
   );
 }

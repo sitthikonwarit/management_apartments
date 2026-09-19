@@ -2,6 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import Select, { components, StylesConfig } from "react-select";
 import { formatCheckInDate } from "../utils/yearFormat";
 import ColResizeHandle from "./ColResizeHandle";
+import PinMenuPopup, { type PinMenuState } from "./PinMenuPopup";
 import EmptyState from "./EmptyState";
 import ContractStatusBadge from "./ContractStatusBadge";
 import PrivacyMask from "./PrivacyMask";
@@ -173,57 +174,6 @@ function ColVisibilityDropdown({
   );
 }
 
-// ─── Pin context menu ─────────────────────────────────────────────────────────
-interface PinMenu { colKey: string; x: number; y: number }
-
-function PinMenuPopup({
-  menu, cols, onPin, onClose,
-}: {
-  menu: PinMenu;
-  cols: ColDef[];
-  onPin: (key: string, dir: PinDir) => void;
-  onClose: () => void;
-}) {
-  const col = cols.find((c) => c.key === menu.colKey);
-  const cur = col?.pin ?? false;
-
-  useEffect(() => {
-    const close = () => onClose();
-    setTimeout(() => window.addEventListener("click", close), 0);
-    return () => window.removeEventListener("click", close);
-  }, []);
-
-  return (
-    <ul
-      className="pinning-menu"
-      style={{ position: "fixed", top: menu.y, left: menu.x }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {cur && (
-        <li className="disabled">
-          <i className="fas fa-thumbtack" />
-          {cur === "left" ? "ปักหมุดซ้าย (ใช้อยู่)" : "ปักหมุดขวา (ใช้อยู่)"}
-        </li>
-      )}
-      {cur !== "left" && (
-        <li onClick={() => { onPin(menu.colKey, "left"); onClose(); }}>
-          <i className="fas fa-thumbtack" style={{ color: "var(--color-primary)" }} />ปักหมุดซ้าย
-        </li>
-      )}
-      {cur !== "right" && (
-        <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}>
-          <i className="fas fa-thumbtack" style={{ color: "var(--color-danger)" }} />ปักหมุดขวา
-        </li>
-      )}
-      {cur && (
-        <li onClick={() => { onPin(menu.colKey, false); onClose(); }}>
-          <i className="fas fa-times" />เลิกปักหมุด
-        </li>
-      )}
-    </ul>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TenantTableView({
   data, rooms, onViewDetail, onDelete, onDeleteBulk,
@@ -237,7 +187,7 @@ export default function TenantTableView({
   const { enabled: privacyModeEnabled } = usePrivacyMode();
   const [cols, setCols] = useColumnVisibility("tenants", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);

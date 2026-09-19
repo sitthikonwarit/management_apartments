@@ -2,6 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Select, { components, StylesConfig } from "react-select";
 import ColResizeHandle from "./ColResizeHandle";
+import PinMenuPopup, { type PinMenuState } from "./PinMenuPopup";
 import EmptyState from "./EmptyState";
 import { useColumnWidths, useColumnVisibility } from "../utils/useColumnWidths";
 import { tenantDisplayName } from "../utils/tenantName";
@@ -109,26 +110,6 @@ function ColVisibilityDropdown({ cols, onChange }: { cols: ColDef[]; onChange: (
   );
 }
 
-/* ── Pin context menu ─────────────────────────────────────────────────────── */
-interface PinMenu { colKey: string; x: number; y: number }
-function PinMenuPopup({ menu, cols, onPin, onClose }: { menu: PinMenu; cols: ColDef[]; onPin: (k: string, d: PinDir) => void; onClose: () => void }) {
-  const col = cols.find((c) => c.key === menu.colKey);
-  const cur = col?.pin ?? false;
-  useEffect(() => {
-    const close = () => onClose();
-    setTimeout(() => window.addEventListener("click", close), 0);
-    return () => window.removeEventListener("click", close);
-  }, []);
-  return (
-    <ul className="pinning-menu" style={{ position: "fixed", top: menu.y, left: menu.x }} onClick={(e) => e.stopPropagation()}>
-      {cur && <li className="disabled"><i className="fas fa-thumbtack" />{cur === "left" ? "ปักหมุดซ้าย (ใช้อยู่)" : "ปักหมุดขวา (ใช้อยู่)"}</li>}
-      {cur !== "left"  && <li onClick={() => { onPin(menu.colKey, "left");  onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-primary)" }} />ปักหมุดซ้าย</li>}
-      {cur !== "right" && <li onClick={() => { onPin(menu.colKey, "right"); onClose(); }}><i className="fas fa-thumbtack" style={{ color: "var(--color-danger)" }} />ปักหมุดขวา</li>}
-      {cur && <li onClick={() => { onPin(menu.colKey, false); onClose(); }}><i className="fas fa-times" />เลิกปักหมุด</li>}
-    </ul>
-  );
-}
-
 /* ── Status helper ────────────────────────────────────────────────────────── */
 function statusClass(s: string) {
   if (s === "ว่าง") return "status-available";
@@ -156,7 +137,7 @@ export default function RoomTableView({
   const navigate = useNavigate();
   const [cols, setCols] = useColumnVisibility("rooms", INITIAL_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [pinMenu, setPinMenu] = useState<PinMenu | null>(null);
+  const [pinMenu, setPinMenu] = useState<PinMenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [resolveMode, setResolveMode] = useState<"remove" | "move" | null>(null);
