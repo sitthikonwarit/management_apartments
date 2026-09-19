@@ -1903,6 +1903,7 @@ export default function RoomsPage() {
         <RoomTableView
           data={filtered}
           isFiltered={!!search.trim() || !!towerFilter || !!statusFilter}
+          sortKey={sort}
           allRooms={rooms}
           towers={towers}
           tenants={tenants}

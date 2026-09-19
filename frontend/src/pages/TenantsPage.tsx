@@ -2060,6 +2060,7 @@ export default function TenantsPage() {
         <TenantTableView
           data={filtered}
           isFiltered={!!search.trim() || !!towerFilter}
+          sortKey={sort}
           rooms={rooms}
           onViewDetail={goToDetail}
           onDelete={async (tenant) => {

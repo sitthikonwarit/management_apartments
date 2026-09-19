@@ -176,12 +176,15 @@ function ColVisibilityDropdown({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TenantTableView({
-  data, isFiltered = false, rooms, onViewDetail, onDelete, onDeleteBulk,
+  data, isFiltered = false, sortKey, rooms, onViewDetail, onDelete, onDeleteBulk,
 }: {
   data: any[];
   // true ตอนหน้ากำลังค้นหา/กรองอยู่ (ดู comment ที่ useRowOrder ใน useColumnWidths.ts) — ลำดับที่ลากจัดไว้
   // จะไม่ถูกใช้ตอนนี้ กันสับสนกับตัวกรอง กลับไปใช้ลำดับที่ลากไว้ทันทีที่เลิกกรอง
   isFiltered?: boolean;
+  // ตัวเลือกการเรียงลำดับที่เลือกอยู่ในหน้า — ส่งมาแค่ให้รู้ว่า "เปลี่ยน" เมื่อไหร่ เพื่อล้างลำดับที่เคยลาก
+  // จัดไว้ทิ้ง ไม่งั้นลำดับที่ลากไว้จะบังการเรียงลำดับใหม่ทุกครั้ง
+  sortKey?: string;
   rooms: any[];
   onViewDetail: (t: any) => void;
   onDelete: (tenant: any) => Promise<void>;
@@ -200,11 +203,18 @@ export default function TenantTableView({
     lineConnect: 110, roomNumber: 90, houseNo: 110, soi: 110, road: 110, province: 110,
     amphoe: 110, tambon: 110, zipcode: 110, address: 200, checkInDate: 150, pdf: 110, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("tenants", data, (t: any) => String(t.id), isFiltered);
+  const { ordered: rowOrdered, moveRow, resetRowOrder } = useRowOrder("tenants", data, (t: any) => String(t.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
   const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const prevSortKeyRef = useRef(sortKey);
+  useEffect(() => {
+    if (prevSortKeyRef.current !== sortKey) {
+      resetRowOrder();
+      prevSortKeyRef.current = sortKey;
+    }
+  }, [sortKey]);
 
   async function doDelete() {
     if (!confirmDelete) return;

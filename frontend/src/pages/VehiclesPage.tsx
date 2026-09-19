@@ -881,8 +881,8 @@ function VehicleDetailView({
 }
 
 // ── VehicleTableView ──────────────────────────────────────────────────────────
-function VehicleTableView({ vehicles, isFiltered = false, types, tenants, rooms, onViewDetail, onEdit, onDeleted }: {
-  vehicles: any[]; isFiltered?: boolean; types: any[]; tenants: any[]; rooms: any[];
+function VehicleTableView({ vehicles, isFiltered = false, sortKey, types, tenants, rooms, onViewDetail, onEdit, onDeleted }: {
+  vehicles: any[]; isFiltered?: boolean; sortKey?: string; types: any[]; tenants: any[]; rooms: any[];
   onViewDetail: (v: any) => void; onEdit: (v: any) => void; onDeleted: (ids: string[]) => void;
 }) {
   const [cols, setCols, moveColumn] = useColumnVisibility("vehicles", VEHICLE_TABLE_COLS);
@@ -895,9 +895,16 @@ function VehicleTableView({ vehicles, isFiltered = false, types, tenants, rooms,
   const { widths, startResize } = useColumnWidths("vehicles", {
     checkbox: 40, type: 110, plate: 130, brand: 130, color: 90, owner: 150, room: 90, phone: 130, fee: 110, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("vehicles", vehicles, (v: any) => String(v.id), isFiltered);
+  const { ordered: rowOrdered, moveRow, resetRowOrder } = useRowOrder("vehicles", vehicles, (v: any) => String(v.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const prevSortKeyRef = useRef(sortKey);
+  useEffect(() => {
+    if (prevSortKeyRef.current !== sortKey) {
+      resetRowOrder();
+      prevSortKeyRef.current = sortKey;
+    }
+  }, [sortKey]);
   const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
   const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
 
@@ -1493,6 +1500,7 @@ export default function VehiclesPage() {
         <VehicleTableView
           vehicles={filtered}
           isFiltered={!!search.trim() || !!typeFilter}
+          sortKey={sort}
           types={types}
           tenants={tenants}
           rooms={rooms}

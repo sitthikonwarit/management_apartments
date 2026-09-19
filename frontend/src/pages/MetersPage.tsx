@@ -1504,9 +1504,10 @@ const METER_TABLE_COLS: ColDef[] = [
   { key: "actions",    header: "จัดการ",           visible: true,  pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
 
-function MeterTableView({ meters, isFiltered = false, filledCount, roomCount, onView, onEdit, onDeleted, onPrintSelected }: {
+function MeterTableView({ meters, isFiltered = false, sortKey, filledCount, roomCount, onView, onEdit, onDeleted, onPrintSelected }: {
   meters: any[];
   isFiltered?: boolean;
+  sortKey?: string;
   filledCount: (r: any) => number;
   roomCount:   (r: any) => number;
   onView:    (m: any) => void;
@@ -1524,11 +1525,18 @@ function MeterTableView({ meters, isFiltered = false, filledCount, roomCount, on
   const { widths, startResize } = useColumnWidths("meters-list", {
     checkbox: 40, monthYear: 130, status: 120, filled: 120, progress: 150, recordDate: 130, updatedAt: 160, actions: 150,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("meters-list", meters, (m: any) => String(m.id), isFiltered);
+  const { ordered: rowOrdered, moveRow, resetRowOrder } = useRowOrder("meters-list", meters, (m: any) => String(m.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
   const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
+  const prevSortKeyRef = useRef(sortKey);
+  useEffect(() => {
+    if (prevSortKeyRef.current !== sortKey) {
+      resetRowOrder();
+      prevSortKeyRef.current = sortKey;
+    }
+  }, [sortKey]);
 
   const allSelected  = meters.length > 0 && selectedRows.size === meters.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
@@ -2281,6 +2289,7 @@ function openExportDialog() {
         <MeterTableView
           meters={filteredMeters}
           isFiltered={!!search.trim()}
+          sortKey={sort}
           filledCount={filledCount}
           roomCount={roomCount}
           onView={(m) => goToDetails(m.monthYear)}

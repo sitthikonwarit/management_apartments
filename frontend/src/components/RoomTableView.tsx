@@ -120,10 +120,14 @@ function statusClass(s: string) {
 
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function RoomTableView({
-  data, isFiltered = false, allRooms, towers, tenants, bookings = [], onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
+  data, isFiltered = false, sortKey, allRooms, towers, tenants, bookings = [], onViewDetail, onEdit, onDelete, onDeleteBulk, onRoomUpdate, onTenantsUpdate,
 }: {
   data: any[];
   isFiltered?: boolean;
+  // ตัวเลือกการเรียงลำดับที่เลือกอยู่ในหน้า (เช่น "เลขห้อง น้อย-มาก") — ส่งมาแค่ให้รู้ว่า "เปลี่ยน" เมื่อไหร่
+  // เพื่อล้างลำดับที่เคยลากจัดไว้ทิ้ง ไม่งั้นลำดับที่ลากไว้จะบังการเรียงลำดับใหม่ทุกครั้ง (เลือกตัวเรียงลำดับ
+  // แล้วแถวไม่ขยับเลย เพราะ useRowOrder เอาลำดับเก่าที่เคยลากไว้มาทับลำดับที่เพิ่งเรียงใหม่เสมอ)
+  sortKey?: string;
   allRooms: any[];
   towers: any[];
   tenants: any[];
@@ -151,11 +155,20 @@ export default function RoomTableView({
     checkbox: 40, number: 100, tower: 110, floor: 80, status: 110, price: 120, dailyPrice: 110,
     meterElectric: 110, meterWater: 110, roomActive: 110, tenant: 160, detail: 200, tags: 160, actions: 130,
   });
-  const { ordered: rowOrdered, moveRow } = useRowOrder("rooms", data, (r: any) => String(r.id), isFiltered);
+  const { ordered: rowOrdered, moveRow, resetRowOrder } = useRowOrder("rooms", data, (r: any) => String(r.id), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
   const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
+  // เปลี่ยนตัวเรียงลำดับ (dropdown "เรียงตาม") = ล้างลำดับที่เคยลากจัดไว้ทิ้ง ให้ตัวเรียงลำดับใหม่มีผลจริง
+  // ไม่ทำตอน mount ครั้งแรก (ไม่งั้นลำดับที่บันทึกไว้จะหายทันทีที่เปิดหน้า ทั้งที่ sortKey ยังไม่ได้เปลี่ยนจริง)
+  const prevSortKeyRef = useRef(sortKey);
+  useEffect(() => {
+    if (prevSortKeyRef.current !== sortKey) {
+      resetRowOrder();
+      prevSortKeyRef.current = sortKey;
+    }
+  }, [sortKey]);
 
   useEffect(() => {
     if (!blockMsg) return;
