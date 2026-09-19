@@ -726,7 +726,7 @@ function MeterDetailView({ record, rooms, tenants, allRecords, towers, onEdit, o
       </div>
 
       <div className="table-responsive-wrapper mt-3 nicescrollbar" style={{ maxHeight: 538, overflow: "auto" }}>
-        <table ref={tableRef} className="table table-mainstyle table-hover table-resizable" id="meter-detail-table">
+        <table ref={tableRef} className="table-mainstyle table-hover table-resizable" style={{ minWidth: 700 }} id="meter-detail-table">
           <thead>
             <tr>
               {ordered.map((col) => {
@@ -1400,7 +1400,7 @@ function MeterFormView({ record, rooms, tenants, allRecords, towers, onSave, onB
       )}
 
       <div className="table-responsive-wrapper mt-3 nicescrollbar" style={{ maxHeight: 538, overflow: "auto" }}>
-        <table ref={tableRef} className="table table-mainstyle table-hover table-resizable" id="meter-reading-table">
+        <table ref={tableRef} className="table-mainstyle table-hover table-resizable" style={{ minWidth: 700 }} id="meter-reading-table">
           <thead>
             <tr>
               {ordered.map((col) => {
