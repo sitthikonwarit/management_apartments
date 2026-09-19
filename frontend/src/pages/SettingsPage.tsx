@@ -145,6 +145,7 @@ function UserFormModal({ editingUser, onClose, onSaved }: {
 }) {
   const [username, setUsername] = useState(editingUser?.username ?? "");
   const [displayName, setDisplayName] = useState(editingUser?.displayName ?? "");
+  const [phone, setPhone] = useState(editingUser?.phone ?? "");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -161,8 +162,8 @@ function UserFormModal({ editingUser, onClose, onSaved }: {
     setSaving(true);
     try {
       const saved = editingUser
-        ? await authApi.updateUser(editingUser.id, { displayName: displayName.trim(), ...(password ? { password } : {}) })
-        : await authApi.createUser(username.trim(), password, displayName.trim() || undefined);
+        ? await authApi.updateUser(editingUser.id, { displayName: displayName.trim(), phone: phone.trim(), ...(password ? { password } : {}) })
+        : await authApi.createUser(username.trim(), password, displayName.trim() || undefined, phone.trim() || undefined);
       toastSuccess(editingUser ? "บันทึกข้อมูลผู้ใช้สำเร็จ" : "เพิ่มผู้ใช้สำเร็จ");
       onSaved(saved);
     } catch (e: any) {
@@ -194,6 +195,16 @@ function UserFormModal({ editingUser, onClose, onSaved }: {
         <div className="mb-3">
           <label className="form-label small fw-bold">ชื่อที่แสดง (ถ้ามี)</label>
           <input className="form-control" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        </div>
+        <div className="mb-3">
+          <label className="form-label small fw-bold">เบอร์โทร (สำหรับกดเชื่อม LINE)</label>
+          <input className="form-control" value={phone} onChange={(e) => setPhone(e.target.value)}
+            placeholder="08xxxxxxxx" disabled={!!editingUser?.lineConnected} />
+          <small className="text-muted d-block mt-1">
+            {editingUser?.lineConnected
+              ? "ผูกบัญชี LINE ไว้แล้ว เปลี่ยนเบอร์ที่นี่ไม่ได้"
+              : "กรอกไว้เพื่อให้ผู้ใช้คนนี้กดปุ่ม \"เชื่อม LINE\" ในตารางรายชื่อได้เอง"}
+          </small>
         </div>
         <div className="mb-3">
           <label className="form-label small fw-bold">
@@ -1623,13 +1634,14 @@ export default function SettingsPage() {
                         <tr>
                           <th>ชื่อผู้ใช้</th>
                           <th>ชื่อที่แสดง</th>
+                          <th>LINE</th>
                           <th>เข้าสู่ระบบล่าสุด</th>
                           <th className="text-center">จัดการ</th>
                         </tr>
                       </thead>
                       <tbody>
                         {usersList.length === 0 ? (
-                          <tr><td colSpan={4} className="text-center text-muted py-4">ยังไม่มีผู้ใช้</td></tr>
+                          <tr><td colSpan={5} className="text-center text-muted py-4">ยังไม่มีผู้ใช้</td></tr>
                         ) : usersList.map((u) => (
                           <tr key={u.id}>
                             <td className="fw-bold">
@@ -1639,6 +1651,25 @@ export default function SettingsPage() {
                               )}
                             </td>
                             <td>{u.displayName || "-"}</td>
+                            <td>
+                              {u.lineConnected ? (
+                                <span className="badge bg-success">
+                                  <i className="fab fa-line me-1" />เชื่อมแล้ว
+                                </span>
+                              ) : u.phone ? (
+                                // เปิดในแท็บใหม่เสมอ — ถ้ากดในแท็บเดิมตอนล็อกอินเป็นแอดมินอยู่ จะโดน OAuth
+                                // สลับ session ไปเป็นบัญชีที่กดเชื่อม LINE แทนทันที (ดู GET /auth/line/authorize
+                                // ใน backend/src/routes/lineLogin.ts — ออก token ใหม่ให้บัญชีที่ผูกสำเร็จเลย)
+                                <a href={`/api/auth/line/authorize?phone=${encodeURIComponent(u.phone)}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="btn btn-sm btn-outline-success"
+                                  title="เปิดแท็บใหม่เพื่อเชื่อม LINE ด้วยเบอร์นี้">
+                                  <i className="fab fa-line me-1" />เชื่อม LINE
+                                </a>
+                              ) : (
+                                <span className="text-muted small">ยังไม่มีเบอร์โทร</span>
+                              )}
+                            </td>
                             <td className="small text-muted">
                               {u.lastLoginAt ? thaiDateOnlyString(new Date(u.lastLoginAt)) : "ยังไม่เคยเข้าสู่ระบบ"}
                             </td>

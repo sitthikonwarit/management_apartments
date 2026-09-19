@@ -106,15 +106,6 @@ export default function Header({ titles, onMenuClick }: HeaderProps) {
               </div>
             )}
           </div>
-          {/* ปุ่มลัดโหมดความเป็นส่วนตัว — ปิดบังข้อมูลอ่อนไหวของผู้เช่า (เลขบัตร ปชช./ที่อยู่/เบอร์โทร/รูป)
-              ทั่วเว็บทันที ไว้กดก่อนแคป/แชร์หน้าจอ (ดูคอมเมนต์ข้อจำกัดที่ context/PrivacyModeContext.tsx —
-              เว็บตรวจจับการแคป/แชร์จอเองไม่ได้ ต้องกดเปิด/ปิดเอง) ตั้งค่าเดียวกับสวิตช์ในหน้า Settings */}
-          <button className="theme-toggle-btn"
-            onClick={togglePrivacy}
-            style={privacyEnabled ? { color: "var(--color-danger)" } : undefined}
-            title={privacyEnabled ? "ปิดโหมดความเป็นส่วนตัว (แสดงข้อมูลผู้เช่าตามปกติ)" : "เปิดโหมดความเป็นส่วนตัว (ซ่อนข้อมูลผู้เช่าก่อนแคป/แชร์จอ)"}>
-            <span className="material-icons-sharp">{privacyEnabled ? "visibility_off" : "visibility"}</span>
-          </button>
           <button className="theme-toggle-btn"
             onClick={(e) => toggle({ x: e.clientX, y: e.clientY })}
             title={theme === "dark" ? "เปลี่ยนเป็น Light Mode" : "เปลี่ยนเป็น Dark Mode"}>
@@ -132,6 +123,16 @@ export default function Header({ titles, onMenuClick }: HeaderProps) {
                   <b>{user?.displayName || user?.username || "ผู้ใช้"}</b>
                   {user?.displayName && <small className="text-muted">{user.username}</small>}
                 </div>
+                {/* สวิตช์โหมดความเป็นส่วนตัว — ปิดบังข้อมูลอ่อนไหวของผู้เช่า (เลขบัตร ปชช./ที่อยู่/เบอร์โทร/รูป)
+                    ทั่วเว็บทันที ไว้กดก่อนแคป/แชร์หน้าจอ (เว็บตรวจจับการแคป/แชร์จอเองไม่ได้ ต้องกดเปิด/ปิดเอง
+                    ดู context/PrivacyModeContext.tsx) ตั้งค่าเดียวกับสวิตช์ในหน้า Settings ย้ายมาไว้ในเมนูนี้
+                    แทนปุ่มลัดแยกบน header ตามที่ผู้ใช้แจ้งว่ากินพื้นที่ */}
+                <button type="button" className="profile-dropdown-item"
+                  onClick={togglePrivacy}
+                  style={privacyEnabled ? { color: "var(--color-danger)" } : undefined}>
+                  <span className="material-icons-sharp">{privacyEnabled ? "visibility_off" : "visibility"}</span>
+                  {privacyEnabled ? "ปิดโหมดความเป็นส่วนตัว" : "เปิดโหมดความเป็นส่วนตัว"}
+                </button>
                 <button type="button" className="profile-dropdown-item" onClick={handleLogout}>
                   <span className="material-icons-sharp">logout</span>
                   Logout

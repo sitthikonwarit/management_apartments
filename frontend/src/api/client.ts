@@ -39,9 +39,9 @@ export const authApi = {
   me: () => api.get("/auth/me").then((r) => r.data),
   logout: () => api.post("/auth/logout").then((r) => r.data),
   getUsers: () => api.get("/auth/users").then((r) => r.data),
-  createUser: (username: string, password: string, displayName?: string) =>
-    api.post("/auth/users", { username, password, displayName }).then((r) => r.data),
-  updateUser: (id: string, data: { displayName?: string; password?: string }) =>
+  createUser: (username: string, password: string, displayName?: string, phone?: string) =>
+    api.post("/auth/users", { username, password, displayName, phone }).then((r) => r.data),
+  updateUser: (id: string, data: { displayName?: string; password?: string; phone?: string }) =>
     api.put(`/auth/users/${id}`, data).then((r) => r.data),
   deleteUser: (id: string) => api.delete(`/auth/users/${id}`).then((r) => r.data),
   // ── ขั้นตอน "ล็อกอินครั้งแรก" ของเจ้าของที่ superadmin สร้างองค์กรไว้ล่วงหน้าด้วยเบอร์โทร (ดู

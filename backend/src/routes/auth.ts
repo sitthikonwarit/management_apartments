@@ -17,6 +17,11 @@ function parseUser(r: typeof users.$inferSelect) {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     lastLoginAt: r.lastLoginAt,
+    // เบอร์โทรไว้กรอกเพื่อกดเชื่อม LINE ทีหลัง (ดู GET /auth/line/authorize?phone= ใน routes/lineLogin.ts) —
+    // ส่งเบอร์ดิบออกไปด้วยเลย (ไม่ใช่แค่ boolean) เพราะหน้า Settings ต้องเอาไปประกอบลิงก์ปุ่ม "เชื่อม LINE"
+    phone: r.phone,
+    // ไม่ส่ง lineUserId ตัวจริงออกไป (เป็น LINE "sub" ของบัญชีส่วนตัว) ส่งแค่สถานะว่าผูกแล้วหรือยังพอ
+    lineConnected: !!r.lineUserId,
   };
 }
 
@@ -24,6 +29,12 @@ function parseUser(r: typeof users.$inferSelect) {
 // ("Admin" กับ "admin" ถือเป็นคนละชื่อผู้ใช้กัน) เหลือแค่ trim ช่องว่างหัวท้ายที่พิมพ์เผลอเท่านั้น
 function normalizeUsername(v: unknown): string {
   return String(v ?? "").trim();
+}
+
+// เหมือน normalizePhone ใน routes/lineLogin.ts/superadmin.ts — ต้องได้ผลลัพธ์ตรงกันเป๊ะกับตอนกดเชื่อม LINE
+// (GET /auth/line/authorize?phone=) ถึงจะจับคู่แถวที่กรอกเบอร์ไว้ตรงนี้ได้
+function normalizePhone(v: unknown): string {
+  return String(v ?? "").replace(/\D/g, "");
 }
 
 // ── เส้นทางสาธารณะ (ไม่ต้องล็อกอิน): เข้าสู่ระบบด้วย username/password ──────────────
@@ -105,21 +116,29 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
     const username = normalizeUsername(b.username);
     const password = String(b.password ?? "");
     const displayName = String(b.displayName ?? "").trim();
+    const phone = b.phone !== undefined ? normalizePhone(b.phone) : "";
     if (!username || !password) { set.status = 400; return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" }; }
     if (password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
+    if (phone && phone.length < 9) { set.status = 400; return { error: "เบอร์โทรไม่ถูกต้อง" }; }
     // username ห้ามซ้ำ "ทั้งระบบ" ไม่ใช่แค่ในองค์กรตัวเอง (เช็คทุกองค์กร ไม่กรอง org_id) — กันสับสนเวลา
     // ซุปเปอร์แอดมิน/ผู้ใช้คนเดียวกันดูแลหลายองค์กรพร้อมกัน แล้วเจอชื่อผู้ใช้ซ้ำข้ามองค์กร
     const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
     if (dup) { set.status = 409; return { error: "มีชื่อผู้ใช้นี้แล้ว กรุณาเลือกชื่ออื่น" }; }
+    // เบอร์โทรก็ต้อง unique ทั้งระบบเช่นกัน (มี unique index ที่ users_phone_unique อยู่แล้ว — เช็คก่อน insert
+    // เพื่อโชว์ error ที่อ่านรู้เรื่องแทนที่จะให้ DB constraint โยน error ดิบๆ ออกมา)
+    if (phone) {
+      const [dupPhone] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
+      if (dupPhone) { set.status = 409; return { error: "มีเบอร์โทรนี้ผูกกับบัญชีอื่นอยู่แล้ว" }; }
+    }
 
     const id = `USR-${Date.now()}`;
     const ts = new Date().toISOString();
     const passwordHash = await Bun.password.hash(password);
-    await db.insert(users).values({ id, orgId, role: "staff", username, passwordHash, displayName, createdAt: ts, updatedAt: ts });
+    await db.insert(users).values({ id, orgId, role: "staff", username, passwordHash, displayName, phone: phone || null, createdAt: ts, updatedAt: ts });
     const [row] = await db.select().from(users).where(eq(users.id, id));
     return parseUser(row);
   })
-  // เปลี่ยนรหัสผ่าน และ/หรือชื่อที่แสดง — ส่ง password มาก็ต่อเมื่อจะเปลี่ยนรหัสผ่านเท่านั้น
+  // เปลี่ยนรหัสผ่าน/ชื่อที่แสดง/เบอร์โทร — ส่ง password มาก็ต่อเมื่อจะเปลี่ยนรหัสผ่านเท่านั้น
   .put("/users/:id", async ({ authUser, params, body, set }) => {
     const [existing] = await db.select().from(users).where(and(eq(users.id, params.id), eq(users.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบผู้ใช้" }; }
@@ -130,6 +149,15 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
       const password = String(b.password);
       if (password.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
       patch.passwordHash = await Bun.password.hash(password);
+    }
+    if (b.phone !== undefined) {
+      const phone = normalizePhone(b.phone);
+      if (phone && phone.length < 9) { set.status = 400; return { error: "เบอร์โทรไม่ถูกต้อง" }; }
+      if (phone && phone !== existing.phone) {
+        const [dupPhone] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
+        if (dupPhone) { set.status = 409; return { error: "มีเบอร์โทรนี้ผูกกับบัญชีอื่นอยู่แล้ว" }; }
+      }
+      patch.phone = phone || null;
     }
     await db.update(users).set(patch).where(eq(users.id, params.id));
     const [row] = await db.select().from(users).where(eq(users.id, params.id));
