@@ -1882,6 +1882,7 @@ const BILL_TABLE_COLS: BillColDef[] = [
   { key: "priceRoom",   header: "ค่าห้อง",     visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "water",       header: "ค่าน้ำ",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "electric",    header: "ค่าไฟ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "vehicle",     header: "ค่าจอดรถ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "other",       header: "อื่นๆ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "outstanding", header: "ค้างชำระ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "ownMonth",    header: "ยอดเดือนนี้",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
@@ -1995,7 +1996,7 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
     checkbox: 40, room: 90, tenant: 160, priceRoom: 100, water: 100,
-    electric: 100, other: 100, outstanding: 110, ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
+    electric: 100, vehicle: 100, other: 100, outstanding: 130, ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
 
   const visible = cols.filter((c) => c.visible);
@@ -2064,7 +2065,25 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
         return <>{money(item.priceWater)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterWater.unit} หน่วย</div></>;
       case "electric":
         return <>{money(item.priceElectric)}<div className="text-muted" style={{ fontSize: 11 }}>{item.meterElectric.unit} หน่วย</div></>;
-      case "other": return money(otherChargesTotal(item));
+      case "vehicle": return item.priceVehicle > 0 ? money(item.priceVehicle) : "-";
+      case "other": {
+        // แยกค่าจอดรถออกไปเป็นคอลัมน์ของตัวเองแล้ว (key "vehicle" ด้านบน) เหลือแค่แท็ก/รายการเพิ่มเติม/
+        // ส่วนลดในคอลัมน์นี้ — โชว์ชื่อรายการที่รวมกันเป็นยอดนี้ไว้ใต้ตัวเลขด้วย เหมือนคอลัมน์ "ค้างชำระ"
+        const otherAmount = otherChargesTotal(item) - item.priceVehicle;
+        if (!(otherAmount !== 0)) return "-";
+        const names = [
+          ...item.billTagItems.map((t) => t.name),
+          ...item.billTenantTagItems.map((t) => t.name),
+          ...item.customItems.map((c) => c.name),
+          ...item.discountItems.map((d) => `ส่วนลด: ${d.name}`),
+        ];
+        return (
+          <>
+            {money(otherAmount)}
+            {names.length > 0 && <div className="text-muted" style={{ fontSize: 11 }}>{names.join(", ")}</div>}
+          </>
+        );
+      }
       case "outstanding": {
         if (!(item.outstandingAmount > 0)) return "-";
         // ยอดค้างยกมายังโชว์ให้เห็นเสมอ — เปลี่ยนเป็นสีเขียวเมื่อยอดก้อนนี้ถูกปิด/จ่ายครบแล้ว (บิลเดือนนี้จ่ายครบ
@@ -2073,7 +2092,14 @@ function BillTableView({ data, payments, monthYear, allBills, onEdit, onPrint, o
           ? reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems)
           : { settledAmount: 0 };
         const cleared = item.status === "paid" || settledAmount >= item.outstandingAmount - 0.005;
-        return <span className={cleared ? "text-success" : "text-danger"}>{money(item.outstandingAmount)}</span>;
+        // รายชื่อเดือนที่ยอดค้างก้อนนี้รวมมาจาก (outstandingItems แต่ละรายการมี monthYear ของบิลต้นทาง)
+        const months = item.outstandingItems.map((o) => monthYearLabel(o.monthYear)).filter(Boolean);
+        return (
+          <>
+            <span className={cleared ? "text-success" : "text-danger"}>{money(item.outstandingAmount)}</span>
+            {months.length > 0 && <div className="text-muted" style={{ fontSize: 11 }}>{months.join(", ")}</div>}
+          </>
+        );
       }
       case "ownMonth": return money(Math.max(0, item.total - (item.outstandingAmount || 0)));
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
