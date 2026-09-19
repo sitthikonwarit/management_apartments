@@ -1363,8 +1363,8 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
   const blankRows = Math.max(0, PRETTY_SLIP_MIN_ROWS - rows.length);
   const total = isSplitCopy ? (payerTotal as number) : item.total;
 
-  // 7 คอลัมน์ตลอดทั้งเอกสาร — แถวข้อมูลผู้เช่า/หมายเหตุ/ยอดรวม ใช้ colSpan รวมกันให้ครบ 7 เสมอ เพื่อให้เส้น
-  // ตารางต่อกันเป็นกล่องเดียวทั้งใบเหมือนแบบฟอร์มกระดาษจริง (ไม่ใช่หลายตารางแยกที่มีช่องว่างคั่นกลาง)
+  // ทุกตารางด้านล่างมีคอลัมน์ของตัวเองอิสระต่อกัน (ไม่ต้องเทียบ colSpan ข้ามตารางให้ตรงกัน) — ที่ยังดูเป็น
+  // กล่องเดียวต่อเนื่องกันได้เพราะห่อด้วย .bsp-box (มีกรอบนอกใบเดียว) แล้วแต่ละตารางมีแค่เส้นคั่นบน/ล่างเอง
   const noteText = `${dueDateLabel(item.overdueConfig ?? config.overdue)}${isSplitCopy ? ` · หารจากยอดรวม ${money(item.total)} บาท ÷ ${payerCount} คน` : ""}`;
 
   return (
@@ -1375,60 +1375,84 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
       </div>
       <div className="bsp-title">บิลชำระค่าเช่าห้องพักและที่ดิน</div>
 
-      <table className="bsp-doc">
-        <tbody>
-          <tr>
-            <td className="bsp-meta-label" colSpan={1}>รหัส</td>
-            <td colSpan={2}>{item.roomNumber}</td>
-            <td className="bsp-meta-label" colSpan={1}>วันที่</td>
-            <td colSpan={3}>{thaiDateOnlyString(new Date())}</td>
-          </tr>
-          <tr>
-            <td className="bsp-meta-label" colSpan={1}>ชื่อ</td>
-            <td colSpan={2}>{isSplitCopy ? payerName : (item.tenantId ? `${item.tenantTitle} ${item.tenantName}` : item.tenantName)}</td>
-            <td className="bsp-meta-label" colSpan={1}>ห้องพัก</td>
-            <td colSpan={3}>{item.roomNumber}</td>
-          </tr>
-
-          <tr className="bsp-thead-row">
-            <th className="bsp-col-no">ลำดับ</th>
-            <th className="bsp-col-name">รายการ</th>
-            <th>เลขครั้งก่อน</th>
-            <th>เลขครั้งนี้</th>
-            <th>หน่วยละ</th>
-            <th>จำนวนที่ใช้</th>
-            <th className="bsp-col-amt">จำนวนเงิน</th>
-          </tr>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <td className="bsp-col-no">{i + 1}</td>
-              <td className="bsp-col-name">{r.name}</td>
-              <td>{r.prev ?? ""}</td>
-              <td>{r.curr ?? ""}</td>
-              <td>{r.rate ? money(r.rate) : ""}</td>
-              <td>{r.unit ?? ""}</td>
-              <td className="bsp-col-amt">{r.price < 0 ? "-" : ""}{money(Math.abs(r.price))}</td>
+      <div className="bsp-box">
+        <table className="bsp-meta">
+          <colgroup><col style={{ width: "13mm" }} /><col /><col style={{ width: "13mm" }} /><col /></colgroup>
+          <tbody>
+            <tr>
+              <td className="bsp-meta-label">รหัส</td>
+              <td>{item.roomNumber}</td>
+              <td className="bsp-meta-label">วันที่</td>
+              <td>{thaiDateOnlyString(new Date())}</td>
             </tr>
-          ))}
-          {Array.from({ length: blankRows }).map((_, i) => (
-            <tr key={`blank-${i}`}>
-              <td className="bsp-col-no">{rows.length + i + 1}</td>
-              <td className="bsp-col-name">&nbsp;</td>
-              <td /><td /><td /><td /><td className="bsp-col-amt" />
+            <tr>
+              <td className="bsp-meta-label">ชื่อ</td>
+              <td>{isSplitCopy ? payerName : (item.tenantId ? `${item.tenantTitle} ${item.tenantName}` : item.tenantName)}</td>
+              <td className="bsp-meta-label">ห้องพัก</td>
+              <td>{item.roomNumber}</td>
             </tr>
-          ))}
+          </tbody>
+        </table>
 
-          <tr>
-            <td className="bsp-meta-label" colSpan={1}>หมายเหตุ</td>
-            <td colSpan={6}>{noteText}</td>
-          </tr>
-          <tr>
-            <td className="bsp-total-label" colSpan={1}>รวมเป็นเงิน</td>
-            <td className="bsp-total-text" colSpan={4}>({thaiBahtText(total)})</td>
-            <td className="bsp-total-amt" colSpan={2}>{money(total)}</td>
-          </tr>
-        </tbody>
-      </table>
+        <table className="bsp-table">
+          <colgroup>
+            <col style={{ width: "7%" }} /><col style={{ width: "27%" }} /><col style={{ width: "12%" }} />
+            <col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "18%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="bsp-col-no">ลำดับ</th>
+              <th className="bsp-col-name">รายการ</th>
+              <th>เลขครั้งก่อน</th>
+              <th>เลขครั้งนี้</th>
+              <th>หน่วยละ</th>
+              <th>จำนวนที่ใช้</th>
+              <th className="bsp-col-amt">จำนวนเงิน</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="bsp-col-no">{i + 1}</td>
+                <td className="bsp-col-name">{r.name}</td>
+                <td>{r.prev ?? ""}</td>
+                <td>{r.curr ?? ""}</td>
+                <td>{r.rate ? money(r.rate) : ""}</td>
+                <td>{r.unit ?? ""}</td>
+                <td className="bsp-col-amt">{r.price < 0 ? "-" : ""}{money(Math.abs(r.price))}</td>
+              </tr>
+            ))}
+            {Array.from({ length: blankRows }).map((_, i) => (
+              <tr key={`blank-${i}`}>
+                <td className="bsp-col-no">{rows.length + i + 1}</td>
+                <td className="bsp-col-name">&nbsp;</td>
+                <td /><td /><td /><td /><td className="bsp-col-amt" />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <table className="bsp-note">
+          <colgroup><col style={{ width: "13mm" }} /><col /></colgroup>
+          <tbody>
+            <tr>
+              <td className="bsp-meta-label">หมายเหตุ</td>
+              <td>{noteText}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table className="bsp-total">
+          <colgroup><col style={{ width: "25mm" }} /><col /><col style={{ width: "30mm" }} /></colgroup>
+          <tbody>
+            <tr>
+              <td className="bsp-total-label">รวมเป็นเงิน</td>
+              <td className="bsp-total-text">({thaiBahtText(total)})</td>
+              <td className="bsp-total-amt">{money(total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <div className="bsp-footer">
         <div className="bsp-footer-left">
