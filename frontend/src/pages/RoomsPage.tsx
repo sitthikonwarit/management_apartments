@@ -19,6 +19,7 @@ import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import EmptyState from "../components/EmptyState";
 import TowerManagement from "../components/TowerManagement";
 import RoomTableView from "../components/RoomTableView";
+import PrivacyMask from "../components/PrivacyMask";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { toDisplayYear } from "../utils/yearFormat";
 import { tenantDisplayName } from "../utils/tenantName";
@@ -1005,7 +1006,7 @@ function RoomDetailView({
               {tenant.tel && (
                 <div className="file-view-item">
                   <i className="fas fa-phone-alt file-icon text-secondary" />
-                  <span className="file-name">เบอร์โทร: <strong>{tenant.tel}</strong></span>
+                  <span className="file-name">เบอร์โทร: <strong><PrivacyMask value={tenant.tel} /></strong></span>
                 </div>
               )}
               {tenant.contractStartDate && (
@@ -1030,7 +1031,7 @@ function RoomDetailView({
               {booking.tel && (
                 <div className="file-view-item">
                   <i className="fas fa-phone-alt file-icon text-secondary" />
-                  <span className="file-name">เบอร์โทร: <strong>{booking.tel}</strong></span>
+                  <span className="file-name">เบอร์โทร: <strong><PrivacyMask value={booking.tel} /></strong></span>
                 </div>
               )}
               {booking.bookedAt && (
@@ -1201,7 +1202,7 @@ function RoomDetailView({
                               <div className="tower-item-name">
                                 <div><strong>{tenantDisplayName(t)}</strong></div>
                                 <div style={{ fontSize: "0.8rem", color: "var(--color-dark-variant)" }}>
-                                  {t.tel && <span><i className="fas fa-phone me-1" />{t.tel}</span>}
+                                  {t.tel && <span><i className="fas fa-phone me-1" /><PrivacyMask value={t.tel} /></span>}
                                   {isHere && <span className="ms-2 text-success"><i className="fas fa-check-circle me-1" />อยู่ในห้องนี้</span>}
                                   {hasOtherRoom && <span className="ms-2 text-warning"><i className="fas fa-door-open me-1" />ห้อง {otherRooms.map((r) => r.number).join(", ")}</span>}
                                   {!t.idRoom && !(t.extraRoomIds?.length) && <span className="ms-2 text-muted"><i className="fas fa-minus-circle me-1" />ไม่มีห้อง</span>}
@@ -1871,13 +1872,13 @@ export default function RoomsPage() {
                   {tenant ? (
                     <div className="room-card-tenant-info">
                       <p><i className="fas fa-user" />{tenantDisplayName(tenant)}</p>
-                      {tenant.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" />{tenant.tel}</p>}
+                      {tenant.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" /><PrivacyMask value={tenant.tel} /></p>}
                     </div>
                   ) : booking ? (
                     <div className="room-card-tenant-info d-flex align-items-center justify-content-between">
                       <div>
                         <p><i className="fas fa-user-clock" />ผู้จอง: {booking.name}</p>
-                        {booking.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" />{booking.tel}</p>}
+                        {booking.tel && <p style={{ marginTop: "0.3rem" }}><i className="fas fa-phone" /><PrivacyMask value={booking.tel} /></p>}
                       </div>
                       {booking.idLine && (
                         <button type="button" className="btn btn-sm btn-outline-primary flex-shrink-0"
