@@ -1988,6 +1988,27 @@ export default function TenantsPage() {
         </ToolbarActionsMenu>
       </div>
 
+      {/* Summary cards — ทรงเดียวกับหน้ายานพาหนะ */}
+      {!loading && (
+        <div className="row g-3 mb-4">
+          {[
+            { icon: "fa-users text-primary", label: "ทั้งหมด", val: `${filtered.length} รายการ` },
+            { icon: "fa-circle-exclamation text-danger", label: "หมดสัญญาแล้ว", val: `${contractExpiredCount} คน` },
+            { icon: "fa-clock text-warning", label: "ใกล้หมดสัญญา", val: `${contractSoonCount} คน (ภายใน ${CONTRACT_WARNING_DAYS} วัน)` },
+          ].map(({ icon, label, val }) => (
+            <div key={label} className="col-6 col-md-4">
+              <div className="detail-item">
+                <i className={`fas ${icon}`} />
+                <div>
+                  <div className="label">{label}</div>
+                  <div className="value">{val}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="row g-2 mb-3 align-items-center">
         <div className="col-12 col-lg">
           <div className="search-container flex-grow-1">
@@ -2040,18 +2061,6 @@ export default function TenantsPage() {
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="d-flex align-items-center flex-wrap gap-3 mb-2" style={{ fontSize: "0.85rem" }}>
-        <span className="text-muted">ทั้งหมด {filtered.length} รายการ</span>
-        {contractExpiredCount > 0 && (
-          <span className="text-danger fw-bold"><i className="fas fa-circle-exclamation me-1" />หมดสัญญาแล้ว {contractExpiredCount} คน</span>
-        )}
-        {contractSoonCount > 0 && (
-          <span className="fw-bold" style={{ color: "#b8860b" }}>
-            <i className="fas fa-clock me-1" />ใกล้หมดสัญญา {contractSoonCount} คน (ภายใน {CONTRACT_WARNING_DAYS} วัน)
-          </span>
-        )}
       </div>
 
       {loading ? (
