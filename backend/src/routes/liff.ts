@@ -452,9 +452,10 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       qrImage,
       amount: payAmount,
       accountInfo: qrImage ? null : {
-        bankName: row?.paymentBankName || "",
-        accountName: row?.paymentAccountName || "",
-        accountNumber: row?.paymentAccountNumber || "",
+        bankName: account?.bankName || row?.paymentBankName || "",
+        accountName: account?.accountName || row?.paymentAccountName || "",
+        accountNumber: account?.accountNumber || row?.paymentAccountNumber || "",
+        bankLogoImage: account?.bankLogoImage || "",
       },
     };
   })
