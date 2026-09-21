@@ -387,10 +387,10 @@ export default function LiffPaymentPage() {
                             <img src={paymentInfo.bankLogoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                           </div>
                         )}
-                        {paymentInfo.bankName && <span className="fw-semibold fs-6">{paymentInfo.bankName}</span>}
+                        {paymentInfo.bankName && <span className="fw-semibold fs-6" style={{ color: "var(--color-dark)" }}>{paymentInfo.bankName}</span>}
                       </div>
                     )}
-                    {paymentInfo.accountName && <div className="fw-semibold mb-1">{paymentInfo.accountName}</div>}
+                    {paymentInfo.accountName && <div className="fw-semibold mb-1" style={{ color: "var(--color-dark)" }}>{paymentInfo.accountName}</div>}
                     <div className="input-group mt-1">
                       <input type="text" className="form-control font-monospace" readOnly value={paymentInfo.accountNumber} />
                       <button className="btn btn-outline-secondary" type="button" onClick={copyAccountNumber} title="คัดลอกเลขบัญชี">
@@ -462,10 +462,10 @@ export default function LiffPaymentPage() {
                                 <img src={paymentInfo.bankLogoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                               </div>
                             )}
-                            {intentAccountInfo.bankName && <span className="fw-semibold fs-6">{intentAccountInfo.bankName}</span>}
+                            {intentAccountInfo.bankName && <span className="fw-semibold fs-6" style={{ color: "var(--color-dark)" }}>{intentAccountInfo.bankName}</span>}
                           </div>
                         )}
-                        {intentAccountInfo.accountName && <div className="fw-semibold mb-1">{intentAccountInfo.accountName}</div>}
+                        {intentAccountInfo.accountName && <div className="fw-semibold mb-1" style={{ color: "var(--color-dark)" }}>{intentAccountInfo.accountName}</div>}
                         <div className="input-group mt-1">
                           <input type="text" className="form-control font-monospace" readOnly value={intentAccountInfo.accountNumber} />
                           <button className="btn btn-outline-secondary" type="button" onClick={copyIntentAccountNumber} title="คัดลอกเลขบัญชี">
