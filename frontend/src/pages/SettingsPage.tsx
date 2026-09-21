@@ -11,7 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import { usePrivacyMode } from "../context/PrivacyModeContext";
 import CustomSelect2, { customStyles } from "../components/CustomSelect2";
 import { thaiDateOnlyString } from "../utils/yearFormat";
-import { THAI_BANKS, generateBankBadge, type ThaiBank } from "../utils/thaiBanks";
+import { THAI_BANKS, bankLogoUrl, loadBankLogoDataUri, generateBankBadge, type ThaiBank } from "../utils/thaiBanks";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 
@@ -1148,12 +1148,11 @@ export default function SettingsPage() {
                                 <div className="row g-3">
                                   <div className="col-md-6">
                                     <label className="form-label small fw-bold">ธนาคาร</label>
-                                    {/* เลือกจากลิสต์ธนาคารยอดนิยม — เลือกแล้วเติมชื่อ + โลโก้ให้อัตโนมัติทันที ไม่ต้อง
-                                        หาไฟล์มาอัปโหลดเอง ถ้าเคยอัปโหลดโลโก้จริงของธนาคารนี้ไว้แล้ว (จากบัญชีอื่น/
-                                        ครั้งก่อน — ดู bankLogoLibrary) จะใช้โลโก้จริงอันนั้นเลย ไม่งั้น fallback เป็น
-                                        ตราวงกลมสีประจำธนาคารที่ระบบสร้างให้ไปก่อน (ดู generateBankBadge ใน
-                                        utils/thaiBanks.ts — ไม่ใช้โลโก้จริงของธนาคารเอง กันปัญหาลิขสิทธิ์/พึ่งพาไฟล์
-                                        ภายนอก) เลือกแล้วยังแก้ชื่อ/อัปโหลดโลโก้จริงเองทับได้อีกทีด้านล่างเหมือนเดิม */}
+                                    {/* เลือกจากลิสต์ธนาคารยอดนิยม — เลือกแล้วเติมชื่อ + โลโก้จริงให้อัตโนมัติทันที
+                                        (โลโก้จริงจาก public/bank-logos/ ดู utils/thaiBanks.ts) ไม่ต้องหาไฟล์มา
+                                        อัปโหลดเอง ถ้าเคยอัปโหลดโลโก้ของธนาคารนี้ไว้เอง (ทับของจริง — ดู
+                                        bankLogoLibrary) จะใช้อันที่อัปโหลดเองก่อน เลือกแล้วยังแก้ชื่อ/อัปโหลด
+                                        โลโก้เองทับได้อีกทีด้านล่างเหมือนเดิม */}
                                     <Select
                                       className="mb-2" styles={customStyles} isSearchable
                                       options={THAI_BANKS.map((b) => ({ value: b.code, bank: b }))}
@@ -1165,25 +1164,31 @@ export default function SettingsPage() {
                                         const realLogo = bankLogoLibrary[o.bank.code];
                                         return (
                                           <div className="d-flex align-items-center gap-2">
-                                            {realLogo ? (
-                                              <img src={realLogo} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "contain", flexShrink: 0, background: "#fff" }} />
-                                            ) : (
-                                              <span style={{
-                                                width: 22, height: 22, borderRadius: "50%", background: o.bank.color,
-                                                color: "#fff", fontSize: 9, fontWeight: 700, flexShrink: 0,
-                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                              }}>{o.bank.code.slice(0, 3)}</span>
-                                            )}
+                                            <img
+                                              src={realLogo || bankLogoUrl(o.bank.code)} alt=""
+                                              style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "contain", flexShrink: 0, background: "#fff" }}
+                                              onError={(e) => {
+                                                const img = e.currentTarget;
+                                                img.onerror = null;
+                                                img.src = generateBankBadge(o.bank);
+                                              }}
+                                            />
                                             {o.bank.name}
                                           </div>
                                         );
                                       }}
                                       onChange={(sel: any) => {
                                         if (!sel) return;
-                                        setAccountBankCode((prev) => ({ ...prev, [acct.id]: sel.bank.code }));
-                                        updatePaymentAccount(acct.id, {
-                                          bankName: sel.bank.name,
-                                          bankLogoImage: bankLogoLibrary[sel.bank.code] || generateBankBadge(sel.bank),
+                                        const bank: ThaiBank = sel.bank;
+                                        setAccountBankCode((prev) => ({ ...prev, [acct.id]: bank.code }));
+                                        updatePaymentAccount(acct.id, { bankName: bank.name });
+                                        const cached = bankLogoLibrary[bank.code];
+                                        if (cached) {
+                                          updatePaymentAccount(acct.id, { bankLogoImage: cached });
+                                          return;
+                                        }
+                                        loadBankLogoDataUri(bank).then((dataUri) => {
+                                          updatePaymentAccount(acct.id, { bankLogoImage: dataUri });
                                         });
                                       }}
                                     />
