@@ -11,6 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import { usePrivacyMode } from "../context/PrivacyModeContext";
 import CustomSelect2, { customStyles } from "../components/CustomSelect2";
 import { thaiDateOnlyString } from "../utils/yearFormat";
+import { THAI_BANKS, generateBankBadge, type ThaiBank } from "../utils/thaiBanks";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 
@@ -1133,6 +1134,32 @@ export default function SettingsPage() {
                                 <div className="row g-3">
                                   <div className="col-md-6">
                                     <label className="form-label small fw-bold">ธนาคาร</label>
+                                    {/* เลือกจากลิสต์ธนาคารยอดนิยม — เลือกแล้วเติมชื่อ + สร้างโลโก้ (ตราวงกลมสีประจำ
+                                        ธนาคาร) ให้อัตโนมัติทันที ไม่ต้องหาไฟล์โลโก้มาอัปโหลดเอง (ดู generateBankBadge
+                                        ใน utils/thaiBanks.ts — ไม่ใช้โลโก้จริงของธนาคาร กันปัญหาลิขสิทธิ์/พึ่งพาไฟล์
+                                        ภายนอก) เลือกแล้วยังแก้ชื่อ/อัปโหลดโลโก้เองทับได้อีกทีด้านล่างเหมือนเดิม */}
+                                    <Select
+                                      className="mb-2" styles={customStyles} isSearchable
+                                      options={THAI_BANKS.map((b) => ({ value: b.code, bank: b }))}
+                                      value={null}
+                                      placeholder="เลือกจากธนาคารยอดนิยม..."
+                                      noOptionsMessage={() => "ไม่พบธนาคาร"}
+                                      menuPortalTarget={document.body} menuPosition="fixed"
+                                      formatOptionLabel={(o: { bank: ThaiBank }) => (
+                                        <div className="d-flex align-items-center gap-2">
+                                          <span style={{
+                                            width: 22, height: 22, borderRadius: "50%", background: o.bank.color,
+                                            color: "#fff", fontSize: 9, fontWeight: 700, flexShrink: 0,
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                          }}>{o.bank.code.slice(0, 3)}</span>
+                                          {o.bank.name}
+                                        </div>
+                                      )}
+                                      onChange={(sel: any) => {
+                                        if (!sel) return;
+                                        updatePaymentAccount(acct.id, { bankName: sel.bank.name, bankLogoImage: generateBankBadge(sel.bank) });
+                                      }}
+                                    />
                                     <div className="d-flex align-items-center gap-2">
                                       <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                         {acct.bankLogoImage
