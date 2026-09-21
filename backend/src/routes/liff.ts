@@ -44,6 +44,76 @@ async function getConfigRow(orgId: string) {
   return row;
 }
 
+interface PaymentAccountAssign {
+  mode: "all" | "rooms" | "tower" | "floor" | "random" | "auto";
+  roomIds?: string[];
+  towerIds?: string[];
+  floors?: string[];
+}
+interface PaymentAccount {
+  id: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  qrImage: string;
+  bankLogoImage: string;
+  promptPayId: string;
+  assign?: PaymentAccountAssign;
+}
+
+function parsePaymentAccounts(raw: string | null | undefined): PaymentAccount[] {
+  try {
+    const v = raw ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+// สุ่ม/หมุนแบบ "คงที่" ต่อห้อง (hash เลขห้อง) — ไม่ใช่สุ่มใหม่ทุกครั้งที่เปิดหน้า ไม่งั้นผู้เช่าจะเห็นบัญชีเปลี่ยน
+// ไปมาสับสน (โอนเงินผิดบัญชีจากที่เคยเห็นครั้งก่อน) ห้องเดียวกันจะได้บัญชีเดิมเสมอตราบใดที่ยังอยู่ในกลุ่มเดิม
+function stableHashIndex(seed: string, mod: number): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return hash % mod;
+}
+
+// เลือกบัญชีรับชำระเงินที่ถูกต้องสำหรับห้องหนึ่งๆ จากรายการบัญชีที่ตั้งไว้หลายบัญชี (ดู payment.accounts ใน
+// routes/settings.ts) ลำดับความสำคัญ: ห้องที่เลือกไว้ตรงๆ > ตึกที่เลือกไว้ > ชั้นที่เลือกไว้ > กลุ่ม "สุ่ม"
+// (hash คงที่ต่อห้อง) > กลุ่ม "อัตโนมัติ" (hash คงที่ต่อห้องเหมือนกัน แค่แยกกลุ่ม ให้เลือกได้อิสระจากกลุ่มสุ่ม —
+// ไม่ใช่การหมุนเวียนแบ่งเท่าๆ กันแบบเป๊ะ เพราะจุดนี้รู้แค่ห้องเดียวที่กำลังจะเลือก ไม่รู้ลำดับห้องทั้งหมด) >
+// บัญชีที่ตั้งเป็น "ทั้งหมด" (ค่าเริ่มต้น) > บัญชีแรกสุดในรายการ (กันกรณีไม่มีบัญชีไหนตั้ง mode ไว้เลย)
+async function resolvePaymentAccountForRoom(orgId: string, accounts: PaymentAccount[], roomId: string | null | undefined): Promise<PaymentAccount | null> {
+  if (accounts.length === 0) return null;
+  if (accounts.length === 1) return accounts[0];
+
+  let room: { id: string; towerId: string | null; floor: string | null } | null = null;
+  if (roomId) {
+    const [r] = await db.select({ id: rooms.id, towerId: rooms.towerId, floor: rooms.floor })
+      .from(rooms).where(and(eq(rooms.id, roomId), eq(rooms.orgId, orgId)));
+    room = r ?? null;
+  }
+
+  if (room) {
+    const byRoom = accounts.find((a) => a.assign?.mode === "rooms" && a.assign.roomIds?.includes(room!.id));
+    if (byRoom) return byRoom;
+    const byTower = room.towerId ? accounts.find((a) => a.assign?.mode === "tower" && a.assign.towerIds?.includes(room!.towerId!)) : undefined;
+    if (byTower) return byTower;
+    const byFloor = room.floor ? accounts.find((a) => a.assign?.mode === "floor" && a.assign.floors?.includes(room!.floor!)) : undefined;
+    if (byFloor) return byFloor;
+  }
+
+  const seed = room?.id ?? roomId ?? "";
+  if (seed) {
+    const randomPool = accounts.filter((a) => a.assign?.mode === "random");
+    if (randomPool.length > 0) return randomPool[stableHashIndex(seed, randomPool.length)];
+    const autoPool = accounts.filter((a) => a.assign?.mode === "auto");
+    if (autoPool.length > 0) return autoPool[stableHashIndex(`auto:${seed}`, autoPool.length)];
+  }
+
+  return accounts.find((a) => !a.assign || a.assign.mode === "all") ?? accounts[0];
+}
+
 function tenantDisplayName(tenant: { title: string | null; firstName: string | null; lastName: string | null }): string {
   return `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim();
 }
@@ -239,24 +309,30 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
     const row = await getConfigRow(orgId);
     const outstanding = await getOutstandingBillsForTenant(orgId, tenant.id);
 
+    // หลายบัญชี — เลือกบัญชีที่ถูกกำหนดไว้สำหรับห้องของผู้เช่าคนนี้ (ดู resolvePaymentAccountForRoom ด้านบน)
+    // ไม่มีบัญชีที่ตั้งไว้เลยก็ fallback ไปฟิลด์เดี่ยวเก่า (องค์กรที่ยังไม่เคยบันทึกหน้านี้ใหม่)
+    const accounts = parsePaymentAccounts(row?.paymentAccounts);
+    const account = await resolvePaymentAccountForRoom(orgId, accounts, tenant.idRoom);
+
     return {
       linked: true,
       tenantName: tenantDisplayName(tenant),
       roomNumber: await tenantRoomNumber(tenant.idRoom),
       outstanding,
       paymentInfo: {
-        bankName: row?.paymentBankName || "",
-        accountName: row?.paymentAccountName || "",
-        accountNumber: row?.paymentAccountNumber || "",
-        qrImage: row?.paymentQrImage || "",
-        bankLogoUrl: row?.paymentBankLogoImage || "",
+        bankName: account?.bankName || row?.paymentBankName || "",
+        accountName: account?.accountName || row?.paymentAccountName || "",
+        accountNumber: account?.accountNumber || row?.paymentAccountNumber || "",
+        qrImage: account?.qrImage || row?.paymentQrImage || "",
+        bankLogoUrl: account?.bankLogoImage || row?.paymentBankLogoImage || "",
         // เปิดสวิตช์ EasySlip ไว้ (easySlipEnabled) และมี API key ก็เลือกจำนวนเงินเอง+ตรวจสลิปอัตโนมัติได้แล้ว
         // (endpoint /payment/qr ด้านล่าง) — ไม่จำเป็นต้องมี PromptPay ID ด้วย (บางที่ผูกบัญชีธนาคารธรรมดากับ
         // EasySlip ไว้ ไม่มี PromptPay ID ให้ใช้สร้าง QR จริง) ถ้าไม่มี PromptPay ID จะโชว์เลขบัญชีให้คัดลอกแทน
         // QR แต่ยังตรวจสลิปอัตโนมัติได้เหมือนเดิม ปิดสวิตช์ไว้หรือไม่มี API key เลยถึงจะ fallback ไปโชว์แค่
-        // QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้
+        // QR/เลขบัญชีคงที่แบบไม่ตรวจสลิปให้ — promptPayId ต้องมาจากบัญชีที่เลือกไว้จริง (คนละบัญชีอาจผูก
+        // PromptPay คนละเลขกัน) ไม่ใช่ฟิลด์เดี่ยวเก่าที่เป็นของบัญชีแรกเท่านั้น
         autoTrackingAvailable: row?.easySlipEnabled === "true" && !!row?.easySlipApiKey,
-        qrGenerationAvailable: row?.easySlipEnabled === "true" && !!(row?.easySlipApiKey && row?.paymentPromptPayId),
+        qrGenerationAvailable: row?.easySlipEnabled === "true" && !!(row?.easySlipApiKey && (account?.promptPayId || row?.paymentPromptPayId)),
       },
     };
   })
@@ -335,7 +411,11 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       return { error: "ระบบยังไม่ได้เปิดใช้งาน EasySlip กรุณาติดต่อผู้ดูแลระบบ" };
     }
     const apiKey = decryptField(row?.easySlipApiKey || "");
-    const promptPayId = row?.paymentPromptPayId || "";
+    // หลายบัญชี — สร้าง QR ด้วย PromptPay ID ของบัญชีที่ถูกกำหนดไว้สำหรับห้องนี้ (ดู resolvePaymentAccountForRoom)
+    // ไม่ใช่ฟิลด์เดี่ยวเก่าตรงๆ เพราะคนละบัญชีอาจผูก PromptPay คนละเลขกัน
+    const accounts = parsePaymentAccounts(row?.paymentAccounts);
+    const account = await resolvePaymentAccountForRoom(orgId, accounts, roomId);
+    const promptPayId = account?.promptPayId || row?.paymentPromptPayId || "";
     if (!apiKey) {
       set.status = 400;
       return { error: "ระบบยังไม่ได้ตั้งค่า EasySlip API Key กรุณาติดต่อผู้ดูแลระบบ" };

@@ -94,6 +94,8 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       },
     },
     payment: {
+      // ฟิลด์เดี่ยวเก่า — เก็บไว้เพื่อ backward-compat (โค้ดเก่า/หน้าจออื่นที่ยังอ้างอิง payment.bankName
+      // ตรงๆ) แต่ค่าที่ใช้แสดงผลจริงในหน้า Settings คือ payment.accounts ด้านล่างเท่านั้น
       bankName: r.paymentBankName || "",
       accountName: r.paymentAccountName || "",
       accountNumber: r.paymentAccountNumber || "",
@@ -102,6 +104,23 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       easySlipEnabled: r.easySlipEnabled === "true",
       easySlipApiKey: decryptField(r.easySlipApiKey || ""),
       promptPayId: r.paymentPromptPayId || "",
+      // รองรับหลายบัญชี — ถ้ายังไม่เคยตั้งค่าเลย (แถวเก่าก่อนมีฟีเจอร์นี้) synthesize บัญชีเดียวจากฟิลด์เดี่ยว
+      // เก่าให้อัตโนมัติ (mode "all" = โชว์ให้ทุกห้องเหมือนพฤติกรรมเดิมเป๊ะ) กันหน้า Settings เห็นรายการว่างเปล่า
+      // ทั้งที่จริงมีบัญชีตั้งไว้แล้วจากฟอร์มเก่า
+      accounts: j(r.paymentAccounts, [] as any[]).length > 0
+        ? j(r.paymentAccounts, [] as any[])
+        : (r.paymentBankName || r.paymentAccountNumber || r.paymentQrImage)
+          ? [{
+              id: "acct-legacy",
+              bankName: r.paymentBankName || "",
+              accountName: r.paymentAccountName || "",
+              accountNumber: r.paymentAccountNumber || "",
+              qrImage: r.paymentQrImage || "",
+              bankLogoImage: r.paymentBankLogoImage || "",
+              promptPayId: r.paymentPromptPayId || "",
+              assign: { mode: "all" },
+            }]
+          : [],
     },
     setupCompleted: r.setupCompleted === "true",
     ratesConfirmed: r.ratesConfirmed === "true",
@@ -245,14 +264,18 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       liffBookingUrl: String(b.richMenu?.liffBookingUrl ?? ""),
       contactPhone: String(b.richMenu?.contactPhone ?? ""),
       contactUrl: String(b.richMenu?.contactUrl ?? ""),
-      paymentBankName: String(b.payment?.bankName ?? ""),
-      paymentAccountName: String(b.payment?.accountName ?? ""),
-      paymentAccountNumber: String(b.payment?.accountNumber ?? ""),
-      paymentQrImage: String(b.payment?.qrImage ?? ""),
-      paymentBankLogoImage: String(b.payment?.bankLogoImage ?? ""),
+      // ฟิลด์เดี่ยวเก่า — ยังอัปเดตตามบัญชีแรกใน accounts ไว้เสมอ (เผื่อโค้ด/หน้าจอเก่าจุดไหนยังอ่านตรงๆ อยู่)
+      // ค่าจริงที่ใช้แสดงผลคือ paymentAccounts ด้านล่าง
+      paymentBankName: String(b.payment?.accounts?.[0]?.bankName ?? b.payment?.bankName ?? ""),
+      paymentAccountName: String(b.payment?.accounts?.[0]?.accountName ?? b.payment?.accountName ?? ""),
+      paymentAccountNumber: String(b.payment?.accounts?.[0]?.accountNumber ?? b.payment?.accountNumber ?? ""),
+      paymentQrImage: String(b.payment?.accounts?.[0]?.qrImage ?? b.payment?.qrImage ?? ""),
+      paymentBankLogoImage: String(b.payment?.accounts?.[0]?.bankLogoImage ?? b.payment?.bankLogoImage ?? ""),
       easySlipEnabled: b.payment?.easySlipEnabled ? "true" : "false",
       easySlipApiKey: encryptField(String(b.payment?.easySlipApiKey ?? "")),
-      paymentPromptPayId: String(b.payment?.promptPayId ?? ""),
+      paymentPromptPayId: String(b.payment?.accounts?.[0]?.promptPayId ?? b.payment?.promptPayId ?? ""),
+      // รองรับหลายบัญชี — เก็บทั้งก้อนเป็น JSON (ดู comment ที่คอลัมน์ paymentAccounts ใน schema.ts)
+      paymentAccounts: JSON.stringify(Array.isArray(b.payment?.accounts) ? b.payment.accounts : []),
       // ตั้งใจไม่เขียนทับด้วย "false" ถ้า body ไม่ได้ส่งฟิลด์นี้มา (เช่น payload จาก SettingsPage.tsx หลัง
       // ผ่านขั้นตอนตั้งค่าเริ่มต้นไปแล้ว ไม่มีฟิลด์นี้ในฟอร์มเลย) — คงค่าที่มีอยู่เดิมไว้เสมอ ต่างจากฟิลด์อื่นๆ
       // ด้านบนที่ยอมให้ "ไม่ส่งมา = false" ได้ เพราะฟิลด์นี้ตั้งใจให้เขียนได้จากจุดเดียวคือ

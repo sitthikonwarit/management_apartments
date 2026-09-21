@@ -422,7 +422,13 @@ export const appConfig = pgTable("app_config", {
   // เพื่อให้ปิดฟีเจอร์ชั่วคราวได้โดยไม่ต้องลบ API Key ทิ้ง (เช่น โควตา EasySlip หมดชั่วคราว)
   easySlipEnabled: text("easyslip_enabled").notNull().default("false"),
   easySlipApiKey: str("easyslip_api_key"),
-  paymentPromptPayId: str("payment_promptpay_id"), // เบอร์มือถือ (10 หลัก) หรือเลขบัตร ปชช. (13 หลัก) ที่ผูก PromptPay ไว้
+  paymentPromptPayId: str("payment_promptpay_id"), // เบอร์มือถือ (10 หลัก) หรือเลขบัตร ปชช. (13 หลัก) ที่ผูก PromptPay ไว้ — ฟิลด์เดี่ยวเดิม เก็บไว้เป็นค่า fallback ของ "บัญชีที่ 1" เท่านั้น ตั้งแต่รองรับหลายบัญชีแล้วให้ดูที่ paymentAccounts แทน
+  // ── รองรับหลายบัญชีรับชำระเงิน (เพิ่มทีหลัง paymentBankName ฯลฯ ด้านบน) — เก็บเป็น JSON array ของ
+  // { id, bankName, accountName, accountNumber, qrImage, bankLogoImage, promptPayId, assign } แต่ละบัญชี
+  // เลือกได้ว่าจะโชว์ให้ห้องไหนเห็น (assign.mode: "all" | "rooms" | "tower" | "floor" | "random" | "auto")
+  // ดูตรรกะเลือกบัญชีจริงที่ resolvePaymentAccountForRoom ใน routes/liff.ts — ฟิลด์ paymentBankName ฯลฯ ด้านบน
+  // ยังเก็บไว้เป็นข้อมูลเก่า/migration source เท่านั้น ไม่ได้ลบทิ้ง เผื่อองค์กรเก่าที่ยังไม่เคยกดบันทึกหน้านี้ใหม่
+  paymentAccounts: json("payment_accounts"),
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — ค่า default "false" มีผลกับ "องค์กรใหม่" เท่านั้น (แถวนี้
   // ถูกสร้างแบบ lazy ตอนเปิดหน้า Settings ครั้งแรก ดู getOrCreateConfig ใน routes/settings.ts) องค์กรเดิมที่มี
   // อยู่ก่อนฟีเจอร์นี้ถูก backfill เป็น "true" แล้วครั้งเดียว (ดู db/backfill-setup-completed.ts) เป็น false

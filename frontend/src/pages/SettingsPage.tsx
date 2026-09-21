@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { settingsApi, authApi } from "../api/client";
+import SelectRaw from "react-select";
+// react-select's default generic infers IsMulti=false — ใช้ isMulti จริงในฟอร์มเลือกห้อง/ตึก/ชั้นของบัญชี
+// รับชำระเงินหลายบัญชีด้านล่าง (PaymentAccount assign) ต้อง cast เป็น any กัน type error เวลา build เท่านั้น
+const Select = SelectRaw as any;
+import { settingsApi, authApi, roomsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
-import { useAppConfig, DEFAULT_APP_CONFIG, NAME_CHAR_DEFAULT, type AppConfig } from "../context/AppConfigContext";
+import { useAppConfig, DEFAULT_APP_CONFIG, NAME_CHAR_DEFAULT, type AppConfig, type PaymentAccount, type PaymentAccountAssignMode } from "../context/AppConfigContext";
 import { useAuth } from "../context/AuthContext";
 import { usePrivacyMode } from "../context/PrivacyModeContext";
-import CustomSelect2 from "../components/CustomSelect2";
+import CustomSelect2, { customStyles } from "../components/CustomSelect2";
 import { thaiDateOnlyString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -291,20 +295,19 @@ export default function SettingsPage() {
   const memberFileRef = useRef<HTMLInputElement>(null);
   const adminFileRef = useRef<HTMLInputElement>(null);
 
-  // ── ข้อมูลบัญชีรับชำระเงิน (แสดงในหน้า LIFF Payment) ──
-  const [paymentBankName, setPaymentBankName] = useState("");
-  const [paymentAccountName, setPaymentAccountName] = useState("");
-  const [paymentAccountNumber, setPaymentAccountNumber] = useState("");
-  const [paymentQrImage, setPaymentQrImage] = useState("");
-  const [uploadingQr, setUploadingQr] = useState(false);
-  const qrFileRef = useRef<HTMLInputElement>(null);
-  const [paymentBankLogoImage, setPaymentBankLogoImage] = useState("");
-  const [uploadingBankLogo, setUploadingBankLogo] = useState(false);
-  const bankLogoFileRef = useRef<HTMLInputElement>(null);
+  // ── ข้อมูลบัญชีรับชำระเงิน (แสดงในหน้า LIFF Payment) — รองรับหลายบัญชี เลือกได้ว่าแต่ละบัญชีจะ
+  // โชว์ให้ห้องไหนเห็น (ดู resolvePaymentAccountForRoom ฝั่ง backend routes/liff.ts) ──
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  // อัปโหลดรูป QR/โลโก้ธนาคาร "อยู่ของบัญชีไหน" — คีย์ด้วย accountId เพราะอัปโหลดได้หลายบัญชีพร้อมกัน
+  const [uploadingAccountImg, setUploadingAccountImg] = useState<Record<string, "qr" | "logo" | undefined>>({});
+  const accountQrFileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const accountLogoFileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // ห้อง/ตึกทั้งหมด — ใช้สร้างตัวเลือก "เลือกห้อง/เลือกตึก/เลือกชั้น" ตอนกำหนดว่าบัญชีไหนโชว์ให้ห้องไหนเห็น
+  const [paymentRooms, setPaymentRooms] = useState<any[]>([]);
+  const [paymentTowers, setPaymentTowers] = useState<any[]>([]);
   const [easySlipEnabled, setEasySlipEnabled] = useState(false);
   const [easySlipApiKey, setEasySlipApiKey] = useState("");
   const [easySlipApiKeyVisible, setEasySlipApiKeyVisible] = useState(false);
-  const [promptPayId, setPromptPayId] = useState("");
 
   const [logoUrl, setLogoUrl] = useState("");
   const [logoBgEnabled, setLogoBgEnabled] = useState(false);
@@ -341,6 +344,14 @@ export default function SettingsPage() {
   useEffect(() => {
     settingsApi.getAll().then((rows) => setFormulas(rows.filter((r: any) => r.type === "electric" || r.type === "water")))
       .finally(() => setLoading(false));
+  }, []);
+
+  // ห้อง/ตึกทั้งหมด — ไว้สร้างตัวเลือก "เลือกห้อง/เลือกตึก/เลือกชั้น" ตอนตั้งค่าว่าบัญชีรับชำระเงินไหนโชว์ให้
+  // ห้องไหนเห็น (ดู PaymentAccountCard ด้านล่าง) โหลดครั้งเดียวตอนเปิดหน้า ไม่ต้อง live-sync เพราะแค่ใช้
+  // ประกอบตัวเลือกในฟอร์ม ไม่ได้แสดงข้อมูลห้องแบบเรียลไทม์
+  useEffect(() => {
+    roomsApi.getAll().then(setPaymentRooms).catch(() => {});
+    roomsApi.getTowers().then(setPaymentTowers).catch(() => {});
   }, []);
 
   function reloadUsers() {
@@ -398,14 +409,9 @@ export default function SettingsPage() {
     setContactUrl(config.richMenu.contactUrl);
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
-    setPaymentBankName(config.payment.bankName);
-    setPaymentAccountName(config.payment.accountName);
-    setPaymentAccountNumber(config.payment.accountNumber);
-    setPaymentQrImage(config.payment.qrImage);
-    setPaymentBankLogoImage(config.payment.bankLogoImage);
+    setPaymentAccounts(config.payment.accounts ?? []);
     setEasySlipEnabled(config.payment.easySlipEnabled);
     setEasySlipApiKey(config.payment.easySlipApiKey);
-    setPromptPayId(config.payment.promptPayId);
     setLogoUrl(config.appIdentity.logoUrl);
     setLogoBgEnabled(config.appIdentity.logoBg.enabled);
     setLogoBgColor(config.appIdentity.logoBg.color);
@@ -503,56 +509,45 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
-  // ย่อรูป QR ให้ไม่ใหญ่เกินไปเหมือน handleLogoFile ด้านบน แต่เก็บขนาดที่ยังสแกนได้จริง (ใหญ่กว่าโลโก้มาก)
-  function handleQrFile(file: File) {
-    setUploadingQr(true);
+  // ย่อรูปแล้วเซ็ตกลับเข้าฟิลด์ของบัญชีนั้นๆ (accountId) — ใช้ร่วมกันทั้ง QR (maxSize ใหญ่กว่า ต้องยังสแกน
+  // ได้จริง) และโลโก้ธนาคาร (maxSize เล็กกว่า) แค่สลับ field/maxSize ที่ส่งเข้ามา
+  function handleAccountImageFile(accountId: string, field: "qrImage" | "bankLogoImage", maxSize: number, file: File) {
+    setUploadingAccountImg((prev) => ({ ...prev, [accountId]: field === "qrImage" ? "qr" : "logo" }));
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
         let width = img.width, height = img.height;
         if (width > height) {
-          if (width > MAX_QR_SIZE) { height *= MAX_QR_SIZE / width; width = MAX_QR_SIZE; }
+          if (width > maxSize) { height *= maxSize / width; width = maxSize; }
         } else {
-          if (height > MAX_QR_SIZE) { width *= MAX_QR_SIZE / height; height = MAX_QR_SIZE; }
+          if (height > maxSize) { width *= maxSize / height; height = maxSize; }
         }
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext("2d")!;
         ctx.clearRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
-        setPaymentQrImage(canvas.toDataURL("image/png"));
-        setUploadingQr(false);
+        const dataUrl = canvas.toDataURL("image/png");
+        setPaymentAccounts((prev) => prev.map((a) => (a.id === accountId ? { ...a, [field]: dataUrl } : a)));
+        setUploadingAccountImg((prev) => ({ ...prev, [accountId]: undefined }));
       };
       img.src = e.target?.result as string;
     };
     reader.readAsDataURL(file);
   }
 
-  // โลโก้ธนาคาร — ย่อขนาดแบบเดียวกับ handleLogoFile (โลโก้เล็ก ไม่ใช่ QR ที่ต้องสแกนได้)
-  function handleBankLogoFile(file: File) {
-    setUploadingBankLogo(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width, height = img.height;
-        if (width > height) {
-          if (width > MAX_LOGO_SIZE) { height *= MAX_LOGO_SIZE / width; width = MAX_LOGO_SIZE; }
-        } else {
-          if (height > MAX_LOGO_SIZE) { width *= MAX_LOGO_SIZE / height; height = MAX_LOGO_SIZE; }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext("2d")!;
-        ctx.clearRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        setPaymentBankLogoImage(canvas.toDataURL("image/png"));
-        setUploadingBankLogo(false);
-      };
-      img.src = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+  function addPaymentAccount() {
+    setPaymentAccounts((prev) => [...prev, {
+      id: `acct-${Date.now()}`, bankName: "", accountName: "", accountNumber: "",
+      qrImage: "", bankLogoImage: "", promptPayId: "", assign: { mode: "all" },
+    }]);
+  }
+  function updatePaymentAccount(id: string, patch: Partial<PaymentAccount>) {
+    setPaymentAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  }
+  function removePaymentAccount(id: string) {
+    setPaymentAccounts((prev) => prev.filter((a) => a.id !== id));
   }
 
   function copyLiffField(field: string, label: string, value: string) {
@@ -634,9 +629,13 @@ export default function SettingsPage() {
           contactUrl: contactUrl.trim(),
         },
         payment: {
-          bankName: paymentBankName.trim(), accountName: paymentAccountName.trim(),
-          accountNumber: paymentAccountNumber.trim(), qrImage: paymentQrImage, bankLogoImage: paymentBankLogoImage,
-          easySlipEnabled, easySlipApiKey: easySlipApiKey.trim(), promptPayId: promptPayId.trim(),
+          ...DEFAULT_APP_CONFIG.payment,
+          easySlipEnabled, easySlipApiKey: easySlipApiKey.trim(),
+          accounts: paymentAccounts.map((a) => ({
+            ...a,
+            bankName: a.bankName.trim(), accountName: a.accountName.trim(),
+            accountNumber: a.accountNumber.trim(), promptPayId: a.promptPayId.trim(),
+          })),
         },
       };
       const updated = await settingsApi.updateConfig(payload);
@@ -1073,67 +1072,150 @@ export default function SettingsPage() {
                   </div>
                 </Searchable>
 
-                <Searchable query={q} keywords="บัญชีธนาคาร โอนเงิน qr code liff payment ชำระเงิน พร้อมเพย์">
+                <Searchable query={q} keywords="บัญชีธนาคาร โอนเงิน qr code liff payment ชำระเงิน พร้อมเพย์ หลายบัญชี เลือกห้อง สุ่ม อัตโนมัติ ตึก ชั้น">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
-                    <h6 style={{ color: "#06C755", borderBottomColor: "#06C755" }}>
-                      <i className="fas fa-qrcode me-2" />ข้อมูลบัญชีรับชำระเงิน (ค่าเริ่มต้น)
-                    </h6>
+                    <div className="d-flex justify-content-between align-items-center mb-1" style={{ borderBottom: "2px solid #06C755", paddingBottom: 8 }}>
+                      <h6 className="mb-0" style={{ fontWeight: 700, color: "#06C755", border: "none", padding: 0, margin: 0 }}>
+                        <i className="fas fa-qrcode me-2" />ข้อมูลบัญชีรับชำระเงิน
+                      </h6>
+                      <button className="btn btn-sm btn-outline-success" type="button" onClick={addPaymentAccount}>
+                        <i className="fas fa-plus me-1" />เพิ่มบัญชี
+                      </button>
+                    </div>
                     <p className="text-muted small mb-3">
-                      แสดงในหน้า LIFF Payment ให้ผู้เช่าดูยอดค้างชำระและโอนเงินเอง — ถ้าตั้งค่า EasySlip ด้านล่างไว้ครบ
-                      ระบบจะสร้าง QR ระบุยอดเองอัตโนมัติแทน ใช้ข้อมูลชุดนี้เป็น QR/เลขบัญชีสำรองตอนยังไม่ได้ตั้งค่า EasySlip เท่านั้น
+                      แสดงในหน้า LIFF Payment ให้ผู้เช่าดูยอดค้างชำระและโอนเงินเอง — ถ้าตั้งค่า EasySlip ด้านล่างไว้ครบ ระบบจะสร้าง QR ระบุยอดเองอัตโนมัติแทน
+                      ใช้ข้อมูลชุดนี้เป็น QR/เลขบัญชีสำรองตอนยังไม่ได้ตั้งค่า EasySlip เท่านั้น เพิ่มได้มากกว่า 1 บัญชี แล้วเลือกได้ว่าแต่ละบัญชีจะให้ห้องไหนเห็น
                     </p>
-                    <div className="row g-4">
-                      <div className="col-md-4 col-lg-3">
-                        <label className="form-label small fw-bold">QR รับเงิน</label>
-                        <div className="p-2 rounded text-center" style={{ border: "1px solid var(--color-light)", background: "var(--color-background)" }}>
-                          <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {paymentQrImage
-                              ? <img src={paymentQrImage} alt="QR รับเงิน" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                              : <span className="text-muted small"><i className="fas fa-qrcode me-1" />ยังไม่มีรูป</span>}
-                          </div>
-                          <button className="btn btn-sm btn-outline-secondary w-100 mt-2" type="button" disabled={uploadingQr}
-                            onClick={() => qrFileRef.current?.click()}>
-                            {uploadingQr
-                              ? <><span className="spinner-border spinner-border-sm me-1" />กำลังอัปโหลด...</>
-                              : <><i className="fas fa-upload me-1" />{paymentQrImage ? "เปลี่ยนรูป" : "อัปโหลดรูป"}</>}
-                          </button>
-                          <input ref={qrFileRef} type="file" accept="image/*" style={{ display: "none" }}
-                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleQrFile(f); e.target.value = ""; }} />
-                        </div>
+
+                    {paymentAccounts.length === 0 && (
+                      <div className="text-center text-muted p-4" style={{ background: "var(--color-background)", borderRadius: "var(--border-radius-1)" }}>
+                        <i className="fas fa-qrcode fa-2x mb-2 d-block opacity-25" />ยังไม่มีบัญชีรับชำระเงิน — กด "เพิ่มบัญชี" เพื่อเริ่มตั้งค่า
                       </div>
-                      <div className="col-md-8 col-lg-9">
-                        <div className="row g-3">
-                          <div className="col-md-6">
-                            <label className="form-label small fw-bold">ธนาคาร</label>
-                            <div className="d-flex align-items-center gap-2">
-                              <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                {paymentBankLogoImage
-                                  ? <img src={paymentBankLogoImage} alt="โลโก้ธนาคาร" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                                  : <i className="fas fa-building-columns text-muted" />}
-                              </div>
-                              <input type="text" className="form-control" placeholder="เช่น ธนาคารกสิกรไทย"
-                                value={paymentBankName} onChange={(e) => setPaymentBankName(e.target.value)} />
-                              <button className="btn btn-sm btn-outline-secondary flex-shrink-0" type="button" disabled={uploadingBankLogo}
-                                title={paymentBankLogoImage ? "เปลี่ยนโลโก้ธนาคาร" : "อัปโหลดโลโก้ธนาคาร"}
-                                onClick={() => bankLogoFileRef.current?.click()}>
-                                {uploadingBankLogo ? <span className="spinner-border spinner-border-sm" /> : <i className="fas fa-upload" />}
+                    )}
+
+                    <div className="d-flex flex-column gap-3">
+                      {paymentAccounts.map((acct, idx) => {
+                        const uploading = uploadingAccountImg[acct.id];
+                        const floorOptions = Array.from(new Set(paymentRooms.map((r) => r.floor).filter(Boolean)))
+                          .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                          .map((f) => ({ value: String(f), label: `ชั้น ${f}` }));
+                        const roomOptions = paymentRooms.map((r) => ({ value: r.id, label: `ห้อง ${r.number}` }));
+                        const towerOptions = paymentTowers.map((t) => ({ value: t.id, label: t.name }));
+                        return (
+                          <div key={acct.id} className="p-3" style={{ border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)", background: "var(--color-background)" }}>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="fw-bold small text-muted">บัญชีที่ {idx + 1}{acct.bankName || acct.accountName ? ` — ${acct.bankName}${acct.accountName ? " · " + acct.accountName : ""}` : ""}</span>
+                              <button type="button" className="btn btn-sm btn-outline-danger border-0" title="ลบบัญชีนี้"
+                                onClick={() => removePaymentAccount(acct.id)}>
+                                <i className="fas fa-trash-alt" />
                               </button>
-                              <input ref={bankLogoFileRef} type="file" accept="image/*" style={{ display: "none" }}
-                                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBankLogoFile(f); e.target.value = ""; }} />
                             </div>
+                            <div className="row g-4">
+                              <div className="col-md-4 col-lg-3">
+                                <label className="form-label small fw-bold">QR รับเงิน</label>
+                                <div className="p-2 rounded text-center" style={{ border: "1px solid var(--color-light)", background: "var(--color-white)" }}>
+                                  <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    {acct.qrImage
+                                      ? <img src={acct.qrImage} alt="QR รับเงิน" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                      : <span className="text-muted small"><i className="fas fa-qrcode me-1" />ยังไม่มีรูป</span>}
+                                  </div>
+                                  <button className="btn btn-sm btn-outline-secondary w-100 mt-2" type="button" disabled={uploading === "qr"}
+                                    onClick={() => accountQrFileRefs.current[acct.id]?.click()}>
+                                    {uploading === "qr"
+                                      ? <><span className="spinner-border spinner-border-sm me-1" />กำลังอัปโหลด...</>
+                                      : <><i className="fas fa-upload me-1" />{acct.qrImage ? "เปลี่ยนรูป" : "อัปโหลดรูป"}</>}
+                                  </button>
+                                  <input ref={(el) => { accountQrFileRefs.current[acct.id] = el; }} type="file" accept="image/*" style={{ display: "none" }}
+                                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAccountImageFile(acct.id, "qrImage", MAX_QR_SIZE, f); e.target.value = ""; }} />
+                                </div>
+                              </div>
+                              <div className="col-md-8 col-lg-9">
+                                <div className="row g-3">
+                                  <div className="col-md-6">
+                                    <label className="form-label small fw-bold">ธนาคาร</label>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "1px solid var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                        {acct.bankLogoImage
+                                          ? <img src={acct.bankLogoImage} alt="โลโก้ธนาคาร" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                          : <i className="fas fa-building-columns text-muted" />}
+                                      </div>
+                                      <input type="text" className="form-control" placeholder="เช่น ธนาคารกสิกรไทย"
+                                        value={acct.bankName} onChange={(e) => updatePaymentAccount(acct.id, { bankName: e.target.value })} />
+                                      <button className="btn btn-sm btn-outline-secondary flex-shrink-0" type="button" disabled={uploading === "logo"}
+                                        title={acct.bankLogoImage ? "เปลี่ยนโลโก้ธนาคาร" : "อัปโหลดโลโก้ธนาคาร"}
+                                        onClick={() => accountLogoFileRefs.current[acct.id]?.click()}>
+                                        {uploading === "logo" ? <span className="spinner-border spinner-border-sm" /> : <i className="fas fa-upload" />}
+                                      </button>
+                                      <input ref={(el) => { accountLogoFileRefs.current[acct.id] = el; }} type="file" accept="image/*" style={{ display: "none" }}
+                                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAccountImageFile(acct.id, "bankLogoImage", MAX_LOGO_SIZE, f); e.target.value = ""; }} />
+                                    </div>
+                                  </div>
+                                  <div className="col-md-6">
+                                    <label className="form-label small fw-bold">ชื่อบัญชี</label>
+                                    <input type="text" className="form-control" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
+                                      value={acct.accountName} onChange={(e) => updatePaymentAccount(acct.id, { accountName: e.target.value })} />
+                                  </div>
+                                  <div className="col-md-6">
+                                    <label className="form-label small fw-bold">เลขบัญชี</label>
+                                    <input type="text" className="form-control" placeholder="xxx-x-xxxxx-x"
+                                      value={acct.accountNumber} onChange={(e) => updatePaymentAccount(acct.id, { accountNumber: e.target.value })} />
+                                  </div>
+                                  <div className="col-md-6">
+                                    <label className="form-label small fw-bold">PromptPay ID <span className="text-muted fw-normal">(ไม่บังคับ)</span></label>
+                                    <input type="text" className="form-control" placeholder="เบอร์มือถือ/เลขบัตร ปชช. ที่ผูก PromptPay"
+                                      value={acct.promptPayId} onChange={(e) => updatePaymentAccount(acct.id, { promptPayId: e.target.value })} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <hr className="my-3" />
+                            <label className="form-label small fw-bold mb-2">
+                              <i className="fas fa-eye me-1" />การแสดงผล — บัญชีนี้ให้ห้องไหนเห็น
+                            </label>
+                            <div className="d-flex flex-wrap gap-2 mb-2">
+                              {([
+                                { value: "all", label: "ทั้งหมด" },
+                                { value: "rooms", label: "เลือกห้อง" },
+                                { value: "tower", label: "เลือกตึก" },
+                                { value: "floor", label: "เลือกชั้น" },
+                                { value: "random", label: "สุ่ม" },
+                                { value: "auto", label: "อัตโนมัติ" },
+                              ] as { value: PaymentAccountAssignMode; label: string }[]).map((opt) => (
+                                <button key={opt.value} type="button"
+                                  className={`pcp-chip${acct.assign.mode === opt.value ? " active" : ""}`}
+                                  onClick={() => updatePaymentAccount(acct.id, { assign: { mode: opt.value } })}>
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                            {acct.assign.mode === "rooms" && (
+                              <Select isMulti styles={customStyles} options={roomOptions} noOptionsMessage={() => "ไม่พบข้อมูล"}
+                                placeholder="เลือกห้อง..." menuPortalTarget={document.body} menuPosition="fixed"
+                                value={roomOptions.filter((o) => acct.assign.roomIds?.includes(o.value))}
+                                onChange={(sel: any) => updatePaymentAccount(acct.id, { assign: { mode: "rooms", roomIds: (sel ?? []).map((s: any) => s.value) } })} />
+                            )}
+                            {acct.assign.mode === "tower" && (
+                              <Select isMulti styles={customStyles} options={towerOptions} noOptionsMessage={() => "ไม่พบข้อมูล"}
+                                placeholder="เลือกตึก..." menuPortalTarget={document.body} menuPosition="fixed"
+                                value={towerOptions.filter((o) => acct.assign.towerIds?.includes(o.value))}
+                                onChange={(sel: any) => updatePaymentAccount(acct.id, { assign: { mode: "tower", towerIds: (sel ?? []).map((s: any) => s.value) } })} />
+                            )}
+                            {acct.assign.mode === "floor" && (
+                              <Select isMulti styles={customStyles} options={floorOptions} noOptionsMessage={() => "ไม่พบข้อมูล"}
+                                placeholder="เลือกชั้น..." menuPortalTarget={document.body} menuPosition="fixed"
+                                value={floorOptions.filter((o) => acct.assign.floors?.includes(o.value))}
+                                onChange={(sel: any) => updatePaymentAccount(acct.id, { assign: { mode: "floor", floors: (sel ?? []).map((s: any) => s.value) } })} />
+                            )}
+                            {acct.assign.mode === "random" && (
+                              <div className="form-text small">สุ่มเลือกจากบัญชีที่ตั้งเป็น "สุ่ม" ทั้งหมด — ห้องเดียวกันจะได้บัญชีเดิมเสมอ (ไม่เปลี่ยนทุกครั้งที่เปิดหน้า)</div>
+                            )}
+                            {acct.assign.mode === "auto" && (
+                              <div className="form-text small">แบ่งห้องที่เหลือ (ไม่ตรงเงื่อนไขบัญชีอื่น) ให้บัญชีกลุ่ม "อัตโนมัติ" กันเองโดยระบบ — ห้องเดียวกันจะได้บัญชีเดิมเสมอ</div>
+                            )}
                           </div>
-                          <div className="col-md-6">
-                            <label className="form-label small fw-bold">ชื่อบัญชี</label>
-                            <input type="text" className="form-control" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
-                              value={paymentAccountName} onChange={(e) => setPaymentAccountName(e.target.value)} />
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label small fw-bold">เลขบัญชี</label>
-                            <input type="text" className="form-control" placeholder="xxx-x-xxxxx-x"
-                              value={paymentAccountNumber} onChange={(e) => setPaymentAccountNumber(e.target.value)} />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </Searchable>
@@ -1165,20 +1247,14 @@ export default function SettingsPage() {
                           <i className={`fas fa-eye${easySlipApiKeyVisible ? "-slash" : ""}`} />
                         </button>
                       </div>
-                      <div className="form-text small mb-2">อย่างเดียวก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (แสดงเลขบัญชีด้านบนให้คัดลอกแทน QR)</div>
-
-                      <label className="form-label small">PromptPay ID <span className="text-muted fw-normal">(ไม่บังคับ — ใส่เพิ่มถ้าอยากให้สร้าง QR สแกนจ่ายได้จริง)</span></label>
-                      <div className="input-group mb-2">
-                        <input type="text" className="form-control" placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร ปชช. 13 หลักที่ผูก PromptPay ไว้ (เว้นว่างได้ถ้าผูกแค่บัญชีธนาคารธรรมดา)"
-                          value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} />
-                      </div>
+                      <div className="form-text small mb-2">อย่างเดียวก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (แสดงเลขบัญชีด้านบนให้คัดลอกแทน QR) — PromptPay ID กรอกแยกไว้ในแต่ละบัญชีด้านบนแล้ว (ไม่บังคับ ใส่เพิ่มถ้าอยากให้บัญชีนั้นสร้าง QR สแกนจ่ายได้จริง)</div>
                     </div>
 
                     <div className="alert alert-light border small mb-0" style={{ background: "var(--color-background)" }}>
                       <strong><i className="fas fa-circle-info me-1" />วิธีใช้งาน</strong>
                       <ol className="mb-0 ps-3 mt-1">
                         <li>เปิดสวิตช์ด้านบนขวา แล้วสมัครใช้งาน EasySlip ที่ easyslip.com คัดลอก API Key มาวางในช่องด้านบน — แค่นี้ก็เปิดใช้ตรวจสลิปอัตโนมัติได้แล้ว (ผูกบัญชีธนาคารธรรมดากับ EasySlip ก็ใช้ได้ ไม่จำเป็นต้องมี PromptPay)</li>
-                        <li>ถ้าอยากให้ผู้เช่าสแกน QR จ่ายได้เลยแทนการโอนด้วยเลขบัญชี ให้กรอกเบอร์มือถือ/เลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริงในช่อง PromptPay ID ด้วย (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
+                        <li>ถ้าอยากให้ผู้เช่าสแกน QR จ่ายได้เลยแทนการโอนด้วยเลขบัญชี ให้กรอกเบอร์มือถือ/เลขบัตรประชาชนที่ผูก PromptPay ไว้รับเงินจริงในช่อง PromptPay ID ของบัญชีนั้นๆ ด้านบนด้วย (ต้องเป็นบัญชีเดียวกับที่ผูกไว้ในระบบ EasySlip)</li>
                         <li>กด "บันทึกการตั้งค่าทั้งหมด" ด้านบนสุดของหน้านี้ — หน้า LIFF Payment จะเปลี่ยนไปให้เลือกจำนวนเงินเองอัตโนมัติ</li>
                         <li>ระบบตรวจสลิปให้เฉพาะสลิปที่ส่งเข้าแชทหลังเลือกจำนวนเงินภายใน 2 ชั่วโมง และยอดต้องตรงกับที่เลือกไว้เป๊ะเท่านั้น — นอกเหนือจากนี้พนักงานยังบันทึกยอดเองได้ตามปกติ</li>
                         <li>ปิดสวิตช์เมื่อใดก็หยุดตรวจสลิปอัตโนมัติทันที กลับไปโชว์ QR/เลขบัญชีคงที่ในหน้า LIFF Payment แทน โดยไม่กระทบ API Key/PromptPay ID ที่เคยกรอกไว้</li>

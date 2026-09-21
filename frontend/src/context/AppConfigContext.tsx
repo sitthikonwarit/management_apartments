@@ -11,6 +11,27 @@ export interface AppIdentity {
   nameColors: string[];
 }
 
+// วิธีเลือกว่าบัญชีนี้จะโชว์ให้ห้องไหนเห็นในหน้า LIFF Payment — "all" (ค่าเริ่มต้น) โชว์ให้ทุกห้อง, "rooms"/
+// "tower"/"floor" เจาะจงเอง, "random"/"auto" ไม่เจาะจง แต่แบ่งกันเองในกลุ่มบัญชีที่ตั้งโหมดเดียวกันไว้ (สุ่ม/
+// หมุนแบบคงที่ต่อห้อง ดู resolvePaymentAccountForRoom ฝั่ง backend routes/liff.ts — รายละเอียดตรรกะจริงอยู่ที่นั่น)
+export type PaymentAccountAssignMode = "all" | "rooms" | "tower" | "floor" | "random" | "auto";
+export interface PaymentAccountAssign {
+  mode: PaymentAccountAssignMode;
+  roomIds?: string[];
+  towerIds?: string[];
+  floors?: string[];
+}
+export interface PaymentAccount {
+  id: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  qrImage: string;
+  bankLogoImage: string;
+  promptPayId: string;
+  assign: PaymentAccountAssign;
+}
+
 export interface AppConfig {
   // รหัสองค์กร (?org=<slug>) ไว้ต่อท้าย Endpoint URL ของ LIFF app แต่ละองค์กรใน LINE Developers Console
   // (ดู resolveOrgId ใน backend/src/routes/liff.ts) — แสดงในหน้า Settings > LINE Messaging ให้ก็อปไปใช้
@@ -57,10 +78,15 @@ export interface AppConfig {
   };
   // ข้อมูลบัญชีรับชำระเงิน — แสดงในหน้า LIFF Payment ให้ผู้เช่าโอนเงินเอง
   payment: {
+    // ฟิลด์เดี่ยวเก่า — คงไว้เพื่อ backward-compat เท่านั้น หน้า Settings/LIFF ใช้ payment.accounts ด้านล่าง
     bankName: string; accountName: string; accountNumber: string; qrImage: string; bankLogoImage: string;
     // EasySlip — สร้าง QR PromptPay ระบุยอดเอง + ตรวจสลิปอัตโนมัติ (ต้องเปิด easySlipEnabled ด้วย ไม่ใช่แค่มี
-    // API Key ถึงจะใช้งานจริง — ปิดสวิตช์ = ใช้ QR/เลขบัญชีคงที่แทนเสมอ)
+    // API Key ถึงจะใช้งานจริง — ปิดสวิตช์ = ใช้ QR/เลขบัญชีคงที่แทนเสมอ) — ตั้งค่าเดียวทั้งองค์กร ไม่แยกต่อบัญชี
+    // (API key เดียวกันใช้สร้าง QR ได้ทุกบัญชี แค่ PromptPay ID ต่างกันไปตามที่ตั้งไว้ในแต่ละบัญชี)
     easySlipEnabled: boolean; easySlipApiKey: string; promptPayId: string;
+    // รองรับหลายบัญชีรับชำระเงิน — เลือกได้ว่าแต่ละบัญชีจะโชว์ให้ห้องไหนเห็น (ดู resolvePaymentAccountForRoom
+    // ฝั่ง backend routes/liff.ts ที่ตัดสินใจจริงตอนผู้เช่าเปิดหน้า LIFF Payment)
+    accounts: PaymentAccount[];
   };
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — false = AuthenticatedShell (App.tsx) บังคับพาไปหน้า
   // wizard ตั้งค่าเริ่มต้นค้างไว้ทุก route จนกว่าจะกดปุ่ม "เริ่มใช้งานระบบ" ในขั้นสุดท้าย (ดู
@@ -106,7 +132,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },
-  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipEnabled: false, easySlipApiKey: "", promptPayId: "" },
+  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipEnabled: false, easySlipApiKey: "", promptPayId: "", accounts: [] },
   // ค่าเริ่มต้น "true" ตั้งใจ (fail open) — กันไม่ให้แอปแวบล็อกทุกคนไปหน้า Settings ระหว่างที่ยังโหลดค่าจริง
   // จาก backend ไม่เสร็จ (AuthenticatedShell เช็ค loading ของ context นี้ประกอบด้วยอยู่แล้ว แต่กันไว้อีกชั้น)
   setupCompleted: true,
