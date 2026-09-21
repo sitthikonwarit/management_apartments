@@ -306,6 +306,12 @@ export default function SettingsPage() {
   // ห้อง/ตึกทั้งหมด — ใช้สร้างตัวเลือก "เลือกห้อง/เลือกตึก/เลือกชั้น" ตอนกำหนดว่าบัญชีไหนโชว์ให้ห้องไหนเห็น
   const [paymentRooms, setPaymentRooms] = useState<any[]>([]);
   const [paymentTowers, setPaymentTowers] = useState<any[]>([]);
+  // คลังโลโก้ธนาคารจริงที่เคยอัปโหลดไว้ { [bankCode]: dataURI } — เลือกธนาคารจากลิสต์แล้วมีโลโก้จริงเก็บไว้
+  // แล้วจากบัญชีอื่น/ครั้งก่อน ดึงมาใช้อัตโนมัติแทนตราวงกลมสีที่ระบบสร้างให้ (ดู generateBankBadge)
+  const [bankLogoLibrary, setBankLogoLibrary] = useState<Record<string, string>>({});
+  // จำว่าบัญชีไหนกำลังผูกกับธนาคารรหัสอะไรอยู่ (เลือกจากลิสต์ล่าสุด) — ใช้ตอนอัปโหลดโลโก้จริงเอง จะได้รู้ว่า
+  // ต้องบันทึกเข้าคลัง bankLogoLibrary ช่องไหนด้วย (ไม่ส่งไป backend ตรงๆ เป็นแค่ state ช่วยจำในหน้านี้)
+  const [accountBankCode, setAccountBankCode] = useState<Record<string, string>>({});
   const [easySlipEnabled, setEasySlipEnabled] = useState(false);
   const [easySlipApiKey, setEasySlipApiKey] = useState("");
   const [easySlipApiKeyVisible, setEasySlipApiKeyVisible] = useState(false);
@@ -411,6 +417,7 @@ export default function SettingsPage() {
     setRichMenuImages(config.richMenu.images);
     setRichMenuIds(config.richMenu.menuIds);
     setPaymentAccounts(config.payment.accounts ?? []);
+    setBankLogoLibrary(config.payment.bankLogoLibrary ?? {});
     setEasySlipEnabled(config.payment.easySlipEnabled);
     setEasySlipApiKey(config.payment.easySlipApiKey);
     setLogoUrl(config.appIdentity.logoUrl);
@@ -531,6 +538,12 @@ export default function SettingsPage() {
         ctx.drawImage(img, 0, 0, width, height);
         const dataUrl = canvas.toDataURL("image/png");
         setPaymentAccounts((prev) => prev.map((a) => (a.id === accountId ? { ...a, [field]: dataUrl } : a)));
+        // อัปโหลดโลโก้ธนาคารเอง (ไม่ใช่ QR) และบัญชีนี้ผูกกับธนาคารจากลิสต์อยู่ — บันทึกเข้าคลังโลโก้จริงด้วย
+        // เพื่อให้บัญชีอื่นที่เลือกธนาคารเดียวกันในอนาคต (หรือแม้แต่เปลี่ยนกลับมาเลือกธนาคารนี้ใหม่) ได้ใช้
+        // โลโก้จริงอันนี้ทันทีโดยไม่ต้องอัปโหลดซ้ำ
+        if (field === "bankLogoImage" && accountBankCode[accountId]) {
+          setBankLogoLibrary((prev) => ({ ...prev, [accountBankCode[accountId]]: dataUrl }));
+        }
         setUploadingAccountImg((prev) => ({ ...prev, [accountId]: undefined }));
       };
       img.src = e.target?.result as string;
@@ -637,6 +650,7 @@ export default function SettingsPage() {
             bankName: a.bankName.trim(), accountName: a.accountName.trim(),
             accountNumber: a.accountNumber.trim(), promptPayId: a.promptPayId.trim(),
           })),
+          bankLogoLibrary,
         },
       };
       const updated = await settingsApi.updateConfig(payload);
@@ -1134,10 +1148,12 @@ export default function SettingsPage() {
                                 <div className="row g-3">
                                   <div className="col-md-6">
                                     <label className="form-label small fw-bold">ธนาคาร</label>
-                                    {/* เลือกจากลิสต์ธนาคารยอดนิยม — เลือกแล้วเติมชื่อ + สร้างโลโก้ (ตราวงกลมสีประจำ
-                                        ธนาคาร) ให้อัตโนมัติทันที ไม่ต้องหาไฟล์โลโก้มาอัปโหลดเอง (ดู generateBankBadge
-                                        ใน utils/thaiBanks.ts — ไม่ใช้โลโก้จริงของธนาคาร กันปัญหาลิขสิทธิ์/พึ่งพาไฟล์
-                                        ภายนอก) เลือกแล้วยังแก้ชื่อ/อัปโหลดโลโก้เองทับได้อีกทีด้านล่างเหมือนเดิม */}
+                                    {/* เลือกจากลิสต์ธนาคารยอดนิยม — เลือกแล้วเติมชื่อ + โลโก้ให้อัตโนมัติทันที ไม่ต้อง
+                                        หาไฟล์มาอัปโหลดเอง ถ้าเคยอัปโหลดโลโก้จริงของธนาคารนี้ไว้แล้ว (จากบัญชีอื่น/
+                                        ครั้งก่อน — ดู bankLogoLibrary) จะใช้โลโก้จริงอันนั้นเลย ไม่งั้น fallback เป็น
+                                        ตราวงกลมสีประจำธนาคารที่ระบบสร้างให้ไปก่อน (ดู generateBankBadge ใน
+                                        utils/thaiBanks.ts — ไม่ใช้โลโก้จริงของธนาคารเอง กันปัญหาลิขสิทธิ์/พึ่งพาไฟล์
+                                        ภายนอก) เลือกแล้วยังแก้ชื่อ/อัปโหลดโลโก้จริงเองทับได้อีกทีด้านล่างเหมือนเดิม */}
                                     <Select
                                       className="mb-2" styles={customStyles} isSearchable
                                       options={THAI_BANKS.map((b) => ({ value: b.code, bank: b }))}
@@ -1145,19 +1161,30 @@ export default function SettingsPage() {
                                       placeholder="เลือกจากธนาคารยอดนิยม..."
                                       noOptionsMessage={() => "ไม่พบธนาคาร"}
                                       menuPortalTarget={document.body} menuPosition="fixed"
-                                      formatOptionLabel={(o: { bank: ThaiBank }) => (
-                                        <div className="d-flex align-items-center gap-2">
-                                          <span style={{
-                                            width: 22, height: 22, borderRadius: "50%", background: o.bank.color,
-                                            color: "#fff", fontSize: 9, fontWeight: 700, flexShrink: 0,
-                                            display: "flex", alignItems: "center", justifyContent: "center",
-                                          }}>{o.bank.code.slice(0, 3)}</span>
-                                          {o.bank.name}
-                                        </div>
-                                      )}
+                                      formatOptionLabel={(o: { bank: ThaiBank }) => {
+                                        const realLogo = bankLogoLibrary[o.bank.code];
+                                        return (
+                                          <div className="d-flex align-items-center gap-2">
+                                            {realLogo ? (
+                                              <img src={realLogo} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "contain", flexShrink: 0, background: "#fff" }} />
+                                            ) : (
+                                              <span style={{
+                                                width: 22, height: 22, borderRadius: "50%", background: o.bank.color,
+                                                color: "#fff", fontSize: 9, fontWeight: 700, flexShrink: 0,
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                              }}>{o.bank.code.slice(0, 3)}</span>
+                                            )}
+                                            {o.bank.name}
+                                          </div>
+                                        );
+                                      }}
                                       onChange={(sel: any) => {
                                         if (!sel) return;
-                                        updatePaymentAccount(acct.id, { bankName: sel.bank.name, bankLogoImage: generateBankBadge(sel.bank) });
+                                        setAccountBankCode((prev) => ({ ...prev, [acct.id]: sel.bank.code }));
+                                        updatePaymentAccount(acct.id, {
+                                          bankName: sel.bank.name,
+                                          bankLogoImage: bankLogoLibrary[sel.bank.code] || generateBankBadge(sel.bank),
+                                        });
                                       }}
                                     />
                                     <div className="d-flex align-items-center gap-2">

@@ -429,6 +429,12 @@ export const appConfig = pgTable("app_config", {
   // ดูตรรกะเลือกบัญชีจริงที่ resolvePaymentAccountForRoom ใน routes/liff.ts — ฟิลด์ paymentBankName ฯลฯ ด้านบน
   // ยังเก็บไว้เป็นข้อมูลเก่า/migration source เท่านั้น ไม่ได้ลบทิ้ง เผื่อองค์กรเก่าที่ยังไม่เคยกดบันทึกหน้านี้ใหม่
   paymentAccounts: json("payment_accounts"),
+  // ── คลังโลโก้ธนาคารจริงที่เจ้าของหอพักเคยอัปโหลดไว้ — เก็บเป็น JSON { [bankCode]: dataURI } (bankCode ตรง
+  // กับ THAI_BANKS ใน frontend/src/utils/thaiBanks.ts เช่น "KBank"/"SCB") พอเลือกธนาคารจากลิสต์แล้วมีโลโก้จริง
+  // อัปโหลดไว้แล้วจากบัญชีอื่น/ครั้งก่อน จะดึงมาใช้อัตโนมัติแทนตราวงกลมสีที่ระบบสร้างให้ ไม่ต้องอัปโหลดซ้ำทุกบัญชี
+  // ที่ใช้ธนาคารเดียวกัน — ตั้งใจไม่ฝังไฟล์โลโก้จริงของธนาคารมาให้เอง (ปัญหาลิขสิทธิ์ ดู comment ที่
+  // generateBankBadge ฝั่ง frontend) ต้องให้ผู้ใช้อัปโหลดเองอย่างน้อยครั้งแรก
+  bankLogoLibrary: json("bank_logo_library"),
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — ค่า default "false" มีผลกับ "องค์กรใหม่" เท่านั้น (แถวนี้
   // ถูกสร้างแบบ lazy ตอนเปิดหน้า Settings ครั้งแรก ดู getOrCreateConfig ใน routes/settings.ts) องค์กรเดิมที่มี
   // อยู่ก่อนฟีเจอร์นี้ถูก backfill เป็น "true" แล้วครั้งเดียว (ดู db/backfill-setup-completed.ts) เป็น false

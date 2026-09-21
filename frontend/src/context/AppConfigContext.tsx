@@ -87,6 +87,9 @@ export interface AppConfig {
     // รองรับหลายบัญชีรับชำระเงิน — เลือกได้ว่าแต่ละบัญชีจะโชว์ให้ห้องไหนเห็น (ดู resolvePaymentAccountForRoom
     // ฝั่ง backend routes/liff.ts ที่ตัดสินใจจริงตอนผู้เช่าเปิดหน้า LIFF Payment)
     accounts: PaymentAccount[];
+    // คลังโลโก้ธนาคารจริงที่เคยอัปโหลดไว้ { [bankCode]: dataURI } — เลือกธนาคารจากลิสต์ยอดนิยมในหน้า Settings
+    // แล้วเคยอัปโหลดโลโก้จริงของธนาคารนั้นไว้ในบัญชีอื่นมาก่อน จะดึงมาใช้อัตโนมัติแทนตราวงกลมสีที่ระบบสร้างให้
+    bankLogoLibrary: Record<string, string>;
   };
   // องค์กรนี้ผ่านขั้นตอนตั้งค่าเริ่มต้นแล้วหรือยัง — false = AuthenticatedShell (App.tsx) บังคับพาไปหน้า
   // wizard ตั้งค่าเริ่มต้นค้างไว้ทุก route จนกว่าจะกดปุ่ม "เริ่มใช้งานระบบ" ในขั้นสุดท้าย (ดู
@@ -132,7 +135,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     images: { guest: "", member: "", admin: "" },
     menuIds: { guest: "", member: "", admin: "" },
   },
-  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipEnabled: false, easySlipApiKey: "", promptPayId: "", accounts: [] },
+  payment: { bankName: "", accountName: "", accountNumber: "", qrImage: "", bankLogoImage: "", easySlipEnabled: false, easySlipApiKey: "", promptPayId: "", accounts: [], bankLogoLibrary: {} },
   // ค่าเริ่มต้น "true" ตั้งใจ (fail open) — กันไม่ให้แอปแวบล็อกทุกคนไปหน้า Settings ระหว่างที่ยังโหลดค่าจริง
   // จาก backend ไม่เสร็จ (AuthenticatedShell เช็ค loading ของ context นี้ประกอบด้วยอยู่แล้ว แต่กันไว้อีกชั้น)
   setupCompleted: true,

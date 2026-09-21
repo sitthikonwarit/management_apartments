@@ -121,6 +121,8 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
               assign: { mode: "all" },
             }]
           : [],
+      // คลังโลโก้ธนาคารจริงที่เคยอัปโหลดไว้ (ดู comment ที่คอลัมน์ bankLogoLibrary ใน schema.ts)
+      bankLogoLibrary: j(r.bankLogoLibrary, {} as Record<string, string>),
     },
     setupCompleted: r.setupCompleted === "true",
     ratesConfirmed: r.ratesConfirmed === "true",
@@ -276,6 +278,10 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       paymentPromptPayId: String(b.payment?.accounts?.[0]?.promptPayId ?? b.payment?.promptPayId ?? ""),
       // รองรับหลายบัญชี — เก็บทั้งก้อนเป็น JSON (ดู comment ที่คอลัมน์ paymentAccounts ใน schema.ts)
       paymentAccounts: JSON.stringify(Array.isArray(b.payment?.accounts) ? b.payment.accounts : []),
+      // คลังโลโก้ธนาคารจริงที่อัปโหลดไว้ (ดู comment ที่คอลัมน์ bankLogoLibrary ใน schema.ts)
+      bankLogoLibrary: JSON.stringify(
+        b.payment?.bankLogoLibrary && typeof b.payment.bankLogoLibrary === "object" ? b.payment.bankLogoLibrary : {}
+      ),
       // ตั้งใจไม่เขียนทับด้วย "false" ถ้า body ไม่ได้ส่งฟิลด์นี้มา (เช่น payload จาก SettingsPage.tsx หลัง
       // ผ่านขั้นตอนตั้งค่าเริ่มต้นไปแล้ว ไม่มีฟิลด์นี้ในฟอร์มเลย) — คงค่าที่มีอยู่เดิมไว้เสมอ ต่างจากฟิลด์อื่นๆ
       // ด้านบนที่ยอมให้ "ไม่ส่งมา = false" ได้ เพราะฟิลด์นี้ตั้งใจให้เขียนได้จากจุดเดียวคือ
