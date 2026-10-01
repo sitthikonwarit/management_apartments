@@ -1967,6 +1967,72 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+interface DashboardStats {
+  totalRooms: number; paid: number; unpaid: number; overdue: number;
+  totalRent: number; totalWater: number; waterUnits: number; totalElectric: number; electricUnits: number;
+  totalOther: number; totalFine: number; totalOutstandingCarried: number;
+  totalFixed: number; totalExpected: number; totalMissing: number; collectRate: number;
+  receivedThisMonth: number; receivedOldMonthsClosedThisMonth: number; netReceived: number;
+}
+
+// ── พิมพ์สรุปภาพรวม Dashboard ของเดือนที่กำลังเปิดดูอยู่ — เอาไว้ติดบอร์ด/ส่งเจ้าของหอให้ดูภาพรวมเร็วๆ โดย
+// ไม่ต้องพิมพ์บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน
+// App.css) โชว์เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none)
+function DashboardSummaryPrint({ stats, config, monthYear }: { stats: DashboardStats; config: AppConfig; monthYear: string }) {
+  const rows: { label: string; value: string }[][] = [
+    [
+      { label: "ห้องทั้งหมด", value: String(stats.totalRooms) },
+      { label: "จ่ายแล้ว", value: String(stats.paid) },
+      { label: "รอชำระ", value: String(stats.unpaid) },
+      { label: "เกินกำหนด", value: String(stats.overdue) },
+    ],
+    [
+      { label: "ค่าเช่า", value: `${money(stats.totalRent)} บาท` },
+      { label: `ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`, value: `${money(stats.totalWater)} บาท` },
+      { label: `ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`, value: `${money(stats.totalElectric)} บาท` },
+      { label: "อื่นๆ", value: `${money(stats.totalOther)} บาท` },
+      { label: "ค่าปรับ", value: `${money(stats.totalFine)} บาท` },
+      { label: "ค้างชำระยกมา", value: `${money(stats.totalOutstandingCarried)} บาท` },
+    ],
+    [
+      { label: "ยอดเรียกเก็บทั้งหมด (คงที่)", value: `${money(stats.totalFixed)} บาท` },
+      { label: "คาดการณ์รายรับ", value: `${money(stats.totalExpected)} บาท` },
+      { label: "ขาดอีก", value: `${money(stats.totalMissing)} บาท` },
+    ],
+    [
+      { label: `รับแล้วเดือน (${stats.collectRate.toFixed(0)}%)`, value: `${money(stats.receivedThisMonth)} บาท` },
+      { label: "เดือนเก่าที่ปิดในเดือนนี้", value: `${money(stats.receivedOldMonthsClosedThisMonth)} บาท` },
+      { label: "ยอดรับแล้วสุทธิ", value: `${money(stats.netReceived)} บาท` },
+    ],
+  ];
+  return (
+    <div className="bill-print-only">
+      <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
+      <div className="bill-record-page">
+        <div className="bill-record-title">
+          สรุปภาพรวมบิล {config.appIdentity.nameText || ""} — ประจำเดือน {monthYearLabel(monthYear)}
+          <span className="bill-record-title-sub">พิมพ์เมื่อ {thaiDateTimeString(new Date())}</span>
+        </div>
+        <table className="bill-record-table" style={{ maxWidth: 480 }}>
+          <tbody>
+            {rows.flatMap((group, gi) => [
+              ...group.map((r, i) => (
+                <tr key={`${gi}-${i}`}>
+                  <td>{r.label}</td>
+                  <td className="amt" style={{ fontWeight: 700 }}>{r.value}</td>
+                </tr>
+              )),
+              gi < rows.length - 1 ? (
+                <tr key={`spacer-${gi}`}><td colSpan={2} style={{ border: "none", padding: "4px 0" }} /></tr>
+              ) : null,
+            ])}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenants, otherDetailMode = "price", totalDisplayMode = "net" }: {
   entries: PrintEntry[]; config: AppConfig; mode: "slip" | "record"; colKeys: Set<string>;
   lineKeys: Set<string>; layout: BillSlipLayout; tenants: any[];
@@ -2937,6 +3003,7 @@ export default function BillsPage() {
   const [printColKeys, setPrintColKeys] = useState<Set<string>>(BILL_RECORD_DEFAULT_COLS);
   const [printOtherDetailMode, setPrintOtherDetailMode] = useState<"price" | "detail">("price");
   const [printTotalDisplayMode, setPrintTotalDisplayMode] = useState<"net" | "excludeSpecialDiscount">("net");
+  const [printDashboard, setPrintDashboard] = useState(false);
   const [printSlipLineKeys, setPrintSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [printSlipLayout, setPrintSlipLayout] = useState<BillSlipLayout>("auto");
   const [printConfigPool, setPrintConfigPool] = useState<{ item: BillItem; monthYear: string }[] | null>(null);
@@ -3785,6 +3852,12 @@ export default function BillsPage() {
               <button className="btn btn-outline-primary btn-sm" onClick={() => setShowSpecialDiscounts(true)}>
                 <i className="fas fa-percent me-1" />ส่วนลดพิเศษ
               </button>
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => {
+                setPrintDashboard(true);
+                setTimeout(() => window.print(), 80);
+              }}>
+                <i className="fas fa-print me-1" />พิมพ์สรุป Dashboard
+              </button>
               {editingId && (
                 <button className="btn btn-outline-danger btn-sm" onClick={() => setConfirmDeleteGroup({ id: editingId, monthYear: editingMonthYear, data: billData })}>
                   <i className="fas fa-trash-alt me-1" />ลบบิลเดือนนี้
@@ -4345,6 +4418,10 @@ export default function BillsPage() {
         <BillPrintOnly entries={printPayload} config={config} mode={printMode} colKeys={printColKeys}
           lineKeys={printSlipLineKeys} layout={printSlipLayout} tenants={tenants} otherDetailMode={printOtherDetailMode}
           totalDisplayMode={printTotalDisplayMode} />
+      )}
+
+      {printDashboard && (
+        <DashboardSummaryPrint stats={stats} config={config} monthYear={editingMonthYear} />
       )}
 
       {payingIndex !== null && billData[payingIndex] && (
