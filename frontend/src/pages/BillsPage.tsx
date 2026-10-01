@@ -1967,6 +1967,42 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+// ── คำนวณสถิติสรุปของบิลกลุ่มหนึ่ง (เดือนหนึ่งๆ) — แยกออกมาจาก useMemo เดิมในตัว BillsPage ให้เรียกใช้ซ้ำได้
+// ทั้งจากเดือนที่กำลังเปิดแก้ไขอยู่ (billData สด) และจากเดือนอื่นในหน้ารายการที่ยังไม่ได้เปิดเข้าไป (ดูปุ่ม
+// "พิมพ์สรุป Dashboard" ใน BillGroupTableView) ซึ่งใช้ b.data ดิบจาก state ตรงๆ แทน
+function computeBillStats(billData: BillItem[], payments: any[], monthYear: string): DashboardStats {
+  const totalRooms = billData.length;
+  const paid = billData.filter((i) => i.status === "paid").length;
+  const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
+  const unpaid = totalRooms - paid - overdue;
+  const totalExpected = billData.reduce((s, i) => s + i.total, 0);
+  const totalFixed = billData.reduce((s, i) => s + (i.originalTotal ?? i.total), 0);
+  const activePayments = payments.filter((p) => !p?.data?.cancelled);
+  const receivedThisMonth = activePayments
+    .filter((p) => p?.data?.monthYear === monthYear && !p?.data?.settledViaMonthYear)
+    .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
+  const receivedOldMonthsClosedThisMonth = activePayments
+    .filter((p) => p?.data?.settledViaMonthYear === monthYear)
+    .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
+  const netReceived = receivedThisMonth + receivedOldMonthsClosedThisMonth;
+  const totalMissing = totalExpected - receivedThisMonth;
+  const totalRent = billData.reduce((s, i) => s + (Number(i.priceRoom) || 0), 0);
+  const totalWater = billData.reduce((s, i) => s + (Number(i.priceWater) || 0), 0);
+  const totalElectric = billData.reduce((s, i) => s + (Number(i.priceElectric) || 0), 0);
+  const totalFine = billData.reduce((s, i) => s + (Number(i.fineAmount) || 0), 0);
+  const totalOutstandingCarried = billData.reduce((s, i) => s + (Number(i.outstandingAmount) || 0), 0);
+  const totalOther = totalExpected - totalRent - totalWater - totalElectric - totalFine - totalOutstandingCarried;
+  const waterUnits = billData.reduce((s, i) => s + (Number(i.meterWater?.unit) || 0), 0);
+  const electricUnits = billData.reduce((s, i) => s + (Number(i.meterElectric?.unit) || 0), 0);
+  const collectRate = totalExpected > 0 ? (receivedThisMonth / totalExpected) * 100 : 0;
+  return {
+    totalRooms, paid, overdue, unpaid, totalExpected, totalFixed,
+    receivedThisMonth, receivedOldMonthsClosedThisMonth, netReceived, totalMissing,
+    totalRent, totalWater, totalElectric, totalFine, totalOutstandingCarried, totalOther,
+    waterUnits, electricUnits, collectRate,
+  };
+}
+
 interface DashboardStats {
   totalRooms: number; paid: number; unpaid: number; overdue: number;
   totalRent: number; totalWater: number; waterUnits: number; totalElectric: number; electricUnits: number;
@@ -2593,12 +2629,13 @@ const BILL_GROUP_TABLE_COLS: BillColDef[] = [
   { key: "actions",   header: "จัดการ",       visible: true, pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
 
-function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
+function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint, onPrintDashboard }: {
   data: BillGroup[];
   onEdit: (g: BillGroup) => void;
   onPrint: (g: BillGroup) => void;
   onDelete: (g: BillGroup) => void;
   onBulkPrint: (groups: BillGroup[]) => void;
+  onPrintDashboard: (g: BillGroup) => void;
 }) {
   const [cols, setCols, moveColumn] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -2698,6 +2735,9 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
             </button>
             <button type="button" className="btn btn-sm btn-secondary" title="พิมพ์ทั้งเดือน" onClick={(e) => { e.stopPropagation(); onPrint(g); }}>
               <i className="fas fa-print" />
+            </button>
+            <button type="button" className="btn btn-sm btn-outline-secondary" title="พิมพ์สรุป Dashboard" onClick={(e) => { e.stopPropagation(); onPrintDashboard(g); }}>
+              <i className="fas fa-chart-pie" />
             </button>
             <button type="button" className="btn btn-sm btn-danger" title="ลบ" onClick={(e) => { e.stopPropagation(); onDelete(g); }}>
               <i className="fas fa-trash-alt" />
@@ -3069,6 +3109,25 @@ export default function BillsPage() {
   const [printOtherDetailMode, setPrintOtherDetailMode] = useState<"price" | "detail">("price");
   const [printTotalDisplayMode, setPrintTotalDisplayMode] = useState<"net" | "excludeSpecialDiscount">("net");
   const [printDashboard, setPrintDashboard] = useState(false);
+  // ข้อมูลสำหรับพิมพ์สรุป Dashboard — แยกจาก stats/editingMonthYear ตรงๆ เพราะกดพิมพ์ได้ทั้งจากเดือนที่
+  // เปิดแก้ไขอยู่ (ใช้ billData สด) และจากเดือนอื่นในหน้ารายการที่ยังไม่ได้เปิดเข้าไปเลย (ใช้ b.data ดิบ)
+  const [printDashboardStats, setPrintDashboardStats] = useState<DashboardStats | null>(null);
+  const [printDashboardMonthYear, setPrintDashboardMonthYear] = useState("");
+
+  function printDashboardForCurrentMonth() {
+    setPrintDashboardStats(stats);
+    setPrintDashboardMonthYear(editingMonthYear);
+    setPrintDashboard(true);
+    setTimeout(() => window.print(), 80);
+  }
+
+  function printDashboardForGroup(group: BillGroup) {
+    const items = (group.data ?? []).map(normalizeBillItem);
+    setPrintDashboardStats(computeBillStats(items, payments, group.monthYear));
+    setPrintDashboardMonthYear(group.monthYear);
+    setPrintDashboard(true);
+    setTimeout(() => window.print(), 80);
+  }
   const [printSlipLineKeys, setPrintSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [printSlipLayout, setPrintSlipLayout] = useState<BillSlipLayout>("auto");
   const [printConfigPool, setPrintConfigPool] = useState<{ item: BillItem; monthYear: string }[] | null>(null);
@@ -3738,51 +3797,10 @@ export default function BillsPage() {
       });
   }, [billData, search, statusFilter]);
 
-  const stats = useMemo(() => {
-    const totalRooms = billData.length;
-    const paid = billData.filter((i) => i.status === "paid").length;
-    const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
-    const unpaid = totalRooms - paid - overdue;
-    const totalExpected = billData.reduce((s, i) => s + i.total, 0);
-    // ยอดเรียกเก็บทั้งหมดแบบตายตัว — ใช้ originalTotal (แช่แข็งไว้ตอนสร้างบิลครั้งแรก) ไม่ใช่ total ปัจจุบัน
-    // จึงไม่ลดลงตามการหักค่าปรับ/เพิ่มส่วนลดทีหลังตอนบันทึกการชำระเงิน ต่างจาก totalExpected ด้านบนที่เป็น
-    // "คาดการณ์รายรับ" ซึ่งตั้งใจให้ขยับตามการปรับจริงเสมอ
-    const totalFixed = billData.reduce((s, i) => s + (i.originalTotal ?? i.total), 0);
-    // เงินที่ "รับแล้วจริง" ต้องอิงจากรายการชำระ (payments) ไม่ใช่แค่ status ของบิล เพราะการปิดยอดเดือนเก่า
-    // พร้อมกับจ่ายเดือนนี้ (ดู handleConfirmPayment) ทำให้เงินก้อนเดียวถูกบันทึกแยกเป็นรายการของ "เดือนเก่า"
-    // เอง (monthYear = เดือนเก่า) แม้จะรับเงินจริงตอนเปิดดูเดือนนี้อยู่ก็ตาม — ถ้าใช้ billData.status เดือนนี้
-    // เดือนเดียวจะไม่เห็นเงินก้อนนั้นเลย ทำให้ยอดดูเหมือนเงินหาย/ลอย ทั้งที่จริงถูกเก็บไปแล้ว
-    const activePayments = payments.filter((p) => !p?.data?.cancelled);
-    // ไม่นับรายการที่ settledViaMonthYear มีค่า (เงินก้อนนี้ถูกรับจริงตอนเปิดดู/จ่ายเดือนอื่นอยู่ ไม่ใช่เดือนนี้
-    // เอง — แค่ monthYear ของรายการตรงกับเดือนนี้เพราะเป็นยอดค้างของเดือนนี้ที่ถูกไปปิดพร้อมเดือนอื่น) กันไม่ให้
-    // ยอดเดียวกันถูกนับซ้ำสองที่ ทั้งใน "รับแล้วเดือน" ของเดือนนี้เอง และ "เดือนเก่าที่ปิดในเดือนนี้" ของเดือนที่
-    // ไปปิดให้จริง — ให้นับเป็นของเดือนที่ปิดให้เท่านั้น (ดู receivedOldMonthsClosedThisMonth ด้านล่าง)
-    const receivedThisMonth = activePayments
-      .filter((p) => p?.data?.monthYear === editingMonthYear && !p?.data?.settledViaMonthYear)
-      .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
-    const receivedOldMonthsClosedThisMonth = activePayments
-      .filter((p) => p?.data?.settledViaMonthYear === editingMonthYear)
-      .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
-    const netReceived = receivedThisMonth + receivedOldMonthsClosedThisMonth;
-    const totalMissing = totalExpected - receivedThisMonth;
-    // แยกยอดตามประเภทค่าใช้จ่าย — "อื่นๆ" คือส่วนที่เหลือหลังหักค่าปรับ/ยอดค้างชำระยกมาออกไปแล้ว
-    // (เช่น ค่ารถ/แท็ก/รายการเพิ่มเติม - ส่วนลด)
-    const totalRent = billData.reduce((s, i) => s + (Number(i.priceRoom) || 0), 0);
-    const totalWater = billData.reduce((s, i) => s + (Number(i.priceWater) || 0), 0);
-    const totalElectric = billData.reduce((s, i) => s + (Number(i.priceElectric) || 0), 0);
-    const totalFine = billData.reduce((s, i) => s + (Number(i.fineAmount) || 0), 0);
-    const totalOutstandingCarried = billData.reduce((s, i) => s + (Number(i.outstandingAmount) || 0), 0);
-    const totalOther = totalExpected - totalRent - totalWater - totalElectric - totalFine - totalOutstandingCarried;
-    const waterUnits = billData.reduce((s, i) => s + (Number(i.meterWater?.unit) || 0), 0);
-    const electricUnits = billData.reduce((s, i) => s + (Number(i.meterElectric?.unit) || 0), 0);
-    const collectRate = totalExpected > 0 ? (receivedThisMonth / totalExpected) * 100 : 0;
-    return {
-      totalRooms, paid, overdue, unpaid, totalExpected, totalFixed,
-      receivedThisMonth, receivedOldMonthsClosedThisMonth, netReceived, totalMissing,
-      totalRent, totalWater, totalElectric, totalFine, totalOutstandingCarried, totalOther,
-      waterUnits, electricUnits, collectRate,
-    };
-  }, [billData, payments, editingMonthYear]);
+  const stats = useMemo(
+    () => computeBillStats(billData, payments, editingMonthYear),
+    [billData, payments, editingMonthYear]
+  );
 
   return (
     <>
@@ -3830,6 +3848,7 @@ export default function BillsPage() {
               onPrint={(g) => openPrintConfig(g.data.map((item) => ({ item, monthYear: g.monthYear })))}
               onDelete={(g) => setConfirmDeleteGroup(g)}
               onBulkPrint={(groups) => openPrintConfig(groups.flatMap((g) => g.data.map((item) => ({ item, monthYear: g.monthYear }))))}
+              onPrintDashboard={printDashboardForGroup}
             />
           ) : groupViewMode === "grid" ? (
             sortedBills.length === 0 ? (
@@ -3917,10 +3936,7 @@ export default function BillsPage() {
               <button className="btn btn-outline-primary btn-sm" onClick={() => setShowSpecialDiscounts(true)}>
                 <i className="fas fa-percent me-1" />ส่วนลดพิเศษ
               </button>
-              <button className="btn btn-outline-secondary btn-sm" onClick={() => {
-                setPrintDashboard(true);
-                setTimeout(() => window.print(), 80);
-              }}>
+              <button className="btn btn-outline-secondary btn-sm" onClick={printDashboardForCurrentMonth}>
                 <i className="fas fa-print me-1" />พิมพ์สรุป Dashboard
               </button>
               {editingId && (
@@ -4485,8 +4501,8 @@ export default function BillsPage() {
           totalDisplayMode={printTotalDisplayMode} />
       )}
 
-      {printDashboard && (
-        <DashboardSummaryPrint stats={stats} config={config} monthYear={editingMonthYear} />
+      {printDashboard && printDashboardStats && (
+        <DashboardSummaryPrint stats={printDashboardStats} config={config} monthYear={printDashboardMonthYear} />
       )}
 
       {payingIndex !== null && billData[payingIndex] && (
