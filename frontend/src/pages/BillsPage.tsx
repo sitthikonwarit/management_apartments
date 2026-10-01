@@ -2543,7 +2543,6 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const [roomPickerOpen, setRoomPickerOpen] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [roomTowerFilter, setRoomTowerFilter] = useState<string[]>([]);
   const activeTowers = towers.filter((t: any) => t.isActive !== false);
@@ -2563,9 +2562,6 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
     return matchSearch && matchTower;
   });
   const allFilteredSelected = filteredRooms.length > 0 && filteredRooms.every((r) => roomIds.includes(r.id));
-  const selectedRoomLabel = roomIds.length === 0
-    ? "เลือกห้อง..."
-    : `เลือกแล้ว ${roomIds.length} ห้อง — ${roomList.filter((r) => roomIds.includes(r.id)).map((r) => r.number).slice(0, 4).join(", ")}${roomIds.length > 4 ? ", ..." : ""}`;
 
   function resetForm() {
     setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setError("");
@@ -2606,7 +2602,7 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
 
   return (
     <div className="confirm-overlay" onClick={onClose}>
-      <div className="confirm-dialog" style={{ maxWidth: 560, width: "94%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+      <div className="confirm-dialog" style={{ maxWidth: 820, width: "96%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
         <div className="d-flex justify-content-between align-items-center mb-3">
           <h6 className="mb-0"><i className="fas fa-percent me-2 text-primary" />ส่วนลดพิเศษเฉพาะห้อง</h6>
           <button className="btn-close" onClick={onClose} />
@@ -2638,95 +2634,89 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
 
         <hr className="my-2" />
         <label className="form-label small fw-bold mb-2">{editingId ? "แก้ไขส่วนลด" : "เพิ่มส่วนลดใหม่"}</label>
-        <div className="row g-2 mb-2">
-          <div className="col-12">
-            <input type="text" className="form-control" placeholder="ชื่อส่วนลด เช่น ส่วนลดพนักงาน"
-              value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="row g-3 mb-2">
+          <div className="col-md-6">
+            <div className="row g-2">
+              <div className="col-12">
+                <input type="text" className="form-control" placeholder="ชื่อส่วนลด เช่น ส่วนลดพนักงาน"
+                  value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="col-6">
+                <select className="form-select" value={type} onChange={(e) => setType(e.target.value as "fixed" | "percent")}>
+                  <option value="fixed">จำนวนเงิน (บาท)</option>
+                  <option value="percent">เปอร์เซ็นต์ (%)</option>
+                </select>
+              </div>
+              <div className="col-6">
+                <input type="number" min={0} className="form-control" placeholder={type === "percent" ? "เช่น 10" : "เช่น 500"}
+                  value={value} onChange={(e) => setValue(e.target.value)} />
+              </div>
+              <div className="col-12">
+                <label className="form-label small mb-1">วันหมดอายุ <span className="text-muted fw-normal">(ไม่ระบุ = ไม่มีวันหมดอายุ)</span></label>
+                <ThaiDatePicker value={expiryDate} onChange={setExpiryDate} />
+              </div>
+            </div>
           </div>
-          <div className="col-6">
-            <select className="form-select" value={type} onChange={(e) => setType(e.target.value as "fixed" | "percent")}>
-              <option value="fixed">จำนวนเงิน (บาท)</option>
-              <option value="percent">เปอร์เซ็นต์ (%)</option>
-            </select>
-          </div>
-          <div className="col-6">
-            <input type="number" min={0} className="form-control" placeholder={type === "percent" ? "เช่น 10" : "เช่น 500"}
-              value={value} onChange={(e) => setValue(e.target.value)} />
-          </div>
-          <div className="col-12" style={{ position: "relative" }}>
-            <label className="form-label small mb-1">ห้องที่ใช้ส่วนลดนี้</label>
-            <button type="button" className="form-select text-start" onClick={() => setRoomPickerOpen((v) => !v)}
-              style={{ color: roomIds.length === 0 ? "var(--color-dark-variant)" : "var(--color-dark)" }}>
-              {selectedRoomLabel}
-            </button>
-            {roomPickerOpen && (
-              <>
-                <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={() => setRoomPickerOpen(false)} />
-                <div className="print-config-panel" style={{
-                  position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 1401,
-                  background: "var(--color-white)", border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)",
-                  boxShadow: "var(--box-shadow)", padding: 10, maxHeight: 360,
-                }}>
-                  <div className="print-config-search">
-                    <i className="fas fa-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-dark-variant)", fontSize: "0.8rem", pointerEvents: "none" }} />
-                    <input type="text" className="form-control form-control-sm" style={{ paddingLeft: 30, fontSize: "0.85rem" }}
-                      placeholder="ค้นหาเลขห้อง หรือชื่อผู้เช่า..." value={roomSearch} onChange={(e) => setRoomSearch(e.target.value)} />
-                  </div>
+          <div className="col-md-6">
+            <label className="form-label small mb-1">ห้องที่ใช้ส่วนลดนี้ {roomIds.length > 0 && <span className="text-muted fw-normal">({roomIds.length} ห้อง)</span>}</label>
+            <div className="print-config-panel" style={{
+              background: "var(--color-background)", border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)",
+              padding: 10,
+            }}>
+              <div className="print-config-search">
+                <i className="fas fa-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-dark-variant)", fontSize: "0.8rem", pointerEvents: "none" }} />
+                <input type="text" className="form-control form-control-sm" style={{ paddingLeft: 30, fontSize: "0.85rem" }}
+                  placeholder="ค้นหาเลขห้อง หรือชื่อผู้เช่า..." value={roomSearch} onChange={(e) => setRoomSearch(e.target.value)} />
+              </div>
 
-                  {activeTowers.length > 1 && (
-                    <div style={{ display: "flex", gap: 6, margin: "8px 0", flexWrap: "wrap" }}>
-                      {activeTowers.map((tw: any) => {
-                        const active = roomTowerFilter.includes(tw.id);
-                        return (
-                          <button key={tw.id} type="button" className={`pcp-chip${active ? " active" : ""}`}
-                            onClick={() => setRoomTowerFilter((prev) => prev.includes(tw.id) ? prev.filter((id) => id !== tw.id) : [...prev, tw.id])}>
-                            <i className="fas fa-building me-1" style={{ fontSize: "0.7em" }} />{tw.name}
-                          </button>
-                        );
-                      })}
-                      {roomTowerFilter.length > 0 && (
-                        <button type="button" className="pcp-chip" onClick={() => setRoomTowerFilter([])}><i className="fas fa-times me-1" />ล้างตึก</button>
-                      )}
-                    </div>
+              {activeTowers.length > 1 && (
+                <div style={{ display: "flex", gap: 6, margin: "8px 0", flexWrap: "wrap" }}>
+                  {activeTowers.map((tw: any) => {
+                    const active = roomTowerFilter.includes(tw.id);
+                    return (
+                      <button key={tw.id} type="button" className={`pcp-chip${active ? " active" : ""}`}
+                        onClick={() => setRoomTowerFilter((prev) => prev.includes(tw.id) ? prev.filter((id) => id !== tw.id) : [...prev, tw.id])}>
+                        <i className="fas fa-building me-1" style={{ fontSize: "0.7em" }} />{tw.name}
+                      </button>
+                    );
+                  })}
+                  {roomTowerFilter.length > 0 && (
+                    <button type="button" className="pcp-chip" onClick={() => setRoomTowerFilter([])}><i className="fas fa-times me-1" />ล้างตึก</button>
                   )}
-
-                  {filteredRooms.length > 0 && (
-                    <label className="print-config-check-row" style={{ marginTop: 6, marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid var(--color-light)" }}>
-                      <input type="checkbox" className="print-config-checkbox" checked={allFilteredSelected}
-                        onChange={(e) => {
-                          const next = new Set(roomIds);
-                          filteredRooms.forEach((r) => { e.target.checked ? next.add(r.id) : next.delete(r.id); });
-                          setRoomIds([...next]);
-                        }} />
-                      <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--color-dark-variant)" }}>เลือกทั้งหมดที่กรอง ({filteredRooms.length} ห้อง)</span>
-                    </label>
-                  )}
-
-                  <div className="nicescrollbar" style={{ overflowY: "auto", maxHeight: 220 }}>
-                    {filteredRooms.length === 0 ? (
-                      <div style={{ textAlign: "center", color: "var(--color-dark-variant)", padding: "20px 0", fontSize: "0.85rem" }}>
-                        <i className="fas fa-search me-2" />ไม่พบห้องที่ตรงกัน
-                      </div>
-                    ) : filteredRooms.map((r) => (
-                      <label key={r.id} className="print-config-room-row">
-                        <input type="checkbox" className="print-config-checkbox" checked={roomIds.includes(r.id)}
-                          onChange={(e) => {
-                            const next = new Set(roomIds);
-                            e.target.checked ? next.add(r.id) : next.delete(r.id);
-                            setRoomIds([...next]);
-                          }} />
-                        <span className="pcr-room-num">{r.number}</span>
-                        {r.tenantName ? <span className="pcr-name">{r.tenantName}</span> : <span className="pcr-vacant"><i className="fas fa-door-open me-1" />ว่าง</span>}
-                      </label>
-                    ))}
-                  </div>
                 </div>
-              </>
-            )}
-          </div>
-          <div className="col-12">
-            <label className="form-label small mb-1">วันหมดอายุ <span className="text-muted fw-normal">(ไม่ระบุ = ไม่มีวันหมดอายุ)</span></label>
-            <ThaiDatePicker value={expiryDate} onChange={setExpiryDate} />
+              )}
+
+              {filteredRooms.length > 0 && (
+                <label className="print-config-check-row" style={{ marginTop: 6, marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid var(--color-light)" }}>
+                  <input type="checkbox" className="print-config-checkbox" checked={allFilteredSelected}
+                    onChange={(e) => {
+                      const next = new Set(roomIds);
+                      filteredRooms.forEach((r) => { e.target.checked ? next.add(r.id) : next.delete(r.id); });
+                      setRoomIds([...next]);
+                    }} />
+                  <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--color-dark-variant)" }}>เลือกทั้งหมดที่กรอง ({filteredRooms.length} ห้อง)</span>
+                </label>
+              )}
+
+              <div className="nicescrollbar" style={{ overflowY: "auto", maxHeight: 190 }}>
+                {filteredRooms.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "var(--color-dark-variant)", padding: "20px 0", fontSize: "0.85rem" }}>
+                    <i className="fas fa-search me-2" />ไม่พบห้องที่ตรงกัน
+                  </div>
+                ) : filteredRooms.map((r) => (
+                  <label key={r.id} className="print-config-room-row">
+                    <input type="checkbox" className="print-config-checkbox" checked={roomIds.includes(r.id)}
+                      onChange={(e) => {
+                        const next = new Set(roomIds);
+                        e.target.checked ? next.add(r.id) : next.delete(r.id);
+                        setRoomIds([...next]);
+                      }} />
+                    <span className="pcr-room-num">{r.number}</span>
+                    {r.tenantName ? <span className="pcr-name">{r.tenantName}</span> : <span className="pcr-vacant"><i className="fas fa-door-open me-1" />ว่าง</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         {error && <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{error}</div>}
