@@ -2126,23 +2126,19 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
       }
       case "outstanding": {
         if (!(item.outstandingAmount > 0)) return "-";
-        // ยอดของแต่ละเดือนที่ยกมา (item.outstandingItems) เป็นค่าที่ "แช่แข็ง" ไว้ตอนสร้างบิลเดือนนี้ ถ้าหลังจาก
-        // นั้นมีการจ่ายบางส่วนของเดือนเก่านั้นเพิ่ม (ดู applyPartialOutstandingPayment ใน handleConfirmPayment)
-        // ยอดแช่แข็งจะไม่ลดตาม ทำให้เห็นยอดค้างเท่าเดิมทั้งที่รับเงินไปแล้วบางส่วน — คำนวณยอดคงเหลือจริงสดๆ จาก
-        // บิลต้นทางของเดือนนั้นแทน (total - outstandingAmount ของตัวมันเอง - paidAmount ปัจจุบัน) เหมือนสูตรใน
-        // getOutstandingBalance ถ้าหาบิลต้นทางไม่เจอ (ข้อมูลเก่า/ถูกลบ) ค่อย fallback ไปใช้ยอดแช่แข็งเดิม
-        const chips = (item.outstandingItems.length > 0
+        // ยอดของแต่ละเดือนที่ยกมา (item.outstandingItems) เป็นค่าที่ "แช่แข็ง" ไว้ตอนสร้างบิลเดือนนี้ — โชว์
+        // ยอดเต็มเดิมเสมอไม่ว่าจะจ่ายไปแล้วบางส่วนหรือไม่ (เป็นบันทึกยอดตอนออกบิล ไม่ใช่ยอดคงเหลือสดๆ) ส่วนยอดที่
+        // รับมาแล้วจริงของเดือนนั้น ไปโชว์ที่คอลัมน์ "รับชำระแล้ว" แทน (ดู case "received" ด้านล่าง) — เปลี่ยนสี
+        // เป็นเขียวเมื่อยอดก้อนนี้ถูกปิด/จ่ายครบแล้วเท่านั้น ยังไม่ครบ (แม้จ่ายมาบางส่วน) ยังเป็นสีแดงเหมือนเดิม
+        const chips = item.outstandingItems.length > 0
           ? item.outstandingItems.map((o) => {
               const group = allBills.find((b) => b.monthYear === o.monthYear);
               const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
-              const liveAmount = roomBill
-                ? Math.max(0, (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0) - (Number(roomBill.paidAmount) || 0))
-                : o.amount;
-              const cleared = item.status === "paid" || liveAmount <= 0.005;
-              return { label: monthYearLabel(o.monthYear), amount: cleared ? o.amount : liveAmount, cleared };
+              const cleared = item.status === "paid"
+                || (!!roomBill && (roomBill.status === "paid" || (Number(roomBill.paidAmount) || 0) >= (Number(roomBill.total) || 0) - 0.005));
+              return { label: monthYearLabel(o.monthYear), amount: o.amount, cleared };
             })
-          : [{ label: "ยอดยกมา", amount: item.outstandingAmount, cleared: item.status === "paid" }]
-        );
+          : [{ label: "ยอดยกมา", amount: item.outstandingAmount, cleared: item.status === "paid" }];
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
             {chips.map((c, i) => (
@@ -2156,14 +2152,27 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
       case "ownMonth": return money(Math.max(0, item.total - (item.outstandingAmount || 0)));
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
       case "received": {
+        // ชิปของเดือนนี้เอง (item.paidAmount) + ชิปของเดือนเก่าที่ยกมา (item.outstandingItems) เดือนไหนที่มีการ
+        // รับเงินไปแล้วจริง (roomBill.paidAmount > 0 ของบิลต้นทางเดือนนั้น) ไม่ว่าจะปิดครบหรือจ่ายมาแค่บางส่วน —
+        // ให้เห็นว่าเงินที่รับมาไปลงเดือนไหนบ้าง แทนที่จะไปลดยอด "ค้างชำระ" ของเดือนนั้นในคอลัมน์อื่น (ดู case
+        // "outstanding" ด้านบน ที่ตั้งใจคงยอดแช่แข็งเดิมไว้เป็นบันทึกตอนออกบิล)
+        const chips: { label: string; amount: number; cleared: boolean }[] = [];
         const paid = Number(item.paidAmount) || 0;
-        if (paid <= 0) return "-";
-        const chipColor = paid >= item.total - 0.005 ? "#198754" : "#ffc107";
+        if (paid > 0) chips.push({ label: monthYearLabel(monthYear), amount: paid, cleared: paid >= item.total - 0.005 });
+        for (const o of item.outstandingItems) {
+          const group = allBills.find((b) => b.monthYear === o.monthYear);
+          const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
+          const oldPaid = Number(roomBill?.paidAmount) || 0;
+          if (oldPaid > 0) chips.push({ label: monthYearLabel(o.monthYear), amount: oldPaid, cleared: roomBill?.status === "paid" || oldPaid >= (Number(roomBill?.total) || 0) - 0.005 });
+        }
+        if (chips.length === 0) return "-";
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
-            <span className="bill-tag-chip" style={{ "--tag-color": chipColor } as React.CSSProperties}>
-              <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{monthYearLabel(monthYear)} ({money(paid)})
-            </span>
+            {chips.map((c, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": c.cleared ? "#198754" : "#ffc107" } as React.CSSProperties}>
+                <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{c.label} ({money(c.amount)})
+              </span>
+            ))}
           </div>
         );
       }
