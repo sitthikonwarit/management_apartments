@@ -178,7 +178,19 @@ function renderBillRecordCell(col: BillRecordColDef, entry: PrintEntry, config: 
     case "water": return money(item.priceWater);
     case "electric": return money(item.priceElectric);
     case "other": return money(otherChargesTotal(item));
-    case "outstanding": return item.outstandingAmount > 0 && item.status !== "paid" ? money(item.outstandingAmount) : "-";
+    case "outstanding": {
+      if (!(item.outstandingAmount > 0) || item.status === "paid") return "-";
+      // บอกด้วยว่าค้างของเดือนไหนบ้าง (ยอดค้างอาจยกมาจากหลายเดือนติดกันพร้อมกันได้) ไม่ใช่โชว์แค่ยอดรวมเฉยๆ
+      // เหมือนคอลัมน์ค้างชำระในตารางบิลแบบ interactive (ดู case "outstanding" ใน renderCell ด้านล่าง)
+      if (item.outstandingItems.length === 0) return money(item.outstandingAmount);
+      return (
+        <>
+          {item.outstandingItems.map((o, i) => (
+            <div key={i}>{monthYearLabel(o.monthYear)} ({money(o.amount)})</div>
+          ))}
+        </>
+      );
+    }
     case "fine": return item.fineAmount > 0 ? money(item.fineAmount) : "-";
     case "total": {
       if (isSplitRow) {
