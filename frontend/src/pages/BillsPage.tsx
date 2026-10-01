@@ -1718,6 +1718,27 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
           </div>
         )}
 
+        {mode === "record" && (colKeys.has("other") || colKeys.has("total")) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 20px", borderBottom: "1px solid var(--color-light)", flexShrink: 0 }}>
+            {colKeys.has("other") && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--color-dark-variant)", flexShrink: 0 }}><i className="fas fa-layer-group me-1" />คอลัมน์ "อื่นๆ (รวม)":</span>
+                <button type="button" className={`pcp-chip${otherDetailMode === "price" ? " active" : ""}`} onClick={() => setOtherDetailMode("price")}>ราคาอย่างเดียว</button>
+                <button type="button" className={`pcp-chip${otherDetailMode === "detail" ? " active" : ""}`} onClick={() => setOtherDetailMode("detail")}>ราคา + รายละเอียด</button>
+              </div>
+            )}
+            {colKeys.has("total") && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--color-dark-variant)", flexShrink: 0 }}><i className="fas fa-coins me-1" />คอลัมน์ "รวมสุทธิ":</span>
+                <button type="button" className={`pcp-chip${totalDisplayMode === "net" ? " active" : ""}`} onClick={() => setTotalDisplayMode("net")}
+                  title="โชว์ยอดปัจจุบัน รวมส่วนลดพิเศษที่ยังไม่หมดอายุ">ยอดปัจจุบัน (รวมส่วนลดพิเศษ)</button>
+                <button type="button" className={`pcp-chip${totalDisplayMode === "excludeSpecialDiscount" ? " active" : ""}`} onClick={() => setTotalDisplayMode("excludeSpecialDiscount")}
+                  title="โชว์ยอดเต็ม ราวกับไม่มีส่วนลดพิเศษนั้น (เผื่อดูว่าจะเก็บเท่าไหร่หลังหมดอายุ)">ยอดเต็มหลังส่วนลดหมดอายุ</button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="print-config-body">
           {mode === "record" && (
             <>
@@ -1737,36 +1758,17 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                         {grp.label}
                       </div>
                       {BILL_RECORD_COLS.filter((c) => grp.keys.includes(c.key)).map((col) => (
-                        <div key={col.key}>
-                          <label className="print-config-check-row">
-                            <input type="checkbox" className="print-config-checkbox"
-                              checked={colKeys.has(col.key)}
-                              onChange={(e) => {
-                                const next = new Set(colKeys);
-                                e.target.checked ? next.add(col.key) : next.delete(col.key);
-                                setColKeys(next);
-                              }}
-                            />
-                            <span>{col.header}</span>
-                          </label>
-                          {/* ตัวเลือกรูปแบบการแสดงผลของคอลัมน์นี้ — วางแทรกในลิสต์ที่เลื่อนได้เลย (ไม่ใช่กล่อง
-                              แยกแปะไว้นอกพื้นที่เลื่อน) กันแผงแคบๆ โดนตัวเลือกพวกนี้แย่งพื้นที่จนลิสต์เช็คบ็อกซ์
-                              เหลือที่โชว์แค่ 1-2 แถว (บั๊กเดิม) */}
-                          {col.key === "other" && colKeys.has("other") && (
-                            <select className="form-select form-select-sm" style={{ fontSize: "0.72rem", marginBottom: 6 }}
-                              value={otherDetailMode} onChange={(e) => setOtherDetailMode(e.target.value as "price" | "detail")}>
-                              <option value="price">อื่นๆ (รวม): ราคาอย่างเดียว</option>
-                              <option value="detail">อื่นๆ (รวม): ราคา + รายละเอียด</option>
-                            </select>
-                          )}
-                          {col.key === "total" && colKeys.has("total") && (
-                            <select className="form-select form-select-sm" style={{ fontSize: "0.72rem", marginBottom: 6 }}
-                              value={totalDisplayMode} onChange={(e) => setTotalDisplayMode(e.target.value as "net" | "excludeSpecialDiscount")}>
-                              <option value="net">รวมสุทธิ: ยอดปัจจุบัน (รวมส่วนลดพิเศษ)</option>
-                              <option value="excludeSpecialDiscount">รวมสุทธิ: ยอดเต็มหลังส่วนลดหมดอายุ</option>
-                            </select>
-                          )}
-                        </div>
+                        <label key={col.key} className="print-config-check-row">
+                          <input type="checkbox" className="print-config-checkbox"
+                            checked={colKeys.has(col.key)}
+                            onChange={(e) => {
+                              const next = new Set(colKeys);
+                              e.target.checked ? next.add(col.key) : next.delete(col.key);
+                              setColKeys(next);
+                            }}
+                          />
+                          <span>{col.header}</span>
+                        </label>
                       ))}
                     </div>
                   ))}
