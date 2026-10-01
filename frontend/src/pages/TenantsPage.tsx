@@ -450,7 +450,7 @@ function TenantDetailView({
           {/* Line Connect */}
           <div className="line-connect-item">
             <i className="fas fa-link" style={{ color: tenant.lineUserId ? "#06C755" : "#ccc" }} />
-            <div>
+            <div className="flex-grow-1">
               <div className="label" style={{ fontSize: "0.85rem", color: "#6c757d" }}>Line Connect</div>
               <div className="value">
                 {tenant.lineUserId
@@ -458,6 +458,12 @@ function TenantDetailView({
                   : <span className="badge bg-secondary">ยังไม่เชื่อมต่อ</span>}
               </div>
             </div>
+            {tenant.lineUserId && (
+              <button type="button" className="btn btn-sm btn-outline-success ms-auto"
+                onClick={() => navigate("/chat", { state: { openLineUserId: tenant.lineUserId } })}>
+                <i className="fab fa-line me-1" />คุยแชท
+              </button>
+            )}
           </div>
         </div>
 
@@ -545,6 +551,16 @@ function TenantDetailView({
                       {cr.lineId && <><i className="fab fa-line me-1 text-success" /><PrivacyMask value={cr.lineId} /></>}
                     </small>
                   </div>
+                  {cr.lineId && (
+                    <button
+                      className="btn btn-sm btn-outline-success"
+                      style={{ padding: "2px 8px", fontSize: "0.75rem" }}
+                      onClick={() => navigate("/chat", { state: { openLineUserId: cr.lineId } })}
+                      title="คุยแชท"
+                    >
+                      <i className="fab fa-line" />
+                    </button>
+                  )}
                   <button
                     className="co-resident-remove"
                     onClick={() => handleRemoveCoResident(i)}
