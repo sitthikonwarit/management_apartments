@@ -1901,6 +1901,7 @@ const BILL_TABLE_COLS: BillColDef[] = [
   { key: "tenantTag",   header: "Tag ผู้เช่า",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "discount",    header: "ส่วนลด",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "other",       header: "อื่นๆ",       visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "fine",        header: "ค่าปรับ",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "outstanding", header: "ค้างชำระ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "ownMonth",    header: "ยอดเดือนนี้",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "total",       header: "รวมสุทธิ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
@@ -1997,7 +1998,7 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
   const selectAllRef = useRef<HTMLInputElement>(null);
   const { widths, startResize } = useColumnWidths("bills-room", {
     checkbox: 40, room: 90, tenant: 160, priceRoom: 100, water: 100,
-    electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, outstanding: 130,
+    electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, fine: 130, outstanding: 130,
     ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
   });
   const { ordered: rowOrdered, moveRow } = useRowOrder("bills-room", data, (d) => String(d.item.roomId), isFiltered);
@@ -2124,6 +2125,16 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
             {money(customTotal)}
             <div className="text-muted" style={{ fontSize: 11 }}>{item.customItems.map((c) => c.name).join(", ")}</div>
           </>
+        );
+      }
+      case "fine": {
+        if (!(item.fineAmount > 0)) return "-";
+        return (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            <span className="bill-tag-chip" style={{ "--tag-color": item.status === "paid" ? "#198754" : "#dc3545" } as React.CSSProperties}>
+              <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{monthYearLabel(monthYear)} ({money(item.fineAmount)})
+            </span>
+          </div>
         );
       }
       case "outstanding": {
