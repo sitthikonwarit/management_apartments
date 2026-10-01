@@ -233,14 +233,25 @@ function dueDateLabel(overdue: AppConfig["overdue"] | undefined) {
 }
 
 // ── รายการประวัติการชำระ พร้อมปุ่มยกเลิกรายยอด — ใช้ร่วมกันทั้งป็อปอัพจ่ายเงินและหน้ารายละเอียดบิล ──
-function PaymentHistoryList({ history, paidAmount, onCancel }: {
-  history: any[]; paidAmount: number;
+function PaymentHistoryList({ history, onCancel }: {
+  history: any[];
   onCancel: (p: any, reason: string) => Promise<void>;
 }) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<any | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  // ยอด "ชำระไปแล้วรวม" ต้องรวมจากรายการที่เห็นในลิสต์นี้เองเท่านั้น (ไม่นับที่ยกเลิกแล้ว) ไม่ใช่ item.paidAmount
+  // ของบิลเดือนที่กำลังแก้ไข เพราะรายการในลิสต์อาจเป็นยอดที่จ่ายไปปิดยอดค้างของเดือนอื่นทั้งหมด (ไม่ได้ลง
+  // paidAmount ของเดือนนี้เลยสักบาท — ดู handleConfirmPayment/includeCurrentMonth) ถ้าใช้ item.paidAmount
+  // จะโชว์ 0 ทั้งที่ลิสต์ด้านบนมีรายการจ่ายจริงอยู่ ทำให้ดูเหมือนยอดที่จ่ายไปแล้วหายไป
+  const totalPaid = history.reduce((sum, p) => {
+    if (p.data?.cancelled) return sum;
+    const linkedOld: { amount: number }[] = Array.isArray(p.data?.linkedOldMonthPayments) ? p.data.linkedOldMonthPayments : [];
+    const linkedOldTotal = linkedOld.reduce((s: number, l: any) => s + (Number(l?.amount) || 0), 0);
+    return sum + (Number(p.data?.amount) || 0) + linkedOldTotal;
+  }, 0);
 
   async function doCancel(p: any) {
     setCancellingId(p.id);
@@ -314,7 +325,7 @@ function PaymentHistoryList({ history, paidAmount, onCancel }: {
         })}
         <div className="payment-history-row payment-history-sum">
           <span>ชำระไปแล้วรวม</span>
-          <span className="amt">{money(paidAmount)} ฿</span>
+          <span className="amt">{money(totalPaid)} ฿</span>
         </div>
       </div>
 
@@ -545,7 +556,7 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
             ) : (
               <>
                 <label className="form-label small fw-bold mb-1">ประวัติการชำระที่ผ่านมา (จากยอดเต็ม {money(item.total)} ฿)</label>
-                <PaymentHistoryList history={history} paidAmount={item.paidAmount} onCancel={onCancelPayment} />
+                <PaymentHistoryList history={history} onCancel={onCancelPayment} />
               </>
             )}
           </div>
@@ -980,7 +991,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               <div className="card mb-3 shadow-sm border-0">
                 <div className="card-body">
                   <h6 className="text-secondary mb-2"><i className="fas fa-receipt me-2" />ประวัติการชำระ (จากยอดเต็ม {money(item.total)} ฿)</h6>
-                  <PaymentHistoryList history={paymentHistory} paidAmount={item.paidAmount} onCancel={onCancelPayment} />
+                  <PaymentHistoryList history={paymentHistory} onCancel={onCancelPayment} />
                 </div>
               </div>
             )}
