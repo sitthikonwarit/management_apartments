@@ -39,7 +39,13 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export default function LiffPaymentPage() {
   // รหัสองค์กร (?org=<slug>) จาก Endpoint URL ของ LIFF app นี้เอง — ดูคอมเมนต์เดียวกันใน LiffLoginPage.tsx
-  const org = new URLSearchParams(window.location.search).get("org") || undefined;
+  // ต้องจับค่าไว้ "ครั้งเดียว" ตอน mount ด้วย useState lazy initializer ห้ามคำนวณจาก window.location.search
+  // สดๆ ทุก render เหมือนเดิม (บั๊ก) เพราะหน้านี้เปิดจากลิงก์บิลที่แนบ billId/roomId มาด้วย แล้วมีโค้ดด้านล่าง
+  // (deep-link auto-open "จ่ายงวดนี้") ที่เรียก window.history.replaceState(null, "", pathname) ล้าง query
+  // string ทั้งหมดออกจาก URL ทิ้งไป (รวม ?org= ด้วย) — ถ้าคำนวณ org สดทุกครั้ง พอ re-render หลังจากนั้น org จะ
+  // กลายเป็น undefined ทันที ทำให้ action ที่เกิดทีหลัง (เช่นกด "ยืนยันจำนวนเงิน"/"สร้าง QR") resolve องค์กรไม่ได้
+  // (ได้ 503 "ระบบยังไม่พร้อมใช้งาน") ทั้งที่ตอนโหลดหน้าแรกสุด/ดึงข้อมูลบิลยังทำงานถูกต้องอยู่
+  const [org] = useState(() => new URLSearchParams(window.location.search).get("org") || undefined);
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [tenantName, setTenantName] = useState("");
