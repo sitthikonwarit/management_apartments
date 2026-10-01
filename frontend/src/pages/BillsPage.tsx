@@ -2126,23 +2126,27 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
       }
       case "outstanding": {
         if (!(item.outstandingAmount > 0)) return "-";
-        // ยอดค้างยกมายังโชว์ให้เห็นเสมอ — เปลี่ยนเป็นสีเขียวเมื่อยอดก้อนนี้ถูกปิด/จ่ายครบแล้ว (บิลเดือนนี้จ่ายครบ
-        // หรือบิลต้นทางของเดือนที่ยกมาถูกปิดยอดไปแล้วเอง) ถ้ายังค้างจริงอยู่ให้เป็นสีแดงตามเดิม
-        const { settledAmount } = item.outstandingItems.length > 0
-          ? reconcileOutstandingItems(allBills, item.roomId, item.tenantId, item.tenantName, item.outstandingItems)
-          : { settledAmount: 0 };
-        const cleared = item.status === "paid" || settledAmount >= item.outstandingAmount - 0.005;
-        const chipColor = cleared ? "#198754" : "#dc3545";
-        // แสดงเป็น chip แยกต่อเดือนที่มายอดค้าง (ทรงเดียวกับ Tag ห้อง/Tag ผู้เช่า/ส่วนลด) แทนตัวเลขก้อนเดียว
-        // + รายชื่อเดือนแบบ text — ข้อมูลเก่าก่อนมีระบบ outstandingItems (breakdown รายเดือน) ไม่มี list นี้
-        // เลย ตกกลับไปโชว์ chip เดียวไม่ระบุเดือน กันพังกับบิลเก่า
-        const chips = item.outstandingItems.length > 0
-          ? item.outstandingItems.map((o) => ({ label: monthYearLabel(o.monthYear), amount: o.amount }))
-          : [{ label: "ยอดยกมา", amount: item.outstandingAmount }];
+        // ยอดของแต่ละเดือนที่ยกมา (item.outstandingItems) เป็นค่าที่ "แช่แข็ง" ไว้ตอนสร้างบิลเดือนนี้ ถ้าหลังจาก
+        // นั้นมีการจ่ายบางส่วนของเดือนเก่านั้นเพิ่ม (ดู applyPartialOutstandingPayment ใน handleConfirmPayment)
+        // ยอดแช่แข็งจะไม่ลดตาม ทำให้เห็นยอดค้างเท่าเดิมทั้งที่รับเงินไปแล้วบางส่วน — คำนวณยอดคงเหลือจริงสดๆ จาก
+        // บิลต้นทางของเดือนนั้นแทน (total - outstandingAmount ของตัวมันเอง - paidAmount ปัจจุบัน) เหมือนสูตรใน
+        // getOutstandingBalance ถ้าหาบิลต้นทางไม่เจอ (ข้อมูลเก่า/ถูกลบ) ค่อย fallback ไปใช้ยอดแช่แข็งเดิม
+        const chips = (item.outstandingItems.length > 0
+          ? item.outstandingItems.map((o) => {
+              const group = allBills.find((b) => b.monthYear === o.monthYear);
+              const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
+              const liveAmount = roomBill
+                ? Math.max(0, (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0) - (Number(roomBill.paidAmount) || 0))
+                : o.amount;
+              const cleared = item.status === "paid" || liveAmount <= 0.005;
+              return { label: monthYearLabel(o.monthYear), amount: cleared ? o.amount : liveAmount, cleared };
+            })
+          : [{ label: "ยอดยกมา", amount: item.outstandingAmount, cleared: item.status === "paid" }]
+        );
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
             {chips.map((c, i) => (
-              <span key={i} className="bill-tag-chip" style={{ "--tag-color": chipColor } as React.CSSProperties}>
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": c.cleared ? "#198754" : "#dc3545" } as React.CSSProperties}>
                 <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{c.label} ({money(c.amount)})
               </span>
             ))}
