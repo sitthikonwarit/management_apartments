@@ -2095,7 +2095,7 @@ function DashPrintTile({ icon, color, label, value }: { icon: string; color: str
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, border: "1px solid #ddd", borderRadius: 8,
-      padding: "10px 12px", flex: "1 1 220px", minWidth: 0,
+      padding: "10px 12px", minWidth: 0,
     }}>
       <div style={{
         width: 36, height: 36, borderRadius: 9, flexShrink: 0, border: `1.5px solid ${color}`,
@@ -2127,7 +2127,7 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore, secti
     { label: "ค้างชำระยกมา", value: stats.totalOutstandingCarried, color: "#e83e8c" },
   ];
   return (
-      <div className="bill-record-page" style={{ maxWidth: 760, ...(pageBreakBefore ? { pageBreakBefore: "always" } : {}) }}>
+      <div className="bill-record-page" style={pageBreakBefore ? { pageBreakBefore: "always" } : undefined}>
         <div className="bill-record-title">
           สรุปภาพรวมบิล {config.appIdentity.nameText || ""} — ประจำเดือน {monthYearLabel(monthYear)}
           <span className="bill-record-title-sub">พิมพ์เมื่อ {thaiDateTimeString(new Date())}</span>
@@ -2138,7 +2138,7 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore, secti
             <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 6px" }}>
               สถานะห้อง
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
               <DashPrintTile icon="fa-door-open" color="#6c757d" label="ห้องทั้งหมด" value={String(stats.totalRooms)} />
               <DashPrintTile icon="fa-check-circle" color="#1B9C85" label="จ่ายแล้ว" value={String(stats.paid)} />
               <DashPrintTile icon="fa-clock" color="#fd7e14" label="รอชำระ" value={String(stats.unpaid)} />
@@ -2152,7 +2152,7 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore, secti
             <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "16px 0 6px" }}>
               แยกตามประเภทค่าใช้จ่าย
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
               <DashPrintTile icon="fa-home" color="#6C9BCF" label="ค่าเช่า" value={`${money(stats.totalRent)} บาท`} />
               <DashPrintTile icon="fa-tint" color="#0dcaf0" label={`ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalWater)} บาท`} />
               <DashPrintTile icon="fa-bolt" color="#fd7e14" label={`ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalElectric)} บาท`} />
@@ -2186,7 +2186,7 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore, secti
             <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 6px" }}>
               ยอดเรียกเก็บ
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
               <DashPrintTile icon="fa-lock" color="#777" label="ยอดเรียกเก็บทั้งหมด (คงที่)" value={`${money(stats.totalFixed)} บาท`} />
               <DashPrintTile icon="fa-chart-line" color="#6C9BCF" label="คาดการณ์รายรับ" value={`${money(stats.totalExpected)} บาท`} />
               <DashPrintTile icon="fa-triangle-exclamation" color="#dc3545" label="ขาดอีก" value={`${money(stats.totalMissing)} บาท`} />
