@@ -357,10 +357,9 @@ function isPastDueDate(monthYear: string, day: number): boolean {
 
 // ── ค่าปรับล่าช้า ──────────────────────────────────────────────────────────────
 export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue"] | undefined, monthYear: string) {
-  item.fineAmount = 0;
   item.isOverdue = false;
   item.overdueDays = 0;
-  if (item.status === "paid") return;
+  if (item.status === "paid") { item.fineAmount = 0; return; }
 
   const mode = item.fineOverride?.mode ?? "auto";
 
@@ -377,7 +376,7 @@ export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue
     return true;
   })();
 
-  if (mode === "off") return; // ปิดค่าปรับเฉพาะบิลใบนี้
+  if (mode === "off") { item.fineAmount = 0; return; } // ปิดค่าปรับเฉพาะบิลใบนี้
 
   if (mode === "manual") {
     const amt = Math.max(0, Number(item.fineOverride?.amount) || 0);
@@ -386,7 +385,15 @@ export function calculateOverdueFine(item: BillItem, overdue: AppConfig["overdue
   }
 
   // auto — คิดอัตโนมัติตามกติกา ต่อเมื่อเลยวันครบกำหนดจริงเท่านั้น
-  if (!pastDue || !overdue?.enabled) return;
+  if (!pastDue || !overdue?.enabled) { item.fineAmount = 0; return; }
+
+  // จ่ายครบทุกอย่างแล้ว (ค่าเช่า/น้ำ/ไฟ/รถ/Tag/รายการอื่นๆ/ยอดค้างยกมา หักส่วนลดแล้ว) เหลือแต่ค่าปรับที่ยัง
+  // ไม่ครบ — แช่แข็งค่าปรับไว้เท่าที่เป็นอยู่ตอนนี้ ไม่คำนวณเพิ่มตามจำนวนวันที่ผ่านไปอีก แม้สถานะบิลจะยังเป็น
+  // "ค้างชำระ" อยู่ก็ตาม (ไม่งั้นค่าปรับจะโตไม่มีที่สิ้นสุดทุกวันที่ผ่านไป ทั้งที่ผู้เช่าจ่ายทุกอย่างที่เรียกเก็บ
+  // จริงครบแล้ว) ถ้าต้องการเก็บเพิ่มให้พนักงานปรับเองผ่าน fineOverride แทน
+  const principal = calcItemTotal({ ...item, fineAmount: 0 });
+  if ((Number(item.paidAmount) || 0) >= principal - 0.005) return; // คงค่า item.fineAmount เดิมไว้ ไม่แตะ
+
   const rawFine = overdue.type === "fixed"
     ? (Number(overdue.amount) || 0)
     : item.overdueDays * (Number(overdue.amount) || 0);
