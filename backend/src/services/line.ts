@@ -913,11 +913,11 @@ export async function sendBillLineForRoom(orgId: string, billId: string, roomId:
     log.detail = `ส่งไม่สำเร็จ: ${e?.message ?? "Unknown error"}`;
   }
 
-  let coOk = 0;
+  const coSentUids: string[] = [];
   for (const uid of coLineUserIds) {
     try {
       await pushLineMessage(settings.token, uid, [message]);
-      coOk++;
+      coSentUids.push(uid);
     } catch {
       // ผู้ร่วมพักส่งไม่สำเร็จเป็นเรื่องรอง ไม่ทำให้ทั้งรายการล้มเหลว แค่รายงานจำนวนที่ส่งได้จริงใน detail
     }
@@ -925,13 +925,21 @@ export async function sendBillLineForRoom(orgId: string, billId: string, roomId:
 
   if (mainOk) {
     log.detail = `ส่งบิลทาง LINE สำเร็จ (${method === "auto" ? "อัตโนมัติ" : "ส่งเอง"})`
-      + (coLineUserIds.length > 0 ? ` — ผู้ร่วมพักอาศัย ${coOk}/${coLineUserIds.length} คน` : "");
+      + (coLineUserIds.length > 0 ? ` — ผู้ร่วมพักอาศัย ${coSentUids.length}/${coLineUserIds.length} คน` : "");
 
     const snapshot = buildChatBillSnapshot(item, billRow.monthYear, settings);
     await logOutboundChatMessage(
       orgId, lineUserId, String(item.tenantId ?? ""), "bill", JSON.stringify(snapshot),
       log.by || "พนักงาน"
     );
+    // ผู้ร่วมพักอาศัยที่ส่งสำเร็จ — ต้องบันทึกลงแชทของแต่ละคนด้วยเหมือนผู้ทำสัญญาหลัก ไม่งั้นแม้จะส่งถึง LINE
+    // จริงแล้ว แชทของเว็บเราจะไม่มีบทสนทนา/ประวัติของคนนั้นเลย (ไม่ขึ้นในรายชื่อหน้าแชทให้กดดูย้อนหลังได้)
+    for (const uid of coSentUids) {
+      await logOutboundChatMessage(
+        orgId, uid, String(item.tenantId ?? ""), "bill", JSON.stringify(snapshot),
+        log.by || "พนักงาน"
+      );
+    }
   }
 
   if (!Array.isArray(item.sendLogs)) item.sendLogs = [];

@@ -147,9 +147,24 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       const tenantId = [...msgs].reverse().find((m) => m.tenantId)?.tenantId || "";
       const tenant = tenantId ? tenantMap.get(tenantId) : undefined;
       const room = tenant?.idRoom ? roomMap.get(tenant.idRoom) : undefined;
-      const displayName = tenant
-        ? `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim()
-        : [...msgs].reverse().find((m) => m.senderName)?.senderName || "ไม่ทราบชื่อ";
+      // tenantId ที่ผูกกับข้อความ เป็นของ "ผู้ทำสัญญาหลัก" เสมอ แม้บทสนทนานี้จะเป็นของผู้ร่วมพักอาศัยคนหนึ่งก็ตาม
+      // (ดู logOutboundChatMessage ใน services/line.ts — ตอนส่งบิลให้ผู้ร่วมพักอาศัย ส่ง tenantId ของผู้ทำสัญญา
+      // หลักไปด้วยเสมอ เพื่อให้ยังหาห้อง/ลิงก์ไปโปรไฟล์ผู้เช่าที่ถูกต้องได้) ถ้า lineUserId ของบทสนทนานี้ไม่ตรง
+      // กับ tenant.lineUserId แปลว่าเป็นผู้ร่วมพักอาศัย ต้องหาชื่อจริงจาก tenant.coResidents แทน ไม่งั้นจะโชว์
+      // ชื่อผู้ทำสัญญาหลักผิดคนในรายชื่อสนทนา
+      let displayName: string;
+      if (!tenant) {
+        displayName = [...msgs].reverse().find((m) => m.senderName)?.senderName || "ไม่ทราบชื่อ";
+      } else if ((tenant.lineUserId ?? "").trim() === lineUserId) {
+        displayName = `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim();
+      } else {
+        let coResidents: any[] = [];
+        try { coResidents = tenant.coResidents ? JSON.parse(tenant.coResidents) : []; } catch {}
+        const co = Array.isArray(coResidents) ? coResidents.find((c: any) => String(c?.lineId ?? "").trim() === lineUserId) : undefined;
+        displayName = co?.name
+          ? `คุณ ${co.name} (ผู้ร่วมพักห้อง ${room?.number ?? tenant.idRoom ?? ""})`
+          : `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim();
+      }
       const unreadCount = msgs.filter((m) => m.direction === "in" && !m.readAt).length;
       const tower = room?.towerId ? towerMap.get(room.towerId) : undefined;
       return {
@@ -438,13 +453,28 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
       }
     }
 
+    // ผู้ทำสัญญาหลัก (tenant) อาจไม่ใช่เจ้าของ lineUserId นี้โดยตรง — อาจเป็นผู้ร่วมพักอาศัยคนหนึ่งที่แชทเข้ามา
+    // (findTenantByLineUserId เช็คทั้งคู่ คืน tenant เดียวกันเสมอเพื่อให้ยังหาห้อง/บิลถูก) ต้องแยก "ชื่อเจ้าของ
+    // บทสนทนานี้จริงๆ" (contactName — ใช้โชว์เป็นหัวข้อใหญ่พร้อมรูปโปรไฟล์) ออกจาก "ผู้เช่า" (tenant.fullName —
+    // ยังคงเป็นผู้ทำสัญญาหลักเสมอ ไว้อ้างอิงว่าห้องนี้เช่าในนามใคร) ไม่งั้นแชทของผู้ร่วมพักอาศัยจะโชว์ชื่อผู้ทำ
+    // สัญญาหลักผิดคนที่หัวข้อใหญ่
+    const tenantFullName = tenant ? `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim() : "";
+    let contactName = tenantFullName;
+    if (tenant && (tenant.lineUserId ?? "").trim() !== lineUserId) {
+      let coResidents: any[] = [];
+      try { coResidents = tenant.coResidents ? JSON.parse(tenant.coResidents) : []; } catch {}
+      const co = Array.isArray(coResidents) ? coResidents.find((c: any) => String(c?.lineId ?? "").trim() === lineUserId) : undefined;
+      if (co?.name) contactName = `คุณ ${co.name}`;
+    }
+
     return {
       lineUserId,
       pictureUrl: profileRow?.pictureUrl || null,
       profileDisplayName: profileRow?.displayName || null,
+      contactName: contactName || null,
       tenant: tenant ? {
         id: tenant.id,
-        fullName: `${tenant.title ?? ""}${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim(),
+        fullName: tenantFullName,
         tel: tenant.tel,
         checkInDate: tenant.checkInDate,
         contractStartDate: tenant.contractStartDate,

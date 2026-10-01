@@ -179,6 +179,7 @@ export interface ChatConversationInfo {
   lineUserId: string;
   pictureUrl: string | null;
   profileDisplayName: string | null;
+  contactName: string | null;
   tenant: {
     id: string;
     fullName: string;

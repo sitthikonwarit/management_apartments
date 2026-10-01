@@ -94,7 +94,9 @@ function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; 
   }
 
   const picture = info?.pictureUrl || pictureUrl;
-  const name = info?.tenant?.fullName || info?.profileDisplayName || displayName;
+  // contactName = เจ้าของบทสนทนานี้จริงๆ (อาจเป็นผู้ร่วมพักอาศัย ไม่ใช่ผู้ทำสัญญาหลักเสมอไป — ดู
+  // GET /chat/conversations/:lineUserId/info) ต่างจาก info.tenant.fullName ที่ยังคงเป็นผู้ทำสัญญาหลักเสมอ
+  const name = info?.contactName || info?.tenant?.fullName || info?.profileDisplayName || displayName;
 
   return (
     <div>
