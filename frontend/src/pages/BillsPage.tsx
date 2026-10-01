@@ -1584,7 +1584,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   initialSelected: Set<string>;
   onCancel: () => void;
   onConfirm: (result: {
-    entries: { item: BillItem; monthYear: string }[]; mode: "slip" | "record"; splitMode: BillSplitMode;
+    entries: { item: BillItem; monthYear: string }[]; mode: "slip" | "record" | "dashboard"; splitMode: BillSplitMode;
     colKeys: Set<string>; slipLineKeys: Set<string>; slipLayout: BillSlipLayout; otherDetailMode: "price" | "detail";
     totalDisplayMode: "net" | "excludeSpecialDiscount";
   }) => void;
@@ -1593,7 +1593,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   const [search, setSearch] = useState("");
   const [occupancy, setOccupancy] = useState<"all" | "occupied" | "vacant">("all");
   const [towerFilter, setTowerFilter] = useState<string[]>([]);
-  const [mode, setMode] = useState<"slip" | "record">("slip");
+  const [mode, setMode] = useState<"slip" | "record" | "dashboard">("slip");
   const [splitMode, setSplitMode] = useState<BillSplitMode>("main");
   // คอลัมน์ของตารางสรุป (โหมด record) รวมช่องว่างสำหรับเขียนด้วยมือ — เลือกได้เหมือนหน้าจดมิเตอร์ จำไว้ "ต่อ
   // ผู้ใช้ต่อเครื่อง" (ดู usePersistedPref) ไม่ต้องมาติ๊กเลือกใหม่ทุกครั้งที่เปิดป็อปอัพนี้ — เก็บเป็น array
@@ -1648,9 +1648,15 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
         </div>
 
         <div className="print-config-summary">
-          <span><i className="fas fa-door-open me-1" />{selected.size} / {pool.length} ห้อง</span>
-          {mode === "record" && (
-            <span style={{ marginLeft: 12 }}><i className="fas fa-columns me-1" />{colKeys.size} / {BILL_RECORD_COLS.length} คอลัมน์</span>
+          {mode === "dashboard" ? (
+            <span><i className="fas fa-chart-pie me-1" />สรุปภาพรวม {months.length > 1 ? `${months.length} เดือน` : "1 เดือน"}</span>
+          ) : (
+            <>
+              <span><i className="fas fa-door-open me-1" />{selected.size} / {pool.length} ห้อง</span>
+              {mode === "record" && (
+                <span style={{ marginLeft: 12 }}><i className="fas fa-columns me-1" />{colKeys.size} / {BILL_RECORD_COLS.length} คอลัมน์</span>
+              )}
+            </>
           )}
         </div>
 
@@ -1667,6 +1673,13 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
             <span>
               <span className="print-mode-title">สำหรับบริหาร/บันทึก</span>
               <span className="print-mode-desc">ตารางสรุปยอดทุกห้องในหน้าเดียว เก็บเป็นหลักฐาน</span>
+            </span>
+          </button>
+          <button type="button" className={`print-mode-btn${mode === "dashboard" ? " active" : ""}`} onClick={() => setMode("dashboard")}>
+            <i className="fas fa-chart-pie me-2" />
+            <span>
+              <span className="print-mode-title">สรุป Dashboard</span>
+              <span className="print-mode-desc">ภาพรวมเดือนนี้หน้าเดียว (จำนวนห้อง/ยอดเรียกเก็บ/รับแล้ว) ไม่ต้องเลือกห้อง</span>
             </span>
           </button>
         </div>
@@ -1779,6 +1792,17 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
               <div style={{ width: 1, background: "var(--color-light)", flexShrink: 0 }} />
             </>
           )}
+          {mode === "dashboard" ? (
+            <div className="print-config-panel" style={{ flex: 1, alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+              <div style={{ color: "var(--color-dark-variant)", padding: "24px 16px" }}>
+                <i className="fas fa-chart-pie mb-2" style={{ fontSize: "2rem", color: "var(--color-primary)" }} />
+                <div style={{ fontWeight: 600, color: "var(--color-dark)", marginBottom: 4 }}>พิมพ์สรุปภาพรวมทั้งเดือน</div>
+                <div style={{ fontSize: "0.82rem" }}>
+                  ไม่ต้องเลือกห้อง — จะพิมพ์สรุปของ{months.length > 1 ? `ทั้ง ${months.length} เดือน` : "เดือนนี้"} ({months.map((my) => monthYearLabel(my)).join(", ")}) ให้ครบทุกห้องในเดือนนั้นๆ โดยอัตโนมัติ
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className="print-config-panel" style={{ flex: 1 }}>
             <div className="print-config-panel-header">
               <span>ผู้เช่า / ห้อง</span>
@@ -1858,17 +1882,20 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
               })}
             </div>
           </div>
+          )}
         </div>
 
         <div className="print-config-footer">
           <button className="btn btn-outline-secondary" onClick={onCancel}>ยกเลิก</button>
-          <button className="btn btn-primary" disabled={selected.size === 0 || (mode === "record" && colKeys.size === 0)}
+          <button className="btn btn-primary" disabled={mode !== "dashboard" && (selected.size === 0 || (mode === "record" && colKeys.size === 0))}
             onClick={() => onConfirm({
-              entries: pool.filter((e) => selected.has(billEntryKey(e.monthYear, e.item.roomId))),
+              entries: mode === "dashboard" ? pool : pool.filter((e) => selected.has(billEntryKey(e.monthYear, e.item.roomId))),
               mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode,
             })}>
             <i className="fas fa-print me-2" />พิมพ์
-            <span style={{ marginLeft: 6, background: "rgba(255,255,255,0.25)", borderRadius: 10, padding: "1px 8px", fontSize: "0.8em" }}>{selected.size} ห้อง</span>
+            {mode !== "dashboard" && (
+              <span style={{ marginLeft: 6, background: "rgba(255,255,255,0.25)", borderRadius: 10, padding: "1px 8px", fontSize: "0.8em" }}>{selected.size} ห้อง</span>
+            )}
           </button>
         </div>
       </div>
@@ -2038,7 +2065,9 @@ function DashPrintTile({ icon, color, label, value }: { icon: string; color: str
 // ไม่ต้องพิมพ์บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน
 // App.css) โชว์เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none) — จัดเป็นการ์ดกริดหน้าตาใกล้เคียงกับหน้า
 // จอจริง (ดูแถวสรุปด้านบนของ BillsPage) แทนตารางตัวอักษรล้วนๆ ให้อ่านง่าย/ดูดีกว่าเดิม
-function DashboardSummaryPrint({ stats, config, monthYear }: { stats: DashboardStats; config: AppConfig; monthYear: string }) {
+function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore }: {
+  stats: DashboardStats; config: AppConfig; monthYear: string; pageBreakBefore: boolean;
+}) {
   const breakdown = [
     { label: "ค่าเช่า", value: stats.totalRent, color: "#6C9BCF" },
     { label: "ค่าน้ำ", value: stats.totalWater, color: "#0dcaf0" },
@@ -2048,9 +2077,7 @@ function DashboardSummaryPrint({ stats, config, monthYear }: { stats: DashboardS
     { label: "ค้างชำระยกมา", value: stats.totalOutstandingCarried, color: "#e83e8c" },
   ];
   return (
-    <div className="bill-print-only">
-      <style>{`@media print { @page { size: A4 portrait; margin: 14mm; } }`}</style>
-      <div className="bill-record-page" style={{ maxWidth: 760 }}>
+      <div className="bill-record-page" style={{ maxWidth: 760, ...(pageBreakBefore ? { pageBreakBefore: "always" } : {}) }}>
         <div className="bill-record-title">
           สรุปภาพรวมบิล {config.appIdentity.nameText || ""} — ประจำเดือน {monthYearLabel(monthYear)}
           <span className="bill-record-title-sub">พิมพ์เมื่อ {thaiDateTimeString(new Date())}</span>
@@ -2130,6 +2157,20 @@ function DashboardSummaryPrint({ stats, config, monthYear }: { stats: DashboardS
           </div>
         </div>
       </div>
+  );
+}
+
+// ── พิมพ์สรุปภาพรวม Dashboard ของเดือนที่เลือก — เอาไว้ติดบอร์ด/ส่งเจ้าของหอให้ดูภาพรวมเร็วๆ โดยไม่ต้องพิมพ์
+// บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน App.css) โชว์
+// เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none) — รับได้หลายเดือนพร้อมกัน (bulk print) พิมพ์แยกหน้า
+// ต่อเดือนให้เอง
+function DashboardSummaryPrint({ groups, config }: { groups: { monthYear: string; stats: DashboardStats }[]; config: AppConfig }) {
+  return (
+    <div className="bill-print-only">
+      <style>{`@media print { @page { size: A4 portrait; margin: 14mm; } }`}</style>
+      {groups.map((g, i) => (
+        <DashboardSummaryPage key={g.monthYear} stats={g.stats} config={config} monthYear={g.monthYear} pageBreakBefore={i > 0} />
+      ))}
     </div>
   );
 }
@@ -3109,22 +3150,21 @@ export default function BillsPage() {
   const [printOtherDetailMode, setPrintOtherDetailMode] = useState<"price" | "detail">("price");
   const [printTotalDisplayMode, setPrintTotalDisplayMode] = useState<"net" | "excludeSpecialDiscount">("net");
   const [printDashboard, setPrintDashboard] = useState(false);
-  // ข้อมูลสำหรับพิมพ์สรุป Dashboard — แยกจาก stats/editingMonthYear ตรงๆ เพราะกดพิมพ์ได้ทั้งจากเดือนที่
-  // เปิดแก้ไขอยู่ (ใช้ billData สด) และจากเดือนอื่นในหน้ารายการที่ยังไม่ได้เปิดเข้าไปเลย (ใช้ b.data ดิบ)
-  const [printDashboardStats, setPrintDashboardStats] = useState<DashboardStats | null>(null);
-  const [printDashboardMonthYear, setPrintDashboardMonthYear] = useState("");
+  // ข้อมูลสำหรับพิมพ์สรุป Dashboard — แยกจาก stats/editingMonthYear ตรงๆ เพราะกดพิมพ์ได้จากหลายที่: เดือนที่
+  // เปิดแก้ไขอยู่ (ใช้ billData สด), เดือนอื่นในหน้ารายการที่ยังไม่ได้เปิดเข้าไปเลย (ใช้ b.data ดิบ), หรือเลือก
+  // โหมด "สรุป Dashboard" ในป็อปอัพตั้งค่าการพิมพ์ซึ่งอาจมีได้หลายเดือนพร้อมกัน (bulk print) — เป็น array เสมอ
+  // พิมพ์ทีละหน้าต่อเดือน (ดู DashboardSummaryPrint)
+  const [printDashboardGroups, setPrintDashboardGroups] = useState<{ monthYear: string; stats: DashboardStats }[]>([]);
 
   function printDashboardForCurrentMonth() {
-    setPrintDashboardStats(stats);
-    setPrintDashboardMonthYear(editingMonthYear);
+    setPrintDashboardGroups([{ monthYear: editingMonthYear, stats }]);
     setPrintDashboard(true);
     setTimeout(() => window.print(), 80);
   }
 
   function printDashboardForGroup(group: BillGroup) {
     const items = (group.data ?? []).map(normalizeBillItem);
-    setPrintDashboardStats(computeBillStats(items, payments, group.monthYear));
-    setPrintDashboardMonthYear(group.monthYear);
+    setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear) }]);
     setPrintDashboard(true);
     setTimeout(() => window.print(), 80);
   }
@@ -4479,6 +4519,24 @@ export default function BillsPage() {
           initialSelected={printConfigPreselect}
           onCancel={() => setPrintConfigPool(null)}
           onConfirm={({ entries, mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode }) => {
+            if (mode === "dashboard") {
+              // โหมดนี้ไม่ผ่าน BillPrintOnly/expandEntriesForPrint เลย — รวมยอด entries (ทุกห้องของ pool ที่
+              // ให้มา ไม่ใช่แค่ที่ติ๊กเลือก เพราะซ่อนตัวเลือกห้องไปแล้วสำหรับโหมดนี้) แยกตามเดือน คำนวณสถิติ
+              // สรุปต่อเดือนด้วย computeBillStats ตัวเดียวกับที่ใช้ทุกจุด
+              const byMonth = new Map<string, BillItem[]>();
+              entries.forEach((e) => {
+                if (!byMonth.has(e.monthYear)) byMonth.set(e.monthYear, []);
+                byMonth.get(e.monthYear)!.push(e.item);
+              });
+              setPrintDashboardGroups(
+                [...byMonth.entries()]
+                  .sort(([a], [b]) => myScore(a) - myScore(b))
+                  .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear) }))
+              );
+              setPrintDashboard(true);
+              setTimeout(() => window.print(), 80);
+              return;
+            }
             // ไม่ปิดหน้าตั้งค่าพิมพ์ตรงนี้ — ถ้ากด cancel ที่ไดอะล็อกพิมพ์ของเบราว์เซอร์ จะได้กลับมาที่
             // หน้าตั้งค่าพิมพ์เดิมทันที (ปรับตัวเลือกแล้วกดพิมพ์ใหม่ได้เลย) แทนที่จะหลุดไปหน้าเปล่าๆ
             setPrintPayload(expandEntriesForPrint(entries, splitMode, tenants));
@@ -4501,8 +4559,8 @@ export default function BillsPage() {
           totalDisplayMode={printTotalDisplayMode} />
       )}
 
-      {printDashboard && printDashboardStats && (
-        <DashboardSummaryPrint stats={printDashboardStats} config={config} monthYear={printDashboardMonthYear} />
+      {printDashboard && printDashboardGroups.length > 0 && (
+        <DashboardSummaryPrint groups={printDashboardGroups} config={config} />
       )}
 
       {payingIndex !== null && billData[payingIndex] && (
