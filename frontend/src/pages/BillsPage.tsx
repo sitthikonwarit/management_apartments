@@ -22,6 +22,7 @@ import {
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import { useColumnWidths, useColumnVisibility, useRowOrder, usePersistedPref } from "../utils/useColumnWidths";
+import { useAuth } from "../context/AuthContext";
 import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -161,6 +162,15 @@ const BILL_RECORD_COL_GROUPS: { label: string; icon?: string; color?: string; ke
   ] },
   { label: "ช่องว่างสำหรับเขียนด้วยมือ", icon: "fa-pen", color: "#b07000", keys: ["collected", "collectDate", "signature", "note"] },
 ];
+
+// ── หมวดที่เลือกแสดง/ซ่อนได้ในหน้าพิมพ์ "สรุป Dashboard" (ดู DashboardSummaryPage) ──────────────────────────
+const DASHBOARD_SECTIONS: { key: string; label: string; desc: string }[] = [
+  { key: "roomStatus", label: "สถานะห้อง", desc: "ห้องทั้งหมด / จ่ายแล้ว / รอชำระ / เกินกำหนด" },
+  { key: "breakdown", label: "แยกตามประเภทค่าใช้จ่าย", desc: "ค่าเช่า / น้ำ / ไฟ / อื่นๆ / ค่าปรับ / ค้างชำระยกมา" },
+  { key: "totals", label: "ยอดเรียกเก็บ", desc: "ยอดเรียกเก็บทั้งหมด (คงที่) / คาดการณ์รายรับ / ขาดอีก" },
+  { key: "received", label: "เงินที่ได้รับแล้ว", desc: "รับแล้วเดือน / เดือนเก่าที่ปิดในเดือนนี้ / ยอดรับแล้วสุทธิ" },
+];
+const DASHBOARD_SECTIONS_DEFAULT = DASHBOARD_SECTIONS.map((s) => s.key);
 
 // entry.payerTotal !== undefined = แถวนี้คือ "แถวแยกตามคน" (มาจาก splitMode split/both) แสดงชื่อคนนั้นๆ
 // และยอดหารเฉพาะของเขา ส่วนแถวปกติ (ไม่แยก) ถ้าเปิดฟีเจอร์หารค่าเช่าฯ + ห้องมีผู้ร่วมพัก จะโชว์สรุปหาร
@@ -1586,7 +1596,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   onConfirm: (result: {
     entries: { item: BillItem; monthYear: string }[]; mode: "slip" | "record" | "dashboard"; splitMode: BillSplitMode;
     colKeys: Set<string>; slipLineKeys: Set<string>; slipLayout: BillSlipLayout; otherDetailMode: "price" | "detail";
-    totalDisplayMode: "net" | "excludeSpecialDiscount";
+    totalDisplayMode: "net" | "excludeSpecialDiscount"; dashboardSections: Set<string>;
   }) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
@@ -1605,6 +1615,11 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   const [otherDetailMode, setOtherDetailMode] = usePersistedPref<"price" | "detail">("bills-print-other-mode", "price");
   // คอลัมน์ "รวมสุทธิ" โชว์ยอดปัจจุบัน (รวมส่วนลดพิเศษที่ยังไม่หมดอายุ) หรือยอดเต็มถ้าไม่มีส่วนลดพิเศษนั้น
   const [totalDisplayMode, setTotalDisplayMode] = usePersistedPref<"net" | "excludeSpecialDiscount">("bills-print-total-mode", "net");
+  // หมวดที่เลือกแสดงในหน้าพิมพ์ "สรุป Dashboard" — จำไว้ต่อผู้ใช้เหมือน colKeys ด้านบน (คีย์เดียวกับที่
+  // printDashboardForCurrentMonth/printDashboardForGroup ใน BillsPage อ่านใช้ ให้ตั้งค่าที่นี่มีผลตรงนั้นด้วย)
+  const [dashboardSectionsArr, setDashboardSectionsArr] = usePersistedPref<string[]>("bills-print-dashboard-sections", DASHBOARD_SECTIONS_DEFAULT);
+  const dashboardSections = useMemo(() => new Set(dashboardSectionsArr), [dashboardSectionsArr]);
+  const setDashboardSections = (next: Set<string>) => setDashboardSectionsArr([...next]);
   // รายการที่โชว์บนใบพิมพ์ (โหมด slip) และจำนวนใบต่อแผ่น A4 — เปิด/ปิดค่าห้อง/น้ำ/ไฟได้ + เลือกขนาดตายตัวหรืออัตโนมัติ
   const [slipLineKeys, setSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [slipLayout, setSlipLayout] = useState<BillSlipLayout>("auto");
@@ -1649,7 +1664,10 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
 
         <div className="print-config-summary">
           {mode === "dashboard" ? (
-            <span><i className="fas fa-chart-pie me-1" />สรุปภาพรวม {months.length > 1 ? `${months.length} เดือน` : "1 เดือน"}</span>
+            <>
+              <span><i className="fas fa-chart-pie me-1" />สรุปภาพรวม {months.length > 1 ? `${months.length} เดือน` : "1 เดือน"}</span>
+              <span style={{ marginLeft: 12 }}><i className="fas fa-list-check me-1" />{dashboardSections.size} / {DASHBOARD_SECTIONS.length} หมวด</span>
+            </>
           ) : (
             <>
               <span><i className="fas fa-door-open me-1" />{selected.size} / {pool.length} ห้อง</span>
@@ -1792,6 +1810,38 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
               <div style={{ width: 1, background: "var(--color-light)", flexShrink: 0 }} />
             </>
           )}
+          {mode === "dashboard" && (
+            <>
+              <div className="print-config-panel">
+                <div className="print-config-panel-header">
+                  <span>หมวดที่แสดง</span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="pcp-btn" onClick={() => setDashboardSections(new Set(DASHBOARD_SECTIONS.map((s) => s.key)))}>ทั้งหมด</button>
+                    <button className="pcp-btn" onClick={() => setDashboardSections(new Set())}>ล้าง</button>
+                  </div>
+                </div>
+                <div className="nicescrollbar" style={{ overflowY: "auto", flex: 1 }}>
+                  {DASHBOARD_SECTIONS.map((s) => (
+                    <label key={s.key} className="print-config-check-row" style={{ alignItems: "flex-start" }}>
+                      <input type="checkbox" className="print-config-checkbox" style={{ marginTop: 2 }}
+                        checked={dashboardSections.has(s.key)}
+                        onChange={(e) => {
+                          const next = new Set(dashboardSections);
+                          e.target.checked ? next.add(s.key) : next.delete(s.key);
+                          setDashboardSections(next);
+                        }}
+                      />
+                      <span>
+                        {s.label}
+                        <div className="text-muted" style={{ fontSize: "0.68rem", fontWeight: 400 }}>{s.desc}</div>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div style={{ width: 1, background: "var(--color-light)", flexShrink: 0 }} />
+            </>
+          )}
           {mode === "dashboard" ? (
             <div className="print-config-panel" style={{ flex: 1, alignItems: "center", justifyContent: "center", textAlign: "center" }}>
               <div style={{ color: "var(--color-dark-variant)", padding: "24px 16px" }}>
@@ -1887,10 +1937,10 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
 
         <div className="print-config-footer">
           <button className="btn btn-outline-secondary" onClick={onCancel}>ยกเลิก</button>
-          <button className="btn btn-primary" disabled={mode !== "dashboard" && (selected.size === 0 || (mode === "record" && colKeys.size === 0))}
+          <button className="btn btn-primary" disabled={mode === "dashboard" ? dashboardSections.size === 0 : (selected.size === 0 || (mode === "record" && colKeys.size === 0))}
             onClick={() => onConfirm({
               entries: mode === "dashboard" ? pool : pool.filter((e) => selected.has(billEntryKey(e.monthYear, e.item.roomId))),
-              mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode,
+              mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode, dashboardSections,
             })}>
             <i className="fas fa-print me-2" />พิมพ์
             {mode !== "dashboard" && (
@@ -2065,8 +2115,8 @@ function DashPrintTile({ icon, color, label, value }: { icon: string; color: str
 // ไม่ต้องพิมพ์บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน
 // App.css) โชว์เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none) — จัดเป็นการ์ดกริดหน้าตาใกล้เคียงกับหน้า
 // จอจริง (ดูแถวสรุปด้านบนของ BillsPage) แทนตารางตัวอักษรล้วนๆ ให้อ่านง่าย/ดูดีกว่าเดิม
-function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore }: {
-  stats: DashboardStats; config: AppConfig; monthYear: string; pageBreakBefore: boolean;
+function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore, sections }: {
+  stats: DashboardStats; config: AppConfig; monthYear: string; pageBreakBefore: boolean; sections: Set<string>;
 }) {
   const breakdown = [
     { label: "ค่าเช่า", value: stats.totalRent, color: "#6C9BCF" },
@@ -2083,79 +2133,93 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore }: {
           <span className="bill-record-title-sub">พิมพ์เมื่อ {thaiDateTimeString(new Date())}</span>
         </div>
 
-        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 6px" }}>
-          สถานะห้อง
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          <DashPrintTile icon="fa-door-open" color="#6c757d" label="ห้องทั้งหมด" value={String(stats.totalRooms)} />
-          <DashPrintTile icon="fa-check-circle" color="#1B9C85" label="จ่ายแล้ว" value={String(stats.paid)} />
-          <DashPrintTile icon="fa-clock" color="#fd7e14" label="รอชำระ" value={String(stats.unpaid)} />
-          <DashPrintTile icon="fa-exclamation-triangle" color="#dc3545" label="เกินกำหนด" value={String(stats.overdue)} />
-        </div>
-
-        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "16px 0 6px" }}>
-          แยกตามประเภทค่าใช้จ่าย
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          <DashPrintTile icon="fa-home" color="#6C9BCF" label="ค่าเช่า" value={`${money(stats.totalRent)} บาท`} />
-          <DashPrintTile icon="fa-tint" color="#0dcaf0" label={`ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalWater)} บาท`} />
-          <DashPrintTile icon="fa-bolt" color="#fd7e14" label={`ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalElectric)} บาท`} />
-          <DashPrintTile icon="fa-receipt" color="#6610f2" label="อื่นๆ" value={`${money(stats.totalOther)} บาท`} />
-          <DashPrintTile icon="fa-exclamation-circle" color="#dc3545" label="ค่าปรับ" value={`${money(stats.totalFine)} บาท`} />
-          <DashPrintTile icon="fa-history" color="#e83e8c" label="ค้างชำระยกมา" value={`${money(stats.totalOutstandingCarried)} บาท`} />
-        </div>
-
-        {stats.totalExpected > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd" }}>
-              {breakdown.map((b, i) => (
-                <div key={i} style={{ width: `${(b.value / stats.totalExpected) * 100}%`, background: b.color }} />
-              ))}
+        {sections.has("roomStatus") && (
+          <>
+            <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 6px" }}>
+              สถานะห้อง
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6, fontSize: "0.72rem", color: "#555" }}>
-              {breakdown.map((b, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  <i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: b.color }} />
-                  {b.label}
-                </span>
-              ))}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <DashPrintTile icon="fa-door-open" color="#6c757d" label="ห้องทั้งหมด" value={String(stats.totalRooms)} />
+              <DashPrintTile icon="fa-check-circle" color="#1B9C85" label="จ่ายแล้ว" value={String(stats.paid)} />
+              <DashPrintTile icon="fa-clock" color="#fd7e14" label="รอชำระ" value={String(stats.unpaid)} />
+              <DashPrintTile icon="fa-exclamation-triangle" color="#dc3545" label="เกินกำหนด" value={String(stats.overdue)} />
+            </div>
+          </>
+        )}
+
+        {sections.has("breakdown") && (
+          <>
+            <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "16px 0 6px" }}>
+              แยกตามประเภทค่าใช้จ่าย
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <DashPrintTile icon="fa-home" color="#6C9BCF" label="ค่าเช่า" value={`${money(stats.totalRent)} บาท`} />
+              <DashPrintTile icon="fa-tint" color="#0dcaf0" label={`ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalWater)} บาท`} />
+              <DashPrintTile icon="fa-bolt" color="#fd7e14" label={`ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalElectric)} บาท`} />
+              <DashPrintTile icon="fa-receipt" color="#6610f2" label="อื่นๆ" value={`${money(stats.totalOther)} บาท`} />
+              <DashPrintTile icon="fa-exclamation-circle" color="#dc3545" label="ค่าปรับ" value={`${money(stats.totalFine)} บาท`} />
+              <DashPrintTile icon="fa-history" color="#e83e8c" label="ค้างชำระยกมา" value={`${money(stats.totalOutstandingCarried)} บาท`} />
+            </div>
+
+            {stats.totalExpected > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd" }}>
+                  {breakdown.map((b, i) => (
+                    <div key={i} style={{ width: `${(b.value / stats.totalExpected) * 100}%`, background: b.color }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6, fontSize: "0.72rem", color: "#555" }}>
+                  {breakdown.map((b, i) => (
+                    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: b.color }} />
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {sections.has("totals") && (
+          <>
+            <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 6px" }}>
+              ยอดเรียกเก็บ
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <DashPrintTile icon="fa-lock" color="#777" label="ยอดเรียกเก็บทั้งหมด (คงที่)" value={`${money(stats.totalFixed)} บาท`} />
+              <DashPrintTile icon="fa-chart-line" color="#6C9BCF" label="คาดการณ์รายรับ" value={`${money(stats.totalExpected)} บาท`} />
+              <DashPrintTile icon="fa-triangle-exclamation" color="#dc3545" label="ขาดอีก" value={`${money(stats.totalMissing)} บาท`} />
+            </div>
+            <div style={{ marginTop: 10, height: 10, borderRadius: 6, border: "1px solid #ddd", overflow: "hidden" }}>
+              <div style={{ width: `${Math.min(stats.collectRate, 100)}%`, height: "100%", background: "#1B9C85" }} />
+            </div>
+          </>
+        )}
+
+        {sections.has("received") && (
+          <div style={{
+            marginTop: 16, padding: "12px 14px", borderRadius: 10, border: "1.5px solid #1B9C85", background: "#f3faf8",
+          }}>
+            <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#1B9C85", marginBottom: 8 }}>
+              <i className="fas fa-hand-holding-usd me-1" />เงินที่ได้รับแล้ว
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#1B9C85" }}>{money(stats.receivedThisMonth)} บาท</div>
+                <div style={{ fontSize: "0.72rem", color: "#555" }}>รับแล้วเดือน ({stats.collectRate.toFixed(0)}%)</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)} บาท</div>
+                <div style={{ fontSize: "0.72rem", color: "#555" }}>เดือนเก่าที่ปิดในเดือนนี้</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "#198754" }}>{money(stats.netReceived)} บาท</div>
+                <div style={{ fontSize: "0.72rem", color: "#555" }}>ยอดรับแล้วสุทธิ</div>
+              </div>
             </div>
           </div>
         )}
-
-        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 6px" }}>
-          ยอดเรียกเก็บ
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          <DashPrintTile icon="fa-lock" color="#777" label="ยอดเรียกเก็บทั้งหมด (คงที่)" value={`${money(stats.totalFixed)} บาท`} />
-          <DashPrintTile icon="fa-chart-line" color="#6C9BCF" label="คาดการณ์รายรับ" value={`${money(stats.totalExpected)} บาท`} />
-          <DashPrintTile icon="fa-triangle-exclamation" color="#dc3545" label="ขาดอีก" value={`${money(stats.totalMissing)} บาท`} />
-        </div>
-        <div style={{ marginTop: 10, height: 10, borderRadius: 6, border: "1px solid #ddd", overflow: "hidden" }}>
-          <div style={{ width: `${Math.min(stats.collectRate, 100)}%`, height: "100%", background: "#1B9C85" }} />
-        </div>
-
-        <div style={{
-          marginTop: 16, padding: "12px 14px", borderRadius: 10, border: "1.5px solid #1B9C85", background: "#f3faf8",
-        }}>
-          <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#1B9C85", marginBottom: 8 }}>
-            <i className="fas fa-hand-holding-usd me-1" />เงินที่ได้รับแล้ว
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#1B9C85" }}>{money(stats.receivedThisMonth)} บาท</div>
-              <div style={{ fontSize: "0.72rem", color: "#555" }}>รับแล้วเดือน ({stats.collectRate.toFixed(0)}%)</div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)} บาท</div>
-              <div style={{ fontSize: "0.72rem", color: "#555" }}>เดือนเก่าที่ปิดในเดือนนี้</div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "#198754" }}>{money(stats.netReceived)} บาท</div>
-              <div style={{ fontSize: "0.72rem", color: "#555" }}>ยอดรับแล้วสุทธิ</div>
-            </div>
-          </div>
-        </div>
       </div>
   );
 }
@@ -2164,12 +2228,15 @@ function DashboardSummaryPage({ stats, config, monthYear, pageBreakBefore }: {
 // บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน App.css) โชว์
 // เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none) — รับได้หลายเดือนพร้อมกัน (bulk print) พิมพ์แยกหน้า
 // ต่อเดือนให้เอง
-function DashboardSummaryPrint({ groups, config }: { groups: { monthYear: string; stats: DashboardStats }[]; config: AppConfig }) {
+function DashboardSummaryPrint({ groups, config, sections }: {
+  groups: { monthYear: string; stats: DashboardStats }[]; config: AppConfig; sections?: Set<string>;
+}) {
+  const sec = sections ?? new Set(DASHBOARD_SECTIONS_DEFAULT);
   return (
     <div className="bill-print-only">
       <style>{`@media print { @page { size: A4 portrait; margin: 14mm; } }`}</style>
       {groups.map((g, i) => (
-        <DashboardSummaryPage key={g.monthYear} stats={g.stats} config={config} monthYear={g.monthYear} pageBreakBefore={i > 0} />
+        <DashboardSummaryPage key={g.monthYear} stats={g.stats} config={config} monthYear={g.monthYear} pageBreakBefore={i > 0} sections={sec} />
       ))}
     </div>
   );
@@ -3155,9 +3222,24 @@ export default function BillsPage() {
   // โหมด "สรุป Dashboard" ในป็อปอัพตั้งค่าการพิมพ์ซึ่งอาจมีได้หลายเดือนพร้อมกัน (bulk print) — เป็น array เสมอ
   // พิมพ์ทีละหน้าต่อเดือน (ดู DashboardSummaryPrint)
   const [printDashboardGroups, setPrintDashboardGroups] = useState<{ monthYear: string; stats: DashboardStats }[]>([]);
+  // หมวดที่เลือกแสดง — จำไว้ต่อผู้ใช้คีย์เดียวกับใน BillPrintConfigModal เพื่อให้ปุ่มพิมพ์เดี่ยวๆ (ในหน้าแก้ไข
+  // บิล/ตารางรายการ) ใช้ค่าที่ตั้งไว้ล่าสุดเหมือนกันเสมอ ไม่ต้องไปตั้งซ้ำสองที่ — อ่านจาก localStorage ตรงๆ
+  // (ไม่ผ่าน useState ของ usePersistedPref) ทุกครั้งที่กดพิมพ์ กัน React re-render ค้างค่าเก่าถ้าผู้ใช้เพิ่งไป
+  // แก้ไว้ในป็อปอัพตั้งค่าการพิมพ์หมาดๆ ในเซสชันเดียวกัน
+  const { user } = useAuth();
+  function readPersistedDashboardSections(): Set<string> {
+    try {
+      const raw = localStorage.getItem(`pref:bills-print-dashboard-sections:${user?.id || "anon"}`);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set(DASHBOARD_SECTIONS_DEFAULT);
+    } catch {
+      return new Set(DASHBOARD_SECTIONS_DEFAULT);
+    }
+  }
+  const [printDashboardSections, setPrintDashboardSections] = useState<Set<string>>(() => new Set(DASHBOARD_SECTIONS_DEFAULT));
 
   function printDashboardForCurrentMonth() {
     setPrintDashboardGroups([{ monthYear: editingMonthYear, stats }]);
+    setPrintDashboardSections(readPersistedDashboardSections());
     setPrintDashboard(true);
     setTimeout(() => window.print(), 80);
   }
@@ -3165,6 +3247,7 @@ export default function BillsPage() {
   function printDashboardForGroup(group: BillGroup) {
     const items = (group.data ?? []).map(normalizeBillItem);
     setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear) }]);
+    setPrintDashboardSections(readPersistedDashboardSections());
     setPrintDashboard(true);
     setTimeout(() => window.print(), 80);
   }
@@ -4518,7 +4601,7 @@ export default function BillsPage() {
           towers={towers}
           initialSelected={printConfigPreselect}
           onCancel={() => setPrintConfigPool(null)}
-          onConfirm={({ entries, mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode }) => {
+          onConfirm={({ entries, mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode, dashboardSections }) => {
             if (mode === "dashboard") {
               // โหมดนี้ไม่ผ่าน BillPrintOnly/expandEntriesForPrint เลย — รวมยอด entries (ทุกห้องของ pool ที่
               // ให้มา ไม่ใช่แค่ที่ติ๊กเลือก เพราะซ่อนตัวเลือกห้องไปแล้วสำหรับโหมดนี้) แยกตามเดือน คำนวณสถิติ
@@ -4533,6 +4616,7 @@ export default function BillsPage() {
                   .sort(([a], [b]) => myScore(a) - myScore(b))
                   .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear) }))
               );
+              setPrintDashboardSections(dashboardSections);
               setPrintDashboard(true);
               setTimeout(() => window.print(), 80);
               return;
@@ -4560,7 +4644,7 @@ export default function BillsPage() {
       )}
 
       {printDashboard && printDashboardGroups.length > 0 && (
-        <DashboardSummaryPrint groups={printDashboardGroups} config={config} />
+        <DashboardSummaryPrint groups={printDashboardGroups} config={config} sections={printDashboardSections} />
       )}
 
       {payingIndex !== null && billData[payingIndex] && (
