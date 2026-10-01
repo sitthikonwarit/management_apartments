@@ -2162,8 +2162,16 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
         for (const o of item.outstandingItems) {
           const group = allBills.find((b) => b.monthYear === o.monthYear);
           const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
-          const oldPaid = Number(roomBill?.paidAmount) || 0;
-          if (oldPaid > 0) chips.push({ label: monthYearLabel(o.monthYear), amount: oldPaid, cleared: roomBill?.status === "paid" || oldPaid >= (Number(roomBill?.total) || 0) - 0.005 });
+          if (!roomBill) continue;
+          // roomBill.paidAmount คือยอดจ่ายสะสมของ "บิลเดือนนั้นทั้งใบ" (รวมค่าใช้จ่ายของตัวมันเอง+ยอดค้างที่มัน
+          // ยกมาจากเดือนก่อนหน้ามันเองด้วย) ไม่ใช่แค่ส่วนที่ไหลมาเป็น "ค้างชำระ" ของเดือนนี้ (o.amount — เฉพาะ
+          // ownAmount ของเดือนนั้น) เอามาโชว์ตรงๆ จะดูสูงเกินจริง/ปนกับยอดอื่นที่ไม่เกี่ยวกับ chip นี้ — คำนวณ
+          // ย้อนกลับจากสูตรเดียวกับตอนสร้าง o.amount (getOutstandingBalance: o.amount = ownAmount - paidAmount
+          // ตอนสร้างบิลนี้) ได้ว่าเงินที่รับเพิ่มมาสำหรับก้อนนี้ตั้งแต่นั้น = o.amount - ยอดคงเหลือสดๆ ตอนนี้
+          const ownAmount = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
+          const liveRemaining = Math.max(0, ownAmount - (Number(roomBill.paidAmount) || 0));
+          const receivedForThis = Math.max(0, o.amount - liveRemaining);
+          if (receivedForThis > 0) chips.push({ label: monthYearLabel(o.monthYear), amount: receivedForThis, cleared: liveRemaining <= 0.005 });
         }
         if (chips.length === 0) return "-";
         return (
