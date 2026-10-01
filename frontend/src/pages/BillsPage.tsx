@@ -1975,59 +1975,124 @@ interface DashboardStats {
   receivedThisMonth: number; receivedOldMonthsClosedThisMonth: number; netReceived: number;
 }
 
+// ── การ์ดตัวเลขเดี่ยวสำหรับหน้าพิมพ์สรุป Dashboard (ดู DashboardSummaryPrint ด้านล่าง) — กรอบ+สีคล้ายของเดิม
+// บนจอ แต่พื้นขาว/เส้นขอบชัดเจน ให้เห็นดีแม้พิมพ์ขาวดำ (ไม่พึ่งพื้นหลังสี ซึ่งเบราว์เซอร์มักไม่พิมพ์ให้ตามปกติ
+// นอกจากจะเปิด "พิมพ์พื้นหลัง" เอง)
+function DashPrintTile({ icon, color, label, value }: { icon: string; color: string; label: string; value: string }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10, border: "1px solid #ddd", borderRadius: 8,
+      padding: "10px 12px", flex: "1 1 220px", minWidth: 0,
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 9, flexShrink: 0, border: `1.5px solid ${color}`,
+        color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+      }}>
+        <i className={`fas ${icon}`} />
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: "1.02rem", color, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+        <div style={{ fontSize: "0.72rem", color: "#666" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── พิมพ์สรุปภาพรวม Dashboard ของเดือนที่กำลังเปิดดูอยู่ — เอาไว้ติดบอร์ด/ส่งเจ้าของหอให้ดูภาพรวมเร็วๆ โดย
 // ไม่ต้องพิมพ์บิลรายห้องทั้งหมด ใช้ class .bill-print-only ตัวเดียวกับใบบิล/ตารางสรุป (ดู @media print ใน
-// App.css) โชว์เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none)
+// App.css) โชว์เฉพาะตอนสั่งพิมพ์เท่านั้น ปกติซ่อนไว้ (display: none) — จัดเป็นการ์ดกริดหน้าตาใกล้เคียงกับหน้า
+// จอจริง (ดูแถวสรุปด้านบนของ BillsPage) แทนตารางตัวอักษรล้วนๆ ให้อ่านง่าย/ดูดีกว่าเดิม
 function DashboardSummaryPrint({ stats, config, monthYear }: { stats: DashboardStats; config: AppConfig; monthYear: string }) {
-  const rows: { label: string; value: string }[][] = [
-    [
-      { label: "ห้องทั้งหมด", value: String(stats.totalRooms) },
-      { label: "จ่ายแล้ว", value: String(stats.paid) },
-      { label: "รอชำระ", value: String(stats.unpaid) },
-      { label: "เกินกำหนด", value: String(stats.overdue) },
-    ],
-    [
-      { label: "ค่าเช่า", value: `${money(stats.totalRent)} บาท` },
-      { label: `ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`, value: `${money(stats.totalWater)} บาท` },
-      { label: `ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`, value: `${money(stats.totalElectric)} บาท` },
-      { label: "อื่นๆ", value: `${money(stats.totalOther)} บาท` },
-      { label: "ค่าปรับ", value: `${money(stats.totalFine)} บาท` },
-      { label: "ค้างชำระยกมา", value: `${money(stats.totalOutstandingCarried)} บาท` },
-    ],
-    [
-      { label: "ยอดเรียกเก็บทั้งหมด (คงที่)", value: `${money(stats.totalFixed)} บาท` },
-      { label: "คาดการณ์รายรับ", value: `${money(stats.totalExpected)} บาท` },
-      { label: "ขาดอีก", value: `${money(stats.totalMissing)} บาท` },
-    ],
-    [
-      { label: `รับแล้วเดือน (${stats.collectRate.toFixed(0)}%)`, value: `${money(stats.receivedThisMonth)} บาท` },
-      { label: "เดือนเก่าที่ปิดในเดือนนี้", value: `${money(stats.receivedOldMonthsClosedThisMonth)} บาท` },
-      { label: "ยอดรับแล้วสุทธิ", value: `${money(stats.netReceived)} บาท` },
-    ],
+  const breakdown = [
+    { label: "ค่าเช่า", value: stats.totalRent, color: "#6C9BCF" },
+    { label: "ค่าน้ำ", value: stats.totalWater, color: "#0dcaf0" },
+    { label: "ค่าไฟ", value: stats.totalElectric, color: "#fd7e14" },
+    { label: "อื่นๆ", value: Math.max(stats.totalOther, 0), color: "#6610f2" },
+    { label: "ค่าปรับ", value: stats.totalFine, color: "#dc3545" },
+    { label: "ค้างชำระยกมา", value: stats.totalOutstandingCarried, color: "#e83e8c" },
   ];
   return (
     <div className="bill-print-only">
-      <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
-      <div className="bill-record-page">
+      <style>{`@media print { @page { size: A4 portrait; margin: 14mm; } }`}</style>
+      <div className="bill-record-page" style={{ maxWidth: 760 }}>
         <div className="bill-record-title">
           สรุปภาพรวมบิล {config.appIdentity.nameText || ""} — ประจำเดือน {monthYearLabel(monthYear)}
           <span className="bill-record-title-sub">พิมพ์เมื่อ {thaiDateTimeString(new Date())}</span>
         </div>
-        <table className="bill-record-table" style={{ maxWidth: 480 }}>
-          <tbody>
-            {rows.flatMap((group, gi) => [
-              ...group.map((r, i) => (
-                <tr key={`${gi}-${i}`}>
-                  <td>{r.label}</td>
-                  <td className="amt" style={{ fontWeight: 700 }}>{r.value}</td>
-                </tr>
-              )),
-              gi < rows.length - 1 ? (
-                <tr key={`spacer-${gi}`}><td colSpan={2} style={{ border: "none", padding: "4px 0" }} /></tr>
-              ) : null,
-            ])}
-          </tbody>
-        </table>
+
+        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 6px" }}>
+          สถานะห้อง
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <DashPrintTile icon="fa-door-open" color="#6c757d" label="ห้องทั้งหมด" value={String(stats.totalRooms)} />
+          <DashPrintTile icon="fa-check-circle" color="#1B9C85" label="จ่ายแล้ว" value={String(stats.paid)} />
+          <DashPrintTile icon="fa-clock" color="#fd7e14" label="รอชำระ" value={String(stats.unpaid)} />
+          <DashPrintTile icon="fa-exclamation-triangle" color="#dc3545" label="เกินกำหนด" value={String(stats.overdue)} />
+        </div>
+
+        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "16px 0 6px" }}>
+          แยกตามประเภทค่าใช้จ่าย
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <DashPrintTile icon="fa-home" color="#6C9BCF" label="ค่าเช่า" value={`${money(stats.totalRent)} บาท`} />
+          <DashPrintTile icon="fa-tint" color="#0dcaf0" label={`ค่าน้ำ (${stats.waterUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalWater)} บาท`} />
+          <DashPrintTile icon="fa-bolt" color="#fd7e14" label={`ค่าไฟ (${stats.electricUnits.toLocaleString()} หน่วย)`} value={`${money(stats.totalElectric)} บาท`} />
+          <DashPrintTile icon="fa-receipt" color="#6610f2" label="อื่นๆ" value={`${money(stats.totalOther)} บาท`} />
+          <DashPrintTile icon="fa-exclamation-circle" color="#dc3545" label="ค่าปรับ" value={`${money(stats.totalFine)} บาท`} />
+          <DashPrintTile icon="fa-history" color="#e83e8c" label="ค้างชำระยกมา" value={`${money(stats.totalOutstandingCarried)} บาท`} />
+        </div>
+
+        {stats.totalExpected > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd" }}>
+              {breakdown.map((b, i) => (
+                <div key={i} style={{ width: `${(b.value / stats.totalExpected) * 100}%`, background: b.color }} />
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6, fontSize: "0.72rem", color: "#555" }}>
+              {breakdown.map((b, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: b.color }} />
+                  {b.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 6px" }}>
+          ยอดเรียกเก็บ
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <DashPrintTile icon="fa-lock" color="#777" label="ยอดเรียกเก็บทั้งหมด (คงที่)" value={`${money(stats.totalFixed)} บาท`} />
+          <DashPrintTile icon="fa-chart-line" color="#6C9BCF" label="คาดการณ์รายรับ" value={`${money(stats.totalExpected)} บาท`} />
+          <DashPrintTile icon="fa-triangle-exclamation" color="#dc3545" label="ขาดอีก" value={`${money(stats.totalMissing)} บาท`} />
+        </div>
+        <div style={{ marginTop: 10, height: 10, borderRadius: 6, border: "1px solid #ddd", overflow: "hidden" }}>
+          <div style={{ width: `${Math.min(stats.collectRate, 100)}%`, height: "100%", background: "#1B9C85" }} />
+        </div>
+
+        <div style={{
+          marginTop: 16, padding: "12px 14px", borderRadius: 10, border: "1.5px solid #1B9C85", background: "#f3faf8",
+        }}>
+          <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#1B9C85", marginBottom: 8 }}>
+            <i className="fas fa-hand-holding-usd me-1" />เงินที่ได้รับแล้ว
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#1B9C85" }}>{money(stats.receivedThisMonth)} บาท</div>
+              <div style={{ fontSize: "0.72rem", color: "#555" }}>รับแล้วเดือน ({stats.collectRate.toFixed(0)}%)</div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#20c997" }}>{money(stats.receivedOldMonthsClosedThisMonth)} บาท</div>
+              <div style={{ fontSize: "0.72rem", color: "#555" }}>เดือนเก่าที่ปิดในเดือนนี้</div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "#198754" }}>{money(stats.netReceived)} บาท</div>
+              <div style={{ fontSize: "0.72rem", color: "#555" }}>ยอดรับแล้วสุทธิ</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
