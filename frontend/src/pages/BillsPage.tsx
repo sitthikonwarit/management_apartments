@@ -3238,6 +3238,10 @@ export default function BillsPage() {
   const [printDashboardSections, setPrintDashboardSections] = useState<Set<string>>(() => new Set(DASHBOARD_SECTIONS_DEFAULT));
 
   function printDashboardForCurrentMonth() {
+    // ต้องปิด printPayload (ตัวเดียวกับที่ BillPrintOnly ใช้โชว์โหมดใบแจก/ตารางสรุป) ก่อนเสมอ ไม่งั้นถ้าเพิ่ง
+    // พิมพ์โหมดอื่นไปก่อนหน้านี้ในเซสชันเดียวกัน (ค้าง state อยู่ ไม่เคยถูกเคลียร์) จะมี .bill-print-only
+    // สองก้อนโผล่พร้อมกันตอนสั่งพิมพ์ เนื้อหาปนกันในกระดาษแผ่นเดียว
+    setPrintPayload(null);
     setPrintDashboardGroups([{ monthYear: editingMonthYear, stats }]);
     setPrintDashboardSections(readPersistedDashboardSections());
     setPrintDashboard(true);
@@ -3245,6 +3249,7 @@ export default function BillsPage() {
   }
 
   function printDashboardForGroup(group: BillGroup) {
+    setPrintPayload(null);
     const items = (group.data ?? []).map(normalizeBillItem);
     setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear) }]);
     setPrintDashboardSections(readPersistedDashboardSections());
@@ -4611,6 +4616,9 @@ export default function BillsPage() {
                 if (!byMonth.has(e.monthYear)) byMonth.set(e.monthYear, []);
                 byMonth.get(e.monthYear)!.push(e.item);
               });
+              // ปิด printPayload ก่อนเสมอ กัน .bill-print-only ของโหมดใบแจก/ตารางสรุปที่พิมพ์ค้างไว้จากก่อนหน้า
+              // (ไม่เคยถูกเคลียร์) โผล่มาพร้อมกับสรุป Dashboard ปนกันในกระดาษแผ่นเดียว
+              setPrintPayload(null);
               setPrintDashboardGroups(
                 [...byMonth.entries()]
                   .sort(([a], [b]) => myScore(a) - myScore(b))
@@ -4621,6 +4629,9 @@ export default function BillsPage() {
               setTimeout(() => window.print(), 80);
               return;
             }
+            // ปิดสรุป Dashboard ที่อาจพิมพ์ค้างไว้จากก่อนหน้า ด้วยเหตุผลเดียวกับด้านบน (กัน .bill-print-only
+            // สองก้อนพร้อมกัน)
+            setPrintDashboard(false);
             // ไม่ปิดหน้าตั้งค่าพิมพ์ตรงนี้ — ถ้ากด cancel ที่ไดอะล็อกพิมพ์ของเบราว์เซอร์ จะได้กลับมาที่
             // หน้าตั้งค่าพิมพ์เดิมทันที (ปรับตัวเลือกแล้วกดพิมพ์ใหม่ได้เลย) แทนที่จะหลุดไปหน้าเปล่าๆ
             setPrintPayload(expandEntriesForPrint(entries, splitMode, tenants));
