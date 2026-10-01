@@ -3465,8 +3465,12 @@ export default function BillsPage() {
     // เอง (monthYear = เดือนเก่า) แม้จะรับเงินจริงตอนเปิดดูเดือนนี้อยู่ก็ตาม — ถ้าใช้ billData.status เดือนนี้
     // เดือนเดียวจะไม่เห็นเงินก้อนนั้นเลย ทำให้ยอดดูเหมือนเงินหาย/ลอย ทั้งที่จริงถูกเก็บไปแล้ว
     const activePayments = payments.filter((p) => !p?.data?.cancelled);
+    // ไม่นับรายการที่ settledViaMonthYear มีค่า (เงินก้อนนี้ถูกรับจริงตอนเปิดดู/จ่ายเดือนอื่นอยู่ ไม่ใช่เดือนนี้
+    // เอง — แค่ monthYear ของรายการตรงกับเดือนนี้เพราะเป็นยอดค้างของเดือนนี้ที่ถูกไปปิดพร้อมเดือนอื่น) กันไม่ให้
+    // ยอดเดียวกันถูกนับซ้ำสองที่ ทั้งใน "รับแล้วเดือน" ของเดือนนี้เอง และ "เดือนเก่าที่ปิดในเดือนนี้" ของเดือนที่
+    // ไปปิดให้จริง — ให้นับเป็นของเดือนที่ปิดให้เท่านั้น (ดู receivedOldMonthsClosedThisMonth ด้านล่าง)
     const receivedThisMonth = activePayments
-      .filter((p) => p?.data?.monthYear === editingMonthYear)
+      .filter((p) => p?.data?.monthYear === editingMonthYear && !p?.data?.settledViaMonthYear)
       .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
     const receivedOldMonthsClosedThisMonth = activePayments
       .filter((p) => p?.data?.settledViaMonthYear === editingMonthYear)
