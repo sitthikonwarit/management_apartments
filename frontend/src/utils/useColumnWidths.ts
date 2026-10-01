@@ -8,7 +8,7 @@ const ROW_ORDER_PREFIX = "rowOrder:";
 // ── เก็บความกว้าง/การซ่อน-แสดงคอลัมน์ที่ผู้ใช้ปรับเองไว้ใน localStorage "ต่อผู้ใช้ต่อเครื่อง" (ใส่ user id
 // ต่อท้าย key เสมอ) — ไม่งั้นถ้าใช้เครื่องเดียวกันหลายคน (สลับบัญชีพนักงาน) การปรับของคนหนึ่งจะไปทับ/ปนกับ
 // อีกคนโดยไม่ตั้งใจ คนที่ยังไม่ได้ล็อกอิน (user เป็น null ตอนโหลดหน้าแรกๆ) ใช้ scope "anon" ไปพลางก่อน
-function useUserScope(): string {
+export function useUserScope(): string {
   const { user } = useAuth();
   return user?.id || "anon";
 }
@@ -202,4 +202,29 @@ export function useRowOrder<T>(storageKey: string, items: T[], getKey: (item: T)
   }
 
   return { ordered, moveRow, resetRowOrder };
+}
+
+const PERSISTED_PREFIX = "pref:";
+
+// ── เก็บค่าที่ผู้ใช้ตั้งไว้ (ไม่ใช่คอลัมน์ตาราง/ลำดับแถวโดยตรง) "ต่อผู้ใช้ต่อเครื่อง" เหมือนฮุคด้านบน —
+// ใช้กับค่าตั้งค่าทั่วไปที่อยากจำไว้ข้ามเซสชัน เช่น checkbox คอลัมน์ในป็อปอัพตั้งค่าการพิมพ์ ไม่ต้องมาติ๊กใหม่
+// ทุกครั้ง — serialize ผ่าน JSON.stringify เสมอ ใช้ได้กับทั้งค่าเดี่ยว (string) และโครงสร้าง (array/object)
+export function usePersistedPref<T>(storageKey: string, initial: T): [T, (v: T) => void] {
+  const scope = useUserScope();
+  const lsKey = `${PERSISTED_PREFIX}${storageKey}:${scope}`;
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(lsKey);
+      return raw ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  function setPersisted(v: T) {
+    setValue(v);
+    try { localStorage.setItem(lsKey, JSON.stringify(v)); } catch {}
+  }
+
+  return [value, setPersisted];
 }

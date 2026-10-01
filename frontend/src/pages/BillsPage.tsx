@@ -21,7 +21,7 @@ import {
   reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { useColumnWidths, useColumnVisibility, useRowOrder } from "../utils/useColumnWidths";
+import { useColumnWidths, useColumnVisibility, useRowOrder, usePersistedPref } from "../utils/useColumnWidths";
 import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../utils/yearFormat";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -166,7 +166,8 @@ const BILL_RECORD_COL_GROUPS: { label: string; icon?: string; color?: string; ke
 // ต่อคนแทรกไว้ใต้ชื่อผู้เช่าหลัก/ยอดรวม ให้ตรงกับที่ใบบิลรายห้อง (BillSlip) แสดงอยู่แล้ว
 function renderBillRecordCell(
   col: BillRecordColDef, entry: PrintEntry, config: AppConfig, tenants: any[],
-  otherDetailMode: "price" | "detail" = "price"
+  otherDetailMode: "price" | "detail" = "price",
+  totalDisplayMode: "net" | "excludeSpecialDiscount" = "net"
 ) {
   const { item } = entry;
   const isSplitRow = entry.payerTotal !== undefined;
@@ -256,11 +257,30 @@ function renderBillRecordCell(
           </>
         );
       }
-      if (!showSplit) return money(item.total);
+      // ส่วนลดพิเศษ (id ขึ้นต้น "special-" — ดู applySpecialDiscounts ใน billCalc.ts) มีวันหมดอายุได้ ยอด
+      // รวมสุทธิปัจจุบันเลยอาจไม่ใช่ยอดที่จะเรียกเก็บจริงถาวร — โชว์ทั้งสองยอดให้เห็นเสมอถ้ามีส่วนลดพิเศษ:
+      // ยอดหลัก (ตามโหมดที่เลือก) + บรรทัดเล็กบอกอีกยอดหนึ่งไว้เทียบ กันพนักงานเข้าใจผิดว่ายอดนี้คงที่ตลอดไป
+      const specialDiscountTotal = item.discountItems
+        .filter((d) => d.id.startsWith("special-"))
+        .reduce((s, d) => s + (Number(d.price) || 0), 0);
+      const fullAmount = item.total + specialDiscountTotal; // ยอดถ้าไม่มีส่วนลดพิเศษนี้ (หลังหมดอายุ)
+      const mainTotal = totalDisplayMode === "excludeSpecialDiscount" ? fullAmount : item.total;
+      const altLabel = totalDisplayMode === "excludeSpecialDiscount"
+        ? `ยอดปัจจุบัน (รวมส่วนลดพิเศษแล้ว) ${money(item.total)}`
+        : `ยอดหลังส่วนลดพิเศษหมดอายุ ${money(fullAmount)}`;
+      if (!showSplit) {
+        return (
+          <>
+            {money(mainTotal)}
+            {specialDiscountTotal > 0 && <div className="bill-record-subline">{altLabel}</div>}
+          </>
+        );
+      }
       return (
         <>
-          {money(item.total)}
-          <div className="bill-record-subline">หาร {item.residentCount} คน · คนละ {money(item.total / item.residentCount)}</div>
+          {money(mainTotal)}
+          <div className="bill-record-subline">หาร {item.residentCount} คน · คนละ {money(mainTotal / item.residentCount)}</div>
+          {specialDiscountTotal > 0 && <div className="bill-record-subline">{altLabel}</div>}
         </>
       );
     }
@@ -1564,6 +1584,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   onConfirm: (result: {
     entries: { item: BillItem; monthYear: string }[]; mode: "slip" | "record"; splitMode: BillSplitMode;
     colKeys: Set<string>; slipLineKeys: Set<string>; slipLayout: BillSlipLayout; otherDetailMode: "price" | "detail";
+    totalDisplayMode: "net" | "excludeSpecialDiscount";
   }) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
@@ -1572,10 +1593,16 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   const [towerFilter, setTowerFilter] = useState<string[]>([]);
   const [mode, setMode] = useState<"slip" | "record">("slip");
   const [splitMode, setSplitMode] = useState<BillSplitMode>("main");
-  // คอลัมน์ของตารางสรุป (โหมด record) รวมช่องว่างสำหรับเขียนด้วยมือ — เลือกได้เหมือนหน้าจดมิเตอร์
-  const [colKeys, setColKeys] = useState<Set<string>>(BILL_RECORD_DEFAULT_COLS);
+  // คอลัมน์ของตารางสรุป (โหมด record) รวมช่องว่างสำหรับเขียนด้วยมือ — เลือกได้เหมือนหน้าจดมิเตอร์ จำไว้ "ต่อ
+  // ผู้ใช้ต่อเครื่อง" (ดู usePersistedPref) ไม่ต้องมาติ๊กเลือกใหม่ทุกครั้งที่เปิดป็อปอัพนี้ — เก็บเป็น array
+  // เพราะ Set ไม่ใช่ชนิดที่ JSON.stringify ได้ตรงๆ
+  const [colKeysArr, setColKeysArr] = usePersistedPref<string[]>("bills-print-cols", [...BILL_RECORD_DEFAULT_COLS]);
+  const colKeys = useMemo(() => new Set(colKeysArr), [colKeysArr]);
+  const setColKeys = (next: Set<string>) => setColKeysArr([...next]);
   // คอลัมน์ "อื่นๆ (รวม)" โชว์แค่ยอดรวม หรือแตกรายละเอียดทุกรายการให้ด้วยในช่องเดียวกัน (ดู renderBillRecordCell)
-  const [otherDetailMode, setOtherDetailMode] = useState<"price" | "detail">("price");
+  const [otherDetailMode, setOtherDetailMode] = usePersistedPref<"price" | "detail">("bills-print-other-mode", "price");
+  // คอลัมน์ "รวมสุทธิ" โชว์ยอดปัจจุบัน (รวมส่วนลดพิเศษที่ยังไม่หมดอายุ) หรือยอดเต็มถ้าไม่มีส่วนลดพิเศษนั้น
+  const [totalDisplayMode, setTotalDisplayMode] = usePersistedPref<"net" | "excludeSpecialDiscount">("bills-print-total-mode", "net");
   // รายการที่โชว์บนใบพิมพ์ (โหมด slip) และจำนวนใบต่อแผ่น A4 — เปิด/ปิดค่าห้อง/น้ำ/ไฟได้ + เลือกขนาดตายตัวหรืออัตโนมัติ
   const [slipLineKeys, setSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [slipLayout, setSlipLayout] = useState<BillSlipLayout>("auto");
@@ -1746,6 +1773,28 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                     </div>
                   </div>
                 )}
+                {colKeys.has("total") && (
+                  <div style={{
+                    marginTop: 8, padding: "8px 10px", borderRadius: 8,
+                    background: "var(--color-background)", border: "1px solid var(--color-light)", flexShrink: 0,
+                  }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-dark)", marginBottom: 6 }}>
+                      <i className="fas fa-sliders-h me-1" />คอลัมน์ "รวมสุทธิ" แสดงแบบไหน?
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {(["net", "excludeSpecialDiscount"] as const).map((v) => (
+                        <button key={v} type="button" className={`pcp-chip${totalDisplayMode === v ? " active" : ""}`}
+                          style={{ width: "100%", textAlign: "center", whiteSpace: "normal", lineHeight: 1.3 }}
+                          onClick={() => setTotalDisplayMode(v)}>
+                          {v === "net" ? "ยอดสุทธิปัจจุบัน (รวมส่วนลดพิเศษ)" : "ยอดเต็มหลังส่วนลดพิเศษหมดอายุ"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-muted" style={{ fontSize: "0.68rem", marginTop: 6 }}>
+                      ถ้าห้องมีส่วนลดพิเศษที่ตั้งวันหมดอายุไว้ จะโชว์อีกยอดเป็นบรรทัดเล็กให้เทียบด้วยเสมอ
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ width: 1, background: "var(--color-light)", flexShrink: 0 }} />
             </>
@@ -1836,7 +1885,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
           <button className="btn btn-primary" disabled={selected.size === 0 || (mode === "record" && colKeys.size === 0)}
             onClick={() => onConfirm({
               entries: pool.filter((e) => selected.has(billEntryKey(e.monthYear, e.item.roomId))),
-              mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode,
+              mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode,
             })}>
             <i className="fas fa-print me-2" />พิมพ์
             <span style={{ marginLeft: 6, background: "rgba(255,255,255,0.25)", borderRadius: 10, padding: "1px 8px", fontSize: "0.8em" }}>{selected.size} ห้อง</span>
@@ -1849,8 +1898,9 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
 
 // ── ตารางสรุปบิลสำหรับบริหาร/บันทึก — รวมทุกห้องไว้ในตารางเดียวต่อเดือน เก็บเป็นหลักฐาน ─
 // เลือกคอลัมน์ที่จะพิมพ์ได้ (colKeys) รวมถึงคอลัมน์ blank ที่เว้นว่างไว้ให้เขียนด้วยมือ (เช่น เก็บเงินหน้างาน)
-function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = "price" }: {
-  entries: PrintEntry[]; config: AppConfig; colKeys: Set<string>; tenants: any[]; otherDetailMode?: "price" | "detail";
+function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = "price", totalDisplayMode = "net" }: {
+  entries: PrintEntry[]; config: AppConfig; colKeys: Set<string>; tenants: any[];
+  otherDetailMode?: "price" | "detail"; totalDisplayMode?: "net" | "excludeSpecialDiscount";
 }) {
   const cols = BILL_RECORD_COLS.filter((c) => colKeys.has(c.key));
   const totalIdx = cols.findIndex((c) => c.key === "total");
@@ -1899,7 +1949,7 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
                   <tr key={`${entry.item.roomId}-${entry.payerIndex ?? "main"}`}>
                     {cols.map((col) => (
                       <td key={col.key} className={`${col.align === "end" ? "amt " : ""}${col.blank ? "blank-write" : ""}`}>
-                        {renderBillRecordCell(col, entry, config, tenants, otherDetailMode)}
+                        {renderBillRecordCell(col, entry, config, tenants, otherDetailMode, totalDisplayMode)}
                       </td>
                     ))}
                   </tr>
@@ -1937,9 +1987,10 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenants, otherDetailMode = "price" }: {
+function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenants, otherDetailMode = "price", totalDisplayMode = "net" }: {
   entries: PrintEntry[]; config: AppConfig; mode: "slip" | "record"; colKeys: Set<string>;
-  lineKeys: Set<string>; layout: BillSlipLayout; tenants: any[]; otherDetailMode?: "price" | "detail";
+  lineKeys: Set<string>; layout: BillSlipLayout; tenants: any[];
+  otherDetailMode?: "price" | "detail"; totalDisplayMode?: "net" | "excludeSpecialDiscount";
 }) {
   const isPretty = layout === "pretty";
   const perPage = layout === "auto" || isPretty ? 0 : Number(layout);
@@ -1969,7 +2020,7 @@ function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenan
           </div>
         ))
       ) : (
-        <BillRecordTable entries={entries} config={config} colKeys={colKeys} tenants={tenants} otherDetailMode={otherDetailMode} />
+        <BillRecordTable entries={entries} config={config} colKeys={colKeys} tenants={tenants} otherDetailMode={otherDetailMode} totalDisplayMode={totalDisplayMode} />
       )}
     </div>
   );
@@ -2905,6 +2956,7 @@ export default function BillsPage() {
   const [printMode, setPrintMode] = useState<"slip" | "record">("slip");
   const [printColKeys, setPrintColKeys] = useState<Set<string>>(BILL_RECORD_DEFAULT_COLS);
   const [printOtherDetailMode, setPrintOtherDetailMode] = useState<"price" | "detail">("price");
+  const [printTotalDisplayMode, setPrintTotalDisplayMode] = useState<"net" | "excludeSpecialDiscount">("net");
   const [printSlipLineKeys, setPrintSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [printSlipLayout, setPrintSlipLayout] = useState<BillSlipLayout>("auto");
   const [printConfigPool, setPrintConfigPool] = useState<{ item: BillItem; monthYear: string }[] | null>(null);
@@ -4292,13 +4344,14 @@ export default function BillsPage() {
           towers={towers}
           initialSelected={printConfigPreselect}
           onCancel={() => setPrintConfigPool(null)}
-          onConfirm={({ entries, mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode }) => {
+          onConfirm={({ entries, mode, splitMode, colKeys, slipLineKeys, slipLayout, otherDetailMode, totalDisplayMode }) => {
             // ไม่ปิดหน้าตั้งค่าพิมพ์ตรงนี้ — ถ้ากด cancel ที่ไดอะล็อกพิมพ์ของเบราว์เซอร์ จะได้กลับมาที่
             // หน้าตั้งค่าพิมพ์เดิมทันที (ปรับตัวเลือกแล้วกดพิมพ์ใหม่ได้เลย) แทนที่จะหลุดไปหน้าเปล่าๆ
             setPrintPayload(expandEntriesForPrint(entries, splitMode, tenants));
             setPrintMode(mode);
             setPrintColKeys(colKeys);
             setPrintOtherDetailMode(otherDetailMode);
+            setPrintTotalDisplayMode(totalDisplayMode);
             setPrintSlipLineKeys(slipLineKeys);
             setPrintSlipLayout(slipLayout);
             // เข้าไดอะล็อกพิมพ์ของเบราว์เซอร์ทันทีเหมือนหน้าจดมิเตอร์ ไม่ต้องมีหน้าพรีวิวคั่นกลาง — รอ
@@ -4310,7 +4363,8 @@ export default function BillsPage() {
 
       {printPayload && (
         <BillPrintOnly entries={printPayload} config={config} mode={printMode} colKeys={printColKeys}
-          lineKeys={printSlipLineKeys} layout={printSlipLayout} tenants={tenants} otherDetailMode={printOtherDetailMode} />
+          lineKeys={printSlipLineKeys} layout={printSlipLayout} tenants={tenants} otherDetailMode={printOtherDetailMode}
+          totalDisplayMode={printTotalDisplayMode} />
       )}
 
       {payingIndex !== null && billData[payingIndex] && (
