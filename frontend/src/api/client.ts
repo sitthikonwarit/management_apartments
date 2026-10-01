@@ -154,6 +154,13 @@ export const vehiclesApi = {
   deleteType: (id: string) => api.delete(`/vehicles/types/${id}`).then((r) => r.data),
 };
 
+export const specialDiscountsApi = {
+  getAll: () => api.get("/special-discounts").then((r) => r.data),
+  create: (data: any) => api.post("/special-discounts", data).then((r) => r.data),
+  update: (id: string, data: any) => api.put(`/special-discounts/${id}`, data).then((r) => r.data),
+  delete: (id: string) => api.delete(`/special-discounts/${id}`).then((r) => r.data),
+};
+
 export interface ChatConversation {
   lineUserId: string;
   tenantId: string | null;

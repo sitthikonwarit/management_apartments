@@ -128,6 +128,21 @@ export const roomTags = pgTable("room_tags", {
   price: str("price"),
 });
 
+// ── ส่วนลดพิเศษ (เฉพาะห้อง) ────────────────────────────────────────────────────
+// ส่วนลดที่พนักงานกำหนดเอง ผูกกับห้องที่เลือกไว้เท่านั้น (roomIds) ถูกคิดซ้ำเข้าไปในบิลทุกเดือนให้อัตโนมัติ
+// (ดู applySpecialDiscounts ใน frontend/src/utils/billCalc.ts) จนกว่าจะถึงเดือนหลัง expiryDate ถึงจะหยุดคิดให้
+// เอง ไม่ต้องมาปิด/ลบเอง — type เป็น "fixed" (จำนวนเงินตรงๆ) หรือ "percent" (เปอร์เซ็นต์ของยอดก่อนหักส่วนลด)
+export const specialDiscounts = pgTable("special_discounts", {
+  id: text("id").primaryKey(),
+  orgId: orgId(),
+  name: str("name"),
+  type: str("type"), // "fixed" | "percent"
+  value: str("value"), // จำนวนเงิน หรือ เปอร์เซ็นต์ แล้วแต่ type
+  roomIds: json("room_ids"),
+  expiryDate: str("expiry_date"), // "YYYY-MM-DD" — ว่าง = ไม่มีวันหมดอายุ
+  createdAt: str("created_at"),
+});
+
 export const meterReadings = pgTable("meter_readings", {
   id: text("id").primaryKey(),
   orgId: orgId(),

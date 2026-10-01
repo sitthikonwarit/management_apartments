@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import Select, { components } from "react-select";
-import { billsApi, roomsApi, tenantsApi, vehiclesApi, metersApi, settingsApi } from "../api/client";
+import { billsApi, roomsApi, tenantsApi, vehiclesApi, metersApi, settingsApi, specialDiscountsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig, type AppConfig } from "../context/AppConfigContext";
 import CustomSelect2 from "../components/CustomSelect2";
@@ -13,6 +13,7 @@ import EmptyState from "../components/EmptyState";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
+  type SpecialDiscount,
   monthYearLabel, myScore, prevMY,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
@@ -2523,6 +2524,139 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
 
 interface BulkSendItem { roomId: string; roomNumber: string; status: "pending" | "sending" | "success" | "error"; message?: string }
 
+// ── ป็อปอัพส่วนลดพิเศษเฉพาะห้อง ───────────────────────────────────────────────
+// ตั้งส่วนลด (จำนวนเงินตรงๆ หรือเปอร์เซ็นต์) ผูกกับห้องที่เลือกไว้ ให้คิดซ้ำเข้าบิลทุกเดือนอัตโนมัติจนกว่าจะถึง
+// เดือนหลังวันหมดอายุที่ตั้งไว้ (ไม่ตั้งวันหมดอายุ = ใช้ได้ตลอดไป) — ดู applySpecialDiscounts ใน utils/billCalc.ts
+function SpecialDiscountsModal({ rooms, discounts, onClose, onChange }: {
+  rooms: any[]; discounts: SpecialDiscount[];
+  onClose: () => void;
+  onChange: (next: SpecialDiscount[]) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"fixed" | "percent">("fixed");
+  const [value, setValue] = useState("");
+  const [roomIds, setRoomIds] = useState<string[]>([]);
+  const [expiryDate, setExpiryDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const roomOptions = rooms
+    .slice()
+    .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true, sensitivity: "base" }))
+    .map((r) => ({ value: r.id, label: `ห้อง ${r.number}` }));
+
+  function resetForm() {
+    setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setError("");
+  }
+  function startEdit(d: SpecialDiscount) {
+    setEditingId(d.id); setName(d.name); setType(d.type); setValue(String(d.value)); setRoomIds(d.roomIds); setExpiryDate(d.expiryDate); setError("");
+  }
+
+  async function handleSubmit() {
+    if (!name.trim()) { setError("กรุณาระบุชื่อส่วนลด"); return; }
+    if (roomIds.length === 0) { setError("กรุณาเลือกห้องอย่างน้อย 1 ห้อง"); return; }
+    if (!(Number(value) > 0)) { setError("กรุณาระบุจำนวน/เปอร์เซ็นต์ให้ถูกต้อง"); return; }
+    setSaving(true); setError("");
+    try {
+      const payload = { name: name.trim(), type, value: Number(value), roomIds, expiryDate };
+      const saved = editingId ? await specialDiscountsApi.update(editingId, payload) : await specialDiscountsApi.create(payload);
+      onChange(editingId ? discounts.map((d) => (d.id === editingId ? saved : d)) : [...discounts, saved]);
+      resetForm();
+      toastSuccess(editingId ? "แก้ไขส่วนลดพิเศษแล้ว" : "เพิ่มส่วนลดพิเศษแล้ว");
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? e?.message ?? "บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await specialDiscountsApi.delete(id);
+      onChange(discounts.filter((d) => d.id !== id));
+      if (editingId === id) resetForm();
+      toastSuccess("ลบส่วนลดพิเศษแล้ว");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="confirm-overlay" onClick={onClose}>
+      <div className="confirm-dialog" style={{ maxWidth: 560, width: "94%", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h6 className="mb-0"><i className="fas fa-percent me-2 text-primary" />ส่วนลดพิเศษเฉพาะห้อง</h6>
+          <button className="btn-close" onClick={onClose} />
+        </div>
+
+        {discounts.length > 0 && (
+          <div className="mb-3" style={{ maxHeight: 220, overflowY: "auto" }}>
+            {discounts.map((d) => (
+              <div key={d.id} className="d-flex align-items-center justify-content-between p-2 mb-1 rounded"
+                style={{ background: "var(--color-background)", border: "1px solid var(--color-light)" }}>
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                  <div className="fw-semibold">
+                    {d.name} <span className="text-muted small">({d.type === "percent" ? `${d.value}%` : `${d.value.toLocaleString()} บาท`})</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: 11 }}>
+                    {d.roomIds.length} ห้อง · {d.expiryDate ? `หมดอายุ ${thaiDateOnlyString(new Date(d.expiryDate))}` : "ไม่มีวันหมดอายุ"}
+                  </div>
+                </div>
+                <div className="d-flex gap-1 flex-shrink-0">
+                  <button className="btn btn-sm btn-outline-secondary" title="แก้ไข" onClick={() => startEdit(d)}><i className="fas fa-pen" /></button>
+                  <button className="btn btn-sm btn-outline-danger" title="ลบ" disabled={deletingId === d.id} onClick={() => handleDelete(d.id)}>
+                    {deletingId === d.id ? <span className="spinner-border spinner-border-sm" /> : <i className="fas fa-trash-alt" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <hr className="my-2" />
+        <label className="form-label small fw-bold mb-2">{editingId ? "แก้ไขส่วนลด" : "เพิ่มส่วนลดใหม่"}</label>
+        <div className="row g-2 mb-2">
+          <div className="col-12">
+            <input type="text" className="form-control" placeholder="ชื่อส่วนลด เช่น ส่วนลดพนักงาน"
+              value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="col-6">
+            <select className="form-select" value={type} onChange={(e) => setType(e.target.value as "fixed" | "percent")}>
+              <option value="fixed">จำนวนเงิน (บาท)</option>
+              <option value="percent">เปอร์เซ็นต์ (%)</option>
+            </select>
+          </div>
+          <div className="col-6">
+            <input type="number" min={0} className="form-control" placeholder={type === "percent" ? "เช่น 10" : "เช่น 500"}
+              value={value} onChange={(e) => setValue(e.target.value)} />
+          </div>
+          <div className="col-12">
+            <label className="form-label small mb-1">ห้องที่ใช้ส่วนลดนี้</label>
+            <Select isMulti options={roomOptions} styles={colSelectStyles}
+              value={roomOptions.filter((o) => roomIds.includes(o.value))}
+              onChange={(sel) => setRoomIds((sel as any[]).map((s) => s.value))}
+              noOptionsMessage={() => "ไม่พบห้อง"} placeholder="เลือกห้อง..." />
+          </div>
+          <div className="col-12">
+            <label className="form-label small mb-1">วันหมดอายุ <span className="text-muted fw-normal">(ไม่ระบุ = ไม่มีวันหมดอายุ)</span></label>
+            <ThaiDatePicker value={expiryDate} onChange={setExpiryDate} />
+          </div>
+        </div>
+        {error && <div className="room-modal-error mb-2"><i className="fas fa-exclamation-circle me-2" />{error}</div>}
+        <div className="d-flex gap-2">
+          {editingId && <button className="btn btn-outline-secondary" onClick={resetForm}>ยกเลิกแก้ไข</button>}
+          <button className="btn btn-primary flex-grow-1" onClick={handleSubmit} disabled={saving}>
+            {saving ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</> : editingId ? "บันทึกการแก้ไข" : <><i className="fas fa-plus me-1" />เพิ่มส่วนลด</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── หน้าหลัก ────────────────────────────────────────────────────────────────────
 export default function BillsPage() {
   const { setBreadcrumb } = useBreadcrumb();
@@ -2557,6 +2691,8 @@ export default function BillsPage() {
   const [tenantTags, setTenantTags] = useState<any[]>([]);
   const [meterReadings, setMeterReadings] = useState<any[]>([]);
   const [formulas, setFormulas] = useState<any[]>([]);
+  const [specialDiscounts, setSpecialDiscounts] = useState<SpecialDiscount[]>([]);
+  const [showSpecialDiscounts, setShowSpecialDiscounts] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingMonthYear, setEditingMonthYear] = useState("");
@@ -2669,16 +2805,17 @@ export default function BillsPage() {
     Promise.all([
       billsApi.getAll(), roomsApi.getAll(), tenantsApi.getAll(), vehiclesApi.getAll(),
       roomsApi.getTags(), tenantsApi.getTags(), metersApi.getAll(), settingsApi.getAll(),
-      roomsApi.getTowers(), billsApi.getPayments(),
-    ]).then(([b, r, t, v, rt, tt, m, f, tw, pay]) => {
+      roomsApi.getTowers(), billsApi.getPayments(), specialDiscountsApi.getAll(),
+    ]).then(([b, r, t, v, rt, tt, m, f, tw, pay, sd]) => {
       setBills(b); setRooms(r); setTenants(t); setVehicles(v);
       setRoomTags(rt); setTenantTags(tt); setMeterReadings(m); setFormulas(f); setTowers(tw); setPayments(pay);
+      setSpecialDiscounts(sd);
     });
   }, [billsLiveTick]);
 
   const ctx: GenCtx = useMemo(() => ({
-    rooms, tenants, vehicles, roomTags, tenantTags, meterReadings, formulas, config, allBills: bills,
-  }), [rooms, tenants, vehicles, roomTags, tenantTags, meterReadings, formulas, config, bills]);
+    rooms, tenants, vehicles, roomTags, tenantTags, meterReadings, formulas, config, allBills: bills, specialDiscounts,
+  }), [rooms, tenants, vehicles, roomTags, tenantTags, meterReadings, formulas, config, bills, specialDiscounts]);
 
   // เปิดตรงไปยังบิล/ห้องที่ระบุ เมื่อมีคนนำทางมาจากหน้าอื่น (เช่น คลิกประวัติการชำระเงินจากหน้ารายละเอียดผู้เช่า)
   // ผ่าน navigate("/bills", { state: { openBillId, openRoomId } }) — ทำครั้งเดียวหลังโหลดข้อมูลบิลเสร็จ
@@ -3411,6 +3548,9 @@ export default function BillsPage() {
                   />
                 </div>
               </div>
+              <button className="btn btn-outline-primary btn-sm" onClick={() => setShowSpecialDiscounts(true)}>
+                <i className="fas fa-percent me-1" />ส่วนลดพิเศษ
+              </button>
               {editingId && (
                 <button className="btn btn-outline-danger btn-sm" onClick={() => setConfirmDeleteGroup({ id: editingId, monthYear: editingMonthYear, data: billData })}>
                   <i className="fas fa-trash-alt me-1" />ลบบิลเดือนนี้
@@ -3919,6 +4059,25 @@ export default function BillsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showSpecialDiscounts && (
+        <SpecialDiscountsModal
+          rooms={rooms}
+          discounts={specialDiscounts}
+          onClose={() => setShowSpecialDiscounts(false)}
+          onChange={(next) => {
+            setSpecialDiscounts(next);
+            // บิลเดือนที่กำลังเปิดแก้ไขอยู่ (ถ้ามี) ต้องคิดส่วนลดพิเศษใหม่ให้ทันที ไม่ต้องปิดเปิดหน้าใหม่ —
+            // ใช้ refreshDerivedFields ตัวเดียวกับตอนโหลดบิล แค่สลับ specialDiscounts ใน ctx เป็นชุดล่าสุด
+            if (billData.length > 0) {
+              const nextData = billData.map((it) => ({ ...it }));
+              refreshDerivedFields(nextData, editingMonthYear, { ...ctx, specialDiscounts: next });
+              setBillData(nextData);
+              setDirty(true);
+            }
+          }}
+        />
       )}
 
       {printConfigPool && (

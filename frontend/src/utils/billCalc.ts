@@ -92,6 +92,17 @@ export interface BillGroup {
   scheduledDate?: string;
 }
 
+// ── ส่วนลดพิเศษเฉพาะห้อง (ตั้งจากหน้าบิล — ดู SpecialDiscountsModal ใน BillsPage.tsx) ──────────────────────
+// คิดซ้ำเข้าบิลทุกเดือนอัตโนมัติให้ทุกห้องที่เลือกไว้ จนกว่าจะถึงเดือนหลัง expiryDate (ว่าง = ไม่มีวันหมดอายุ)
+export interface SpecialDiscount {
+  id: string;
+  name: string;
+  type: "fixed" | "percent";
+  value: number;
+  roomIds: string[];
+  expiryDate: string; // "YYYY-MM-DD" ว่าง = ไม่หมดอายุ
+}
+
 export interface GenCtx {
   rooms: any[];
   tenants: any[];
@@ -102,6 +113,7 @@ export interface GenCtx {
   formulas: any[];
   config: AppConfig;
   allBills: BillGroup[];
+  specialDiscounts: SpecialDiscount[];
 }
 
 // ── Date / label helpers ──────────────────────────────────────────────────────
@@ -469,13 +481,41 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
   return rows;
 }
 
+// ── ส่วนลดพิเศษเฉพาะห้อง — ไม่หมดอายุในเดือนนี้หรือยังไม่มีวันหมดอายุเลย = ยังใช้ได้ ──
+function specialDiscountActiveForMonth(d: SpecialDiscount, monthYear: string): boolean {
+  if (!d.expiryDate) return true;
+  const [m, y] = monthYear.split("/");
+  const monthStart = new Date(Number(y), Number(m) - 1, 1).getTime();
+  const expiry = new Date(d.expiryDate).getTime();
+  if (Number.isNaN(expiry)) return true;
+  return monthStart <= expiry;
+}
+
+// สมานรายการ "ส่วนลดพิเศษ" (id ขึ้นต้นด้วย "special-") ในบิลให้ตรงกับส่วนลดพิเศษที่ตั้งไว้จริง ณ ตอนนี้ — ลบ
+// รายการที่ไม่มีสิทธิ์แล้ว (ห้องถูกถอดออก/หมดอายุ/ถูกลบส่วนลดทิ้ง) เพิ่มรายการที่มีสิทธิ์ใหม่ และอัปเดตยอดของ
+// รายการเดิมให้ตรง (เผื่อแก้ไขมูลค่า/เปอร์เซ็นต์ทีหลัง) ไม่แตะรายการส่วนลดอื่นที่พนักงานเพิ่มเอง (discFromStaff)
+// — ส่วนลดแบบเปอร์เซ็นต์คิดจากยอดก่อนหักส่วนลดทั้งหมด (ค่าเช่า+น้ำ+ไฟ+รถ+Tag+รายการอื่นๆ+ค่าปรับ+ยอดค้างยกมา)
+export function applySpecialDiscounts(item: BillItem, monthYear: string, discounts: SpecialDiscount[]) {
+  const others = (item.discountItems || []).filter((d) => !d.id.startsWith("special-"));
+  const applicable = discounts.filter((d) => d.roomIds.includes(item.roomId) && specialDiscountActiveForMonth(d, monthYear));
+  if (applicable.length === 0) { item.discountItems = others; return; }
+  const base = calcItemTotal({ ...item, discountItems: [] });
+  const specialItems: BillLineItem[] = applicable.map((d) => ({
+    id: `special-${d.id}`,
+    name: d.name,
+    price: Math.max(0, d.type === "percent" ? base * ((Number(d.value) || 0) / 100) : Number(d.value) || 0),
+  }));
+  item.discountItems = [...others, ...specialItems];
+}
+
 // ── Recalc หนึ่งแถว (หลังแก้มิเตอร์/สูตร/รายการ) ─────────────────────────────
 export function recalcItem(
   item: BillItem,
   config: AppConfig,
   defaults: { water: string; electric: string },
   monthYear: string,
-  tenant?: any
+  tenant?: any,
+  specialDiscounts?: SpecialDiscount[]
 ) {
   const meterBase = Math.pow(10, config.meterDigits || 4);
   item.meterWater.unit = item.waterActive ? calcUnit(item.meterWater.curr, item.meterWater.prev, meterBase) : 0;
@@ -516,6 +556,9 @@ export function recalcItem(
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);
 
   calculateOverdueFine(item, overdueCfg, monthYear);
+  // specialDiscounts ไม่ได้ส่งมา = ไม่แตะรายการส่วนลดพิเศษที่มีอยู่เดิมเลย (เผื่อ caller ที่ยังไม่รู้จักฟีเจอร์นี้
+  // เรียก recalcItem ตรงๆ โดยไม่ผ่าน ctx — ถ้า default เป็น [] จะลบส่วนลดพิเศษที่เคยใส่ไว้ทิ้งโดยไม่ตั้งใจ)
+  if (specialDiscounts !== undefined) applySpecialDiscounts(item, monthYear, specialDiscounts);
   applyBillRounding(item, monthYear);
   item.total = calcItemTotal(item);
   item.originalTotal = item.originalTotal ?? item.total;
@@ -638,7 +681,7 @@ export function generateBillForMonth(monthYear: string, ctx: GenCtx): BillItem[]
       status: "unpaid",
       paidAmount: 0,
     };
-    recalcItem(item, ctx.config, defaults, monthYear);
+    recalcItem(item, ctx.config, defaults, monthYear, undefined, ctx.specialDiscounts);
     return item;
   });
 }
@@ -761,7 +804,7 @@ export function refreshDerivedFields(items: BillItem[], monthYear: string, ctx: 
   const defaults = resolveDefaultFormulas(ctx.formulas);
   items.forEach((item) => {
     const tenant = item.tenantId ? ctx.tenants.find((t) => String(t.id) === String(item.tenantId)) : undefined;
-    recalcItem(item, ctx.config, defaults, monthYear, tenant);
+    recalcItem(item, ctx.config, defaults, monthYear, tenant, ctx.specialDiscounts);
   });
   return items;
 }
@@ -804,7 +847,7 @@ export function syncTenantForItem(item: BillItem, ctx: GenCtx, monthYear: string
   item.outstandingItems = outstanding.items;
 
   const defaults = resolveDefaultFormulas(ctx.formulas);
-  recalcItem(item, ctx.config, defaults, monthYear, tenant);
+  recalcItem(item, ctx.config, defaults, monthYear, tenant, ctx.specialDiscounts);
   return item;
 }
 
