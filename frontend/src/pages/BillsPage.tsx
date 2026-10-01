@@ -1737,64 +1737,40 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                         {grp.label}
                       </div>
                       {BILL_RECORD_COLS.filter((c) => grp.keys.includes(c.key)).map((col) => (
-                        <label key={col.key} className="print-config-check-row">
-                          <input type="checkbox" className="print-config-checkbox"
-                            checked={colKeys.has(col.key)}
-                            onChange={(e) => {
-                              const next = new Set(colKeys);
-                              e.target.checked ? next.add(col.key) : next.delete(col.key);
-                              setColKeys(next);
-                            }}
-                          />
-                          <span>{col.header}</span>
-                        </label>
+                        <div key={col.key}>
+                          <label className="print-config-check-row">
+                            <input type="checkbox" className="print-config-checkbox"
+                              checked={colKeys.has(col.key)}
+                              onChange={(e) => {
+                                const next = new Set(colKeys);
+                                e.target.checked ? next.add(col.key) : next.delete(col.key);
+                                setColKeys(next);
+                              }}
+                            />
+                            <span>{col.header}</span>
+                          </label>
+                          {/* ตัวเลือกรูปแบบการแสดงผลของคอลัมน์นี้ — วางแทรกในลิสต์ที่เลื่อนได้เลย (ไม่ใช่กล่อง
+                              แยกแปะไว้นอกพื้นที่เลื่อน) กันแผงแคบๆ โดนตัวเลือกพวกนี้แย่งพื้นที่จนลิสต์เช็คบ็อกซ์
+                              เหลือที่โชว์แค่ 1-2 แถว (บั๊กเดิม) */}
+                          {col.key === "other" && colKeys.has("other") && (
+                            <select className="form-select form-select-sm" style={{ fontSize: "0.72rem", marginBottom: 6 }}
+                              value={otherDetailMode} onChange={(e) => setOtherDetailMode(e.target.value as "price" | "detail")}>
+                              <option value="price">อื่นๆ (รวม): ราคาอย่างเดียว</option>
+                              <option value="detail">อื่นๆ (รวม): ราคา + รายละเอียด</option>
+                            </select>
+                          )}
+                          {col.key === "total" && colKeys.has("total") && (
+                            <select className="form-select form-select-sm" style={{ fontSize: "0.72rem", marginBottom: 6 }}
+                              value={totalDisplayMode} onChange={(e) => setTotalDisplayMode(e.target.value as "net" | "excludeSpecialDiscount")}>
+                              <option value="net">รวมสุทธิ: ยอดปัจจุบัน (รวมส่วนลดพิเศษ)</option>
+                              <option value="excludeSpecialDiscount">รวมสุทธิ: ยอดเต็มหลังส่วนลดหมดอายุ</option>
+                            </select>
+                          )}
+                        </div>
                       ))}
                     </div>
                   ))}
                 </div>
-                {colKeys.has("other") && (
-                  <div style={{
-                    marginTop: 8, padding: "8px 10px", borderRadius: 8,
-                    background: "var(--color-background)", border: "1px solid var(--color-light)", flexShrink: 0,
-                  }}>
-                    <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-dark)", marginBottom: 6 }}>
-                      <i className="fas fa-sliders-h me-1" />คอลัมน์ "อื่นๆ (รวม)" แสดงแบบไหน?
-                    </div>
-                    {/* แผงนี้แคบแค่ 190px (ดู .print-config-panel) — เรียงปุ่มตามแนวตั้งแทนแนวนอน กันข้อความยาว
-                        ("ราคา + รายละเอียด") ถูกตัด/ทับกันในพื้นที่แคบๆ */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {(["price", "detail"] as const).map((v) => (
-                        <button key={v} type="button" className={`pcp-chip${otherDetailMode === v ? " active" : ""}`}
-                          style={{ width: "100%", textAlign: "center", whiteSpace: "normal", lineHeight: 1.3 }}
-                          onClick={() => setOtherDetailMode(v)}>
-                          {v === "price" ? "ราคาอย่างเดียว" : "ราคา + รายละเอียด"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {colKeys.has("total") && (
-                  <div style={{
-                    marginTop: 8, padding: "8px 10px", borderRadius: 8,
-                    background: "var(--color-background)", border: "1px solid var(--color-light)", flexShrink: 0,
-                  }}>
-                    <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-dark)", marginBottom: 6 }}>
-                      <i className="fas fa-sliders-h me-1" />คอลัมน์ "รวมสุทธิ" แสดงแบบไหน?
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {(["net", "excludeSpecialDiscount"] as const).map((v) => (
-                        <button key={v} type="button" className={`pcp-chip${totalDisplayMode === v ? " active" : ""}`}
-                          style={{ width: "100%", textAlign: "center", whiteSpace: "normal", lineHeight: 1.3 }}
-                          onClick={() => setTotalDisplayMode(v)}>
-                          {v === "net" ? "ยอดสุทธิปัจจุบัน (รวมส่วนลดพิเศษ)" : "ยอดเต็มหลังส่วนลดพิเศษหมดอายุ"}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="text-muted" style={{ fontSize: "0.68rem", marginTop: 6 }}>
-                      ถ้าห้องมีส่วนลดพิเศษที่ตั้งวันหมดอายุไว้ จะโชว์อีกยอดเป็นบรรทัดเล็กให้เทียบด้วยเสมอ
-                    </div>
-                  </div>
-                )}
               </div>
               <div style={{ width: 1, background: "var(--color-light)", flexShrink: 0 }} />
             </>
