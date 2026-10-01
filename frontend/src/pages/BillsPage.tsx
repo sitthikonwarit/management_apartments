@@ -2589,9 +2589,17 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
     try {
       const payload = { name: name.trim(), type, value: Number(value), roomIds, expiryDate };
       const saved = editingId ? await specialDiscountsApi.update(editingId, payload) : await specialDiscountsApi.create(payload);
-      onChange(editingId ? discounts.map((d) => (d.id === editingId ? saved : d)) : [...discounts, saved]);
+      // บันทึกลง backend สำเร็จแล้ว ณ จุดนี้ — reset ฟอร์ม/แจ้งเตือนสำเร็จก่อนเลย ไม่รอ onChange ด้านล่าง
+      // (ซึ่งแค่รีคำนวณบิลเดือนที่เปิดอยู่ให้เห็นผลทันที เป็นแค่ side effect ของหน้านี้ ไม่ใช่ส่วนที่ตัดสินว่า
+      // บันทึกสำเร็จหรือไม่) กันปัญหาที่ onChange พังแล้วทำให้ผู้ใช้เข้าใจผิดว่าบันทึกไม่สำเร็จทั้งที่จริงๆ
+      // ข้อมูลถูกบันทึกลง backend ไปแล้ว
       resetForm();
       toastSuccess(editingId ? "แก้ไขส่วนลดพิเศษแล้ว" : "เพิ่มส่วนลดพิเศษแล้ว");
+      try {
+        onChange(editingId ? discounts.map((d) => (d.id === editingId ? saved : d)) : [...discounts, saved]);
+      } catch (e) {
+        console.error("[SpecialDiscountsModal] onChange failed", e);
+      }
     } catch (e: any) {
       setError(e?.response?.data?.error ?? e?.message ?? "บันทึกไม่สำเร็จ");
     } finally {
