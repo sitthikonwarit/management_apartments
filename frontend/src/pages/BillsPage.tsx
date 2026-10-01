@@ -2153,9 +2153,15 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
       case "total": return <span className="fw-bold" style={{ color: "var(--color-primary)" }}>{money(item.total)}</span>;
       case "received": {
         const paid = Number(item.paidAmount) || 0;
-        return paid > 0
-          ? <span className={paid >= item.total - 0.005 ? "text-success" : "text-warning"}>{money(paid)}</span>
-          : "-";
+        if (paid <= 0) return "-";
+        const chipColor = paid >= item.total - 0.005 ? "#198754" : "#ffc107";
+        return (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            <span className="bill-tag-chip" style={{ "--tag-color": chipColor } as React.CSSProperties}>
+              <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{monthYearLabel(monthYear)} ({money(paid)})
+            </span>
+          </div>
+        );
       }
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
