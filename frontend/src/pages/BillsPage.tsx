@@ -136,6 +136,7 @@ const BILL_RECORD_COLS: BillRecordColDef[] = [
   { key: "customItems", header: "รายการอื่นๆ", align: "end" },
   { key: "discount", header: "ส่วนลด", align: "end" },
   { key: "other", header: "อื่นๆ (รวม)", align: "end" },
+  { key: "ownMonth", header: "ยอดเดือนนี้", align: "end" },
   { key: "outstanding", header: "ค้างชำระ", align: "end" },
   { key: "fine", header: "ค่าปรับ", align: "end" },
   { key: "total", header: "รวมสุทธิ", align: "end" },
@@ -156,7 +157,7 @@ const BILL_RECORD_DEFAULT_COLS = new Set(
 const BILL_RECORD_COL_GROUPS: { label: string; icon?: string; color?: string; keys: string[] }[] = [
   { label: "ข้อมูลบิล", keys: [
     "room", "tenant", "priceRoom", "water", "electric", "vehicle", "roomTag", "tenantTag", "customItems",
-    "discount", "other", "outstanding", "fine", "total", "status",
+    "discount", "other", "ownMonth", "outstanding", "fine", "total", "status",
   ] },
   { label: "ช่องว่างสำหรับเขียนด้วยมือ", icon: "fa-pen", color: "#b07000", keys: ["collected", "collectDate", "signature", "note"] },
 ];
@@ -234,6 +235,7 @@ function renderBillRecordCell(
         </>
       );
     }
+    case "ownMonth": return money(Math.max(0, item.total - (item.outstandingAmount || 0)));
     case "outstanding": {
       if (!(item.outstandingAmount > 0) || item.status === "paid") return "-";
       // บอกด้วยว่าค้างของเดือนไหนบ้าง (ยอดค้างอาจยกมาจากหลายเดือนติดกันพร้อมกันได้) ไม่ใช่โชว์แค่ยอดรวมเฉยๆ
