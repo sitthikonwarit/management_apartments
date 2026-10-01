@@ -206,9 +206,11 @@ export function getOutstandingBalance(
 // ── ปรับ outstandingItems ที่แช่แข็งไว้ให้ตรงกับความจริง ────────────────────────
 // outstandingAmount/outstandingItems ถูก "แช่แข็ง" ไว้กับบิลตอนสร้าง และ refreshDerivedFields จงใจไม่คำนวณใหม่
 // (ดูคอมเมนต์ยาวที่ refreshDerivedFields) แต่ถ้าผู้ใช้ไปกดปิดยอดบิลเดือนเก่าจาก "หน้าของเดือนนั้นเอง" โดยตรง
-// (ไม่ได้ปิดผ่านป็อปอัพชำระเงินของเดือนนี้) snapshot นี้จะไม่ถูกอัปเดต ทำให้เดือนนี้ยังโชว์ยอดค้าง/ให้เลือกปิด
-// เดือนที่จริงๆ ปิดไปแล้ว — ฟังก์ชันนี้เทียบ outstandingItems กับสถานะจริงของบิลต้นทางแต่ละเดือน แล้วแยกเป็น
-// เดือนที่ยัง "ค้างจริง" (pending) กับยอดรวมของเดือนที่ "ปิดไปแล้ว" (settledAmount) ให้ผู้เรียกเอาไปหักออก
+// (ไม่ได้ปิดผ่านป็อปอัพชำระเงินของเดือนนี้) หรือจ่ายบางส่วนของเดือนเก่าผ่าน applyPartialOutstandingPayment
+// snapshot นี้จะไม่ถูกอัปเดต ทำให้เดือนนี้ยังโชว์ยอดค้าง/ให้เลือกปิดเต็มจำนวนเดิม ทั้งที่จริงๆ ปิดไปแล้ว (เต็มหรือ
+// บางส่วน) — ฟังก์ชันนี้เทียบ outstandingItems กับสถานะจริงของบิลต้นทางแต่ละเดือน แล้วแยกเป็นเดือนที่ยัง
+// "ค้างจริง" (pending — amount ถูกปรับเป็นยอดคงเหลือสดๆ แล้วถ้าจ่ายมาบางส่วน) กับยอดรวมของเดือนที่ "ปิดไปแล้ว
+// เต็มจำนวน" (settledAmount) ให้ผู้เรียกเอาไปหักออก
 export function reconcileOutstandingItems(
   allBills: BillGroup[], roomId: string, tenantId: string | null, tenantName: string,
   outstandingItems: OutstandingItem[]
@@ -219,11 +221,18 @@ export function reconcileOutstandingItems(
   for (const o of outstandingItems) {
     const group = allBills.find((b) => b.monthYear === o.monthYear);
     const roomBill = (group?.data || []).find((r) => String(r.roomId) === String(roomId));
-    const isSettled = !!roomBill
-      && sameOutstandingTenant(roomBill, tenantId, tenantName)
-      && (roomBill.status === "paid" || (Number(roomBill.paidAmount) || 0) >= (Number(roomBill.total) || 0) - 0.005);
-    if (isSettled) { settled.push(o); settledAmount += Number(o.amount) || 0; }
-    else pending.push(o);
+    const sameTenant = !!roomBill && sameOutstandingTenant(roomBill, tenantId, tenantName);
+    const isSettled = sameTenant
+      && (roomBill!.status === "paid" || (Number(roomBill!.paidAmount) || 0) >= (Number(roomBill!.total) || 0) - 0.005);
+    if (isSettled) {
+      settled.push(o); settledAmount += Number(o.amount) || 0;
+    } else if (sameTenant) {
+      const ownAmount = (Number(roomBill!.total) || 0) - (Number(roomBill!.outstandingAmount) || 0);
+      const liveAmount = Math.max(0, ownAmount - (Number(roomBill!.paidAmount) || 0));
+      pending.push({ ...o, amount: liveAmount });
+    } else {
+      pending.push(o);
+    }
   }
   return { pending, settled, settledAmount };
 }
