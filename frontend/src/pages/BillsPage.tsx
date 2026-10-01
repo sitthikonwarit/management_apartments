@@ -2528,8 +2528,8 @@ interface BulkSendItem { roomId: string; roomNumber: string; status: "pending" |
 // ── ป็อปอัพส่วนลดพิเศษเฉพาะห้อง ───────────────────────────────────────────────
 // ตั้งส่วนลด (จำนวนเงินตรงๆ หรือเปอร์เซ็นต์) ผูกกับห้องที่เลือกไว้ ให้คิดซ้ำเข้าบิลทุกเดือนอัตโนมัติจนกว่าจะถึง
 // เดือนหลังวันหมดอายุที่ตั้งไว้ (ไม่ตั้งวันหมดอายุ = ใช้ได้ตลอดไป) — ดู applySpecialDiscounts ใน utils/billCalc.ts
-function SpecialDiscountsModal({ rooms, tenants, discounts, onClose, onChange }: {
-  rooms: any[]; tenants: any[]; discounts: SpecialDiscount[];
+function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onChange }: {
+  rooms: any[]; tenants: any[]; towers: any[]; discounts: SpecialDiscount[];
   onClose: () => void;
   onChange: (next: SpecialDiscount[]) => void;
 }) {
@@ -2543,14 +2543,29 @@ function SpecialDiscountsModal({ rooms, tenants, discounts, onClose, onChange }:
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const roomOptions = rooms
+  const [roomPickerOpen, setRoomPickerOpen] = useState(false);
+  const [roomSearch, setRoomSearch] = useState("");
+  const [roomTowerFilter, setRoomTowerFilter] = useState<string[]>([]);
+  const activeTowers = towers.filter((t: any) => t.isActive !== false);
+
+  const roomList = rooms
     .slice()
     .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true, sensitivity: "base" }))
     .map((r) => {
       const tenant = findTenantForRoom(tenants, r);
       const tenantName = tenant ? `${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim() : "";
-      return { value: r.id, label: `ห้อง ${r.number}`, tenantName };
+      return { id: r.id, number: r.number, towerId: r.towerId, tenantName };
     });
+  const filteredRooms = roomList.filter((r) => {
+    const q = roomSearch.trim().toLowerCase();
+    const matchSearch = !q || r.number.toLowerCase().includes(q) || r.tenantName.toLowerCase().includes(q);
+    const matchTower = roomTowerFilter.length === 0 || roomTowerFilter.includes(r.towerId ?? "unassigned");
+    return matchSearch && matchTower;
+  });
+  const allFilteredSelected = filteredRooms.length > 0 && filteredRooms.every((r) => roomIds.includes(r.id));
+  const selectedRoomLabel = roomIds.length === 0
+    ? "เลือกห้อง..."
+    : `เลือกแล้ว ${roomIds.length} ห้อง — ${roomList.filter((r) => roomIds.includes(r.id)).map((r) => r.number).slice(0, 4).join(", ")}${roomIds.length > 4 ? ", ..." : ""}`;
 
   function resetForm() {
     setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setError("");
@@ -2638,20 +2653,76 @@ function SpecialDiscountsModal({ rooms, tenants, discounts, onClose, onChange }:
             <input type="number" min={0} className="form-control" placeholder={type === "percent" ? "เช่น 10" : "เช่น 500"}
               value={value} onChange={(e) => setValue(e.target.value)} />
           </div>
-          <div className="col-12">
+          <div className="col-12" style={{ position: "relative" }}>
             <label className="form-label small mb-1">ห้องที่ใช้ส่วนลดนี้</label>
-            <Select isMulti options={roomOptions} styles={colSelectStyles}
-              value={roomOptions.filter((o) => roomIds.includes(o.value))}
-              onChange={(sel) => setRoomIds((sel as any[]).map((s) => s.value))}
-              formatOptionLabel={(o: { label: string; tenantName: string }, meta: { context: string }) => (
-                meta.context === "menu" ? (
-                  <div className="d-flex justify-content-between align-items-center gap-2">
-                    <span>{o.label}</span>
-                    {o.tenantName && <span className="text-muted" style={{ fontSize: 12 }}>{o.tenantName}</span>}
+            <button type="button" className="form-select text-start" onClick={() => setRoomPickerOpen((v) => !v)}
+              style={{ color: roomIds.length === 0 ? "var(--color-dark-variant)" : "var(--color-dark)" }}>
+              {selectedRoomLabel}
+            </button>
+            {roomPickerOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={() => setRoomPickerOpen(false)} />
+                <div className="print-config-panel" style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 1401,
+                  background: "var(--color-white)", border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)",
+                  boxShadow: "var(--box-shadow)", padding: 10, maxHeight: 360,
+                }}>
+                  <div className="print-config-search">
+                    <i className="fas fa-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-dark-variant)", fontSize: "0.8rem", pointerEvents: "none" }} />
+                    <input type="text" className="form-control form-control-sm" style={{ paddingLeft: 30, fontSize: "0.85rem" }}
+                      placeholder="ค้นหาเลขห้อง หรือชื่อผู้เช่า..." value={roomSearch} onChange={(e) => setRoomSearch(e.target.value)} />
                   </div>
-                ) : <span>{o.label}</span>
-              )}
-              noOptionsMessage={() => "ไม่พบห้อง"} placeholder="เลือกห้อง..." />
+
+                  {activeTowers.length > 1 && (
+                    <div style={{ display: "flex", gap: 6, margin: "8px 0", flexWrap: "wrap" }}>
+                      {activeTowers.map((tw: any) => {
+                        const active = roomTowerFilter.includes(tw.id);
+                        return (
+                          <button key={tw.id} type="button" className={`pcp-chip${active ? " active" : ""}`}
+                            onClick={() => setRoomTowerFilter((prev) => prev.includes(tw.id) ? prev.filter((id) => id !== tw.id) : [...prev, tw.id])}>
+                            <i className="fas fa-building me-1" style={{ fontSize: "0.7em" }} />{tw.name}
+                          </button>
+                        );
+                      })}
+                      {roomTowerFilter.length > 0 && (
+                        <button type="button" className="pcp-chip" onClick={() => setRoomTowerFilter([])}><i className="fas fa-times me-1" />ล้างตึก</button>
+                      )}
+                    </div>
+                  )}
+
+                  {filteredRooms.length > 0 && (
+                    <label className="print-config-check-row" style={{ marginTop: 6, marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid var(--color-light)" }}>
+                      <input type="checkbox" className="print-config-checkbox" checked={allFilteredSelected}
+                        onChange={(e) => {
+                          const next = new Set(roomIds);
+                          filteredRooms.forEach((r) => { e.target.checked ? next.add(r.id) : next.delete(r.id); });
+                          setRoomIds([...next]);
+                        }} />
+                      <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--color-dark-variant)" }}>เลือกทั้งหมดที่กรอง ({filteredRooms.length} ห้อง)</span>
+                    </label>
+                  )}
+
+                  <div className="nicescrollbar" style={{ overflowY: "auto", maxHeight: 220 }}>
+                    {filteredRooms.length === 0 ? (
+                      <div style={{ textAlign: "center", color: "var(--color-dark-variant)", padding: "20px 0", fontSize: "0.85rem" }}>
+                        <i className="fas fa-search me-2" />ไม่พบห้องที่ตรงกัน
+                      </div>
+                    ) : filteredRooms.map((r) => (
+                      <label key={r.id} className="print-config-room-row">
+                        <input type="checkbox" className="print-config-checkbox" checked={roomIds.includes(r.id)}
+                          onChange={(e) => {
+                            const next = new Set(roomIds);
+                            e.target.checked ? next.add(r.id) : next.delete(r.id);
+                            setRoomIds([...next]);
+                          }} />
+                        <span className="pcr-room-num">{r.number}</span>
+                        {r.tenantName ? <span className="pcr-name">{r.tenantName}</span> : <span className="pcr-vacant"><i className="fas fa-door-open me-1" />ว่าง</span>}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <div className="col-12">
             <label className="form-label small mb-1">วันหมดอายุ <span className="text-muted fw-normal">(ไม่ระบุ = ไม่มีวันหมดอายุ)</span></label>
@@ -4078,6 +4149,7 @@ export default function BillsPage() {
         <SpecialDiscountsModal
           rooms={rooms}
           tenants={tenants}
+          towers={towers}
           discounts={specialDiscounts}
           onClose={() => setShowSpecialDiscounts(false)}
           onChange={(next) => {
