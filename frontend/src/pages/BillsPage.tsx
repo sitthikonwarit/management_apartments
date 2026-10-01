@@ -26,6 +26,7 @@ import { thaiDateTimeString, thaiDateOnlyString, thaiFullDateString } from "../u
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
 import { setUnsavedGuard, clearUnsavedGuard, guardNavigation } from "../utils/unsavedGuard";
+import { findTenantForRoom } from "../utils/tenantRoom";
 
 // หมายเหตุ: ข้อมูลเดือน/ปีของบิลและมิเตอร์ในระบบนี้เก็บเป็นปี ค.ศ. ตรงๆ เสมอ (ไม่แปลง)
 // เพื่อให้ตรงกับข้อมูลมิเตอร์/บิลเดิมที่มีอยู่แล้ว — การแปลงเป็น พ.ศ./ค.ศ. ตามที่ผู้ใช้เลือกไว้ในหน้าตั้งค่า
@@ -2527,8 +2528,8 @@ interface BulkSendItem { roomId: string; roomNumber: string; status: "pending" |
 // ── ป็อปอัพส่วนลดพิเศษเฉพาะห้อง ───────────────────────────────────────────────
 // ตั้งส่วนลด (จำนวนเงินตรงๆ หรือเปอร์เซ็นต์) ผูกกับห้องที่เลือกไว้ ให้คิดซ้ำเข้าบิลทุกเดือนอัตโนมัติจนกว่าจะถึง
 // เดือนหลังวันหมดอายุที่ตั้งไว้ (ไม่ตั้งวันหมดอายุ = ใช้ได้ตลอดไป) — ดู applySpecialDiscounts ใน utils/billCalc.ts
-function SpecialDiscountsModal({ rooms, discounts, onClose, onChange }: {
-  rooms: any[]; discounts: SpecialDiscount[];
+function SpecialDiscountsModal({ rooms, tenants, discounts, onClose, onChange }: {
+  rooms: any[]; tenants: any[]; discounts: SpecialDiscount[];
   onClose: () => void;
   onChange: (next: SpecialDiscount[]) => void;
 }) {
@@ -2545,7 +2546,11 @@ function SpecialDiscountsModal({ rooms, discounts, onClose, onChange }: {
   const roomOptions = rooms
     .slice()
     .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true, sensitivity: "base" }))
-    .map((r) => ({ value: r.id, label: `ห้อง ${r.number}` }));
+    .map((r) => {
+      const tenant = findTenantForRoom(tenants, r);
+      const tenantName = tenant ? `${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim() : "";
+      return { value: r.id, label: `ห้อง ${r.number}`, tenantName };
+    });
 
   function resetForm() {
     setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setError("");
@@ -2638,6 +2643,14 @@ function SpecialDiscountsModal({ rooms, discounts, onClose, onChange }: {
             <Select isMulti options={roomOptions} styles={colSelectStyles}
               value={roomOptions.filter((o) => roomIds.includes(o.value))}
               onChange={(sel) => setRoomIds((sel as any[]).map((s) => s.value))}
+              formatOptionLabel={(o: { label: string; tenantName: string }, meta: { context: string }) => (
+                meta.context === "menu" ? (
+                  <div className="d-flex justify-content-between align-items-center gap-2">
+                    <span>{o.label}</span>
+                    {o.tenantName && <span className="text-muted" style={{ fontSize: 12 }}>{o.tenantName}</span>}
+                  </div>
+                ) : <span>{o.label}</span>
+              )}
               noOptionsMessage={() => "ไม่พบห้อง"} placeholder="เลือกห้อง..." />
           </div>
           <div className="col-12">
@@ -4064,6 +4077,7 @@ export default function BillsPage() {
       {showSpecialDiscounts && (
         <SpecialDiscountsModal
           rooms={rooms}
+          tenants={tenants}
           discounts={specialDiscounts}
           onClose={() => setShowSpecialDiscounts(false)}
           onChange={(next) => {
