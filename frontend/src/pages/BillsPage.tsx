@@ -1726,13 +1726,19 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                   ))}
                 </div>
                 {colKeys.has("other") && (
-                  <div style={{ borderTop: "1px solid var(--color-light)", paddingTop: 8, marginTop: 4 }}>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--color-dark-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                      คอลัมน์ "อื่นๆ (รวม)"
+                  <div style={{
+                    marginTop: 8, padding: "8px 10px", borderRadius: 8,
+                    background: "var(--color-background)", border: "1px solid var(--color-light)", flexShrink: 0,
+                  }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-dark)", marginBottom: 6 }}>
+                      <i className="fas fa-sliders-h me-1" />คอลัมน์ "อื่นๆ (รวม)" แสดงแบบไหน?
                     </div>
-                    <div style={{ display: "flex", gap: 6 }}>
+                    {/* แผงนี้แคบแค่ 190px (ดู .print-config-panel) — เรียงปุ่มตามแนวตั้งแทนแนวนอน กันข้อความยาว
+                        ("ราคา + รายละเอียด") ถูกตัด/ทับกันในพื้นที่แคบๆ */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {(["price", "detail"] as const).map((v) => (
                         <button key={v} type="button" className={`pcp-chip${otherDetailMode === v ? " active" : ""}`}
+                          style={{ width: "100%", textAlign: "center", whiteSpace: "normal", lineHeight: 1.3 }}
                           onClick={() => setOtherDetailMode(v)}>
                           {v === "price" ? "ราคาอย่างเดียว" : "ราคา + รายละเอียด"}
                         </button>
