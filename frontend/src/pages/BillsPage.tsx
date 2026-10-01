@@ -145,10 +145,13 @@ const BILL_RECORD_COLS: BillRecordColDef[] = [
   { key: "signature", header: "ลายเซ็นผู้รับ/ผู้จ่าย", blank: true },
   { key: "note", header: "หมายเหตุ", blank: true },
 ];
-// ค่าเริ่มต้น "อื่นๆ (รวม)" ปิดไว้ (ซ้ำกับคอลัมน์แยกย่อยที่เปิดเป็นค่าเริ่มต้นแทน) ผู้ใช้เปิดเองได้ถ้าอยากได้
-// ยอดรวมก้อนเดียวแทน/เพิ่มเติมจากคอลัมน์แยก
+// ค่าเริ่มต้น: คอลัมน์แยกย่อย (ค่าจอดรถ/Tag ห้อง/Tag ผู้เช่า/รายการอื่นๆ/ส่วนลด) ปิดไว้ก่อน เปิดเองได้จาก
+// ตัวเลือกคอลัมน์ — ถ้าเปิดทุกอย่างพร้อมกันเป็นค่าเริ่มต้น ตารางจะกว้างเกินหน้ากระดาษ A4 แนวนอน จนบางคอลัมน์
+// (โดยเฉพาะตัวที่อยู่กลางๆ) ล้นออกนอกหน้าไม่ถูกพิมพ์ให้เห็นเลย — คงค่าเริ่มต้นเป็นชุดเดิมก่อนมีฟีเจอร์นี้ไว้
+// (รวม "อื่นๆ (รวม)" เหมือนเดิม) ผู้ใช้ที่อยากได้รายละเอียดแยกค่อยเปิดเพิ่มเอง (แนะนำให้ปิด "อื่นๆ (รวม)" ลง
+// พร้อมกันกันข้อมูลซ้ำซ้อน/ตารางกว้างเกินไป)
 const BILL_RECORD_DEFAULT_COLS = new Set(
-  BILL_RECORD_COLS.filter((c) => !c.blank && c.key !== "other").map((c) => c.key)
+  BILL_RECORD_COLS.filter((c) => !c.blank && !["vehicle", "roomTag", "tenantTag", "customItems", "discount"].includes(c.key)).map((c) => c.key)
 );
 const BILL_RECORD_COL_GROUPS: { label: string; icon?: string; color?: string; keys: string[] }[] = [
   { label: "ข้อมูลบิล", keys: [
@@ -3125,9 +3128,22 @@ export default function BillsPage() {
     setView("detail");
   }
 
+  // บิลที่จะพิมพ์อาจมาจากเดือนที่ไม่ได้เปิดแก้ไขอยู่ตอนนี้ (เช่น พิมพ์สรุปจากหน้ารายการหลายเดือนพร้อมกัน) ยอดที่
+  // เก็บไว้ใน bills state จึงอาจไม่ทันล่าสุด — โดยเฉพาะส่วนลดพิเศษที่มีวันหมดอายุ (ดู applySpecialDiscounts) หรือ
+  // การปัดเศษ ถ้าไม่เคยเปิดบิลเดือนนั้นมาแก้/รีเฟรชอีกเลยตั้งแต่เพิ่ม/แก้ส่วนลดพิเศษ ยอดที่พิมพ์จะยังเป็นยอดเก่า
+  // ก่อนมีส่วนลดนั้น (หรือยังมีส่วนลดที่หมดอายุไปแล้วค้างอยู่) — คำนวณใหม่สดๆ ด้วย ctx ปัจจุบันก่อนพิมพ์เสมอ ไม่
+  // พึ่งค่าที่แช่แข็งไว้ใน state (clone ก่อน ไม่แก้ item ต้นฉบับใน bills/billData ตรงๆ)
   function openPrintConfig(pool: { item: BillItem; monthYear: string }[], preselect?: Set<string>) {
-    setPrintConfigPool(pool);
-    setPrintConfigPreselect(preselect ?? new Set(pool.map((e) => billEntryKey(e.monthYear, e.item.roomId))));
+    const byMonth = new Map<string, BillItem[]>();
+    const cloned = pool.map(({ item, monthYear }) => {
+      const copy = JSON.parse(JSON.stringify(item)) as BillItem;
+      if (!byMonth.has(monthYear)) byMonth.set(monthYear, []);
+      byMonth.get(monthYear)!.push(copy);
+      return { item: copy, monthYear };
+    });
+    byMonth.forEach((items, monthYear) => refreshDerivedFields(items, monthYear, ctx));
+    setPrintConfigPool(cloned);
+    setPrintConfigPreselect(preselect ?? new Set(cloned.map((e) => billEntryKey(e.monthYear, e.item.roomId))));
     setPrintConfigNonce((n) => n + 1);
   }
 
