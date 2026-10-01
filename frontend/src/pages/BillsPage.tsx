@@ -2881,17 +2881,18 @@ export default function BillsPage() {
     Promise.all([
       billsApi.getAll(), roomsApi.getAll(), tenantsApi.getAll(), vehiclesApi.getAll(),
       roomsApi.getTags(), tenantsApi.getTags(), metersApi.getAll(), settingsApi.getAll(),
-      roomsApi.getTowers(), billsApi.getPayments(),
-    ]).then(([b, r, t, v, rt, tt, m, f, tw, pay]) => {
+      roomsApi.getTowers(), billsApi.getPayments(), specialDiscountsApi.getAll(),
+    ]).then(([b, r, t, v, rt, tt, m, f, tw, pay, sd]) => {
       setBills(b); setRooms(r); setTenants(t); setVehicles(v);
       setRoomTags(rt); setTenantTags(tt); setMeterReadings(m); setFormulas(f); setTowers(tw); setPayments(pay);
+      setSpecialDiscounts(sd);
     }).finally(() => setLoading(false));
   }, []);
 
   // มีคนอื่นแก้ไขบิล/ห้อง/ผู้เช่า/รถ/แท็ก/มิเตอร์/สูตร/ตึก/การชำระเงินที่เครื่องอื่น — โหลดข้อมูลใหม่เงียบๆ
   // ไม่กระทบ billData ที่กำลังแก้ไขค้างอยู่ (เป็น state แยกจาก bills) จึงไม่เสี่ยงข้อมูลที่ยังไม่ได้บันทึกหาย
   const billsLiveTick = useLiveRefreshTick([
-    "bill", "room", "tenant", "vehicle", "room-tag", "tenant-tag", "meter", "formula", "tower", "payment",
+    "bill", "room", "tenant", "vehicle", "room-tag", "tenant-tag", "meter", "formula", "tower", "payment", "special-discount",
   ]);
   useEffect(() => {
     if (billsLiveTick === 0) return;

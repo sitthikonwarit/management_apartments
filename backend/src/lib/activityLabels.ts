@@ -66,6 +66,11 @@ const RULES: LogRule[] = [
   { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/send-sticker$/, entityType: "chat", action: "create", label: "ส่งสติกเกอร์ทางแชท" },
   { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/read$/, entityType: "chat", action: "read", label: "อ่านข้อความแชท" },
 
+  // special discounts
+  { method: "POST", pattern: /^\/special-discounts$/, entityType: "special-discount", action: "create", label: "เพิ่มส่วนลดพิเศษ" },
+  { method: "PUT", pattern: /^\/special-discounts\/[^/]+$/, entityType: "special-discount", action: "update", label: "แก้ไขส่วนลดพิเศษ" },
+  { method: "DELETE", pattern: /^\/special-discounts\/[^/]+$/, entityType: "special-discount", action: "delete", label: "ลบส่วนลดพิเศษ" },
+
   // auth — เฉพาะจัดการบัญชี (login/register/logout log แยกต่างหากในจุดที่เกิดเหตุการณ์จริง)
   { method: "POST", pattern: /^\/auth\/users$/, entityType: "user", action: "create", label: "เพิ่มผู้ใช้งาน" },
   { method: "PUT", pattern: /^\/auth\/users\/[^/]+$/, entityType: "user", action: "update", label: "แก้ไขผู้ใช้งาน" },
