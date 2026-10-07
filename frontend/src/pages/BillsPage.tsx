@@ -114,6 +114,10 @@ function expandEntriesForPrint(
   return result;
 }
 
+function remainingDue(item: BillItem) {
+  return Math.max(0, (Number(item.total) || 0) - (Number(item.paidAmount) || 0));
+}
+
 function otherChargesTotal(item: BillItem) {
   const tags = item.billTagItems.reduce((s, t) => s + (Number(t.price) || 0), 0)
     + item.billTenantTagItems.reduce((s, t) => s + (Number(t.price) || 0), 0);
@@ -141,6 +145,7 @@ const BILL_RECORD_COLS: BillRecordColDef[] = [
   { key: "outstanding", header: "ค้างชำระ", align: "end" },
   { key: "fine", header: "ค่าปรับ", align: "end" },
   { key: "total", header: "รวมสุทธิ", align: "end" },
+  { key: "remaining", header: "คงเหลือค้างจ่าย", align: "end" },
   { key: "status", header: "สถานะ" },
   { key: "collected", header: "ยอดที่เก็บจริง", align: "end", blank: true },
   { key: "collectDate", header: "วันที่เก็บ", blank: true },
@@ -158,7 +163,7 @@ const BILL_RECORD_DEFAULT_COLS = new Set(
 const BILL_RECORD_COL_GROUPS: { label: string; icon?: string; color?: string; keys: string[] }[] = [
   { label: "ข้อมูลบิล", keys: [
     "room", "tenant", "priceRoom", "water", "electric", "vehicle", "roomTag", "tenantTag", "customItems",
-    "discount", "other", "ownMonth", "outstanding", "fine", "total", "status",
+    "discount", "other", "ownMonth", "outstanding", "fine", "total", "remaining", "status",
   ] },
   { label: "ช่องว่างสำหรับเขียนด้วยมือ", icon: "fa-pen", color: "#b07000", keys: ["collected", "collectDate", "signature", "note"] },
 ];
@@ -295,6 +300,11 @@ function renderBillRecordCell(
           {specialDiscountTotal > 0 && <div className="bill-record-subline">{altLabel}</div>}
         </>
       );
+    }
+    // ยอดคงเหลือที่ยังต้องจ่ายจริง = รวมสุทธิ (ซึ่งรวมยอดค้างยกมาแล้ว) - ที่รับชำระแล้ว
+    case "remaining": {
+      const rem = remainingDue(item);
+      return rem > 0.005 ? money(rem) : "-";
     }
     case "status": return item.status === "paid" ? "จ่ายแล้ว" : "รอชำระ";
     default: return null; // คอลัมน์ blank สำหรับเขียนด้วยมือ — ไม่มีข้อมูลให้แสดง
@@ -1960,7 +1970,6 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
   otherDetailMode?: "price" | "detail"; totalDisplayMode?: "net" | "excludeSpecialDiscount";
 }) {
   const cols = BILL_RECORD_COLS.filter((c) => colKeys.has(c.key));
-  const totalIdx = cols.findIndex((c) => c.key === "total");
   // entries อาจมีหลายแถวต่อห้องเดียวกัน (โหมดแยกแถวตามคน) — เรียงตามเลขห้องก่อน แล้วตามด้วยลำดับคนในห้องนั้น
   // (payerIndex ว่าง = แถวรวมของห้อง ให้ขึ้นก่อนแถวแยกของห้องเดียวกันเสมอ)
   const groups = useMemo(() => {
@@ -1986,6 +1995,7 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
         // ยอดรวม/จำนวนห้องคิดจากห้องจริงเท่านั้น (dedupe ตาม roomId) ไม่นับซ้ำตามจำนวนแถวที่แยกคน
         const uniqueItems = [...new Map(rows.map((e) => [e.item.roomId, e.item])).values()];
         const grandTotal = uniqueItems.reduce((s, i) => s + i.total, 0);
+        const grandRemaining = uniqueItems.reduce((s, i) => s + remainingDue(i), 0);
         const paidCount = uniqueItems.filter((i) => i.status === "paid").length;
         return (
           <div key={monthYear} style={gi > 0 ? { pageBreakBefore: "always" } : undefined}>
@@ -2014,15 +2024,19 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
               </tbody>
               <tfoot>
                 <tr>
-                  {totalIdx === -1 ? (
-                    <td colSpan={cols.length}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>
-                  ) : (
-                    <>
-                      {totalIdx > 0 && <td colSpan={totalIdx}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>}
-                      <td className="amt">{money(grandTotal)}</td>
-                      {cols.length - totalIdx - 1 > 0 && <td colSpan={cols.length - totalIdx - 1} />}
-                    </>
-                  )}
+                  {(() => {
+                    const sums: Record<string, number> = { total: grandTotal, remaining: grandRemaining };
+                    const firstSum = cols.findIndex((c) => c.key in sums);
+                    if (firstSum === -1) return <td colSpan={cols.length}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>;
+                    return (
+                      <>
+                        {firstSum > 0 && <td colSpan={firstSum}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>}
+                        {cols.slice(firstSum).map((c) => (
+                          <td key={c.key} className={c.align === "end" ? "amt" : undefined}>{c.key in sums ? money(sums[c.key]) : ""}</td>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </tr>
               </tfoot>
             </table>
