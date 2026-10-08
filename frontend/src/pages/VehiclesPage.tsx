@@ -15,7 +15,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Select from "react-select";
 import { vehiclesApi, tenantsApi, roomsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
-import CustomSelect2 from "../components/CustomSelect2";
+import CustomSelect2, { CreatableSelect2 } from "../components/CustomSelect2";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
@@ -352,20 +352,29 @@ function VehicleTypesView({ types, onBack, onUpdate }: {
 function BrandModelFields({ brand, model, onChange }: { brand: string; model: string; onChange: (brand: string, model: string) => void }) {
   const brandKey = VEHICLE_BRANDS.find((b) => b.toLowerCase() === brand.trim().toLowerCase());
   const models = brandKey ? VEHICLE_BRAND_MODELS[brandKey] : [];
+  const brandOptions = VEHICLE_BRANDS.map((b) => ({ value: b, label: b }));
+  const modelOptions = models.map((m) => ({ value: m, label: m }));
   return (
     <>
       <div className="col-md-6">
         <label className="form-label">ยี่ห้อ</label>
-        <input type="text" className="form-control" list="vehicle-brand-list" placeholder="เลือกหรือพิมพ์ เช่น Honda, Toyota"
-          value={brand} onChange={(e) => onChange(e.target.value, model)} />
-        <datalist id="vehicle-brand-list">{VEHICLE_BRANDS.map((b) => <option key={b} value={b} />)}</datalist>
+        <CreatableSelect2
+          value={brand ? { value: brand, label: brand } : null}
+          options={brandOptions}
+          onChange={(o: any) => onChange(o?.value ?? "", o?.value === brand ? model : "")}
+          isClearable
+          placeholder="เลือกหรือพิมพ์ยี่ห้อ..."
+        />
       </div>
       <div className="col-md-6">
         <label className="form-label">รุ่น</label>
-        <input type="text" className="form-control" list="vehicle-model-list"
-          placeholder={models.length ? "เลือกหรือพิมพ์รุ่น" : "พิมพ์รุ่น (เลือกยี่ห้อก่อนจะมีลิสต์รุ่นให้เลือก)"}
-          value={model} onChange={(e) => onChange(brand, e.target.value)} />
-        <datalist id="vehicle-model-list">{models.map((m) => <option key={m} value={m} />)}</datalist>
+        <CreatableSelect2
+          value={model ? { value: model, label: model } : null}
+          options={modelOptions}
+          onChange={(o: any) => onChange(brand, o?.value ?? "")}
+          isClearable
+          placeholder={models.length ? "เลือกหรือพิมพ์รุ่น..." : "พิมพ์รุ่น (เลือกยี่ห้อก่อนจะมีลิสต์ให้เลือก)"}
+        />
       </div>
     </>
   );

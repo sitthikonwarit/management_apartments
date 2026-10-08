@@ -1,4 +1,5 @@
 import Select, { StylesConfig, Props } from "react-select";
+import CreatableSelect from "react-select/creatable";
 
 export const customStyles: StylesConfig<any, false> = {
   control: (base, state) => ({
@@ -97,6 +98,20 @@ export default function CustomSelect2(props: Props<any, false>) {
       menuPortalTarget={document.body}
       menuPosition="fixed"
       {...props}
+    />
+  );
+}
+
+// Dropdown แบบเดียวกับ CustomSelect2 แต่พิมพ์ค่าใหม่นอกลิสต์เพิ่มเองได้ (เช่น ยี่ห้อ/รุ่นรถที่ไม่มีในลิสต์)
+export function CreatableSelect2(props: Props<any, false>) {
+  return (
+    <CreatableSelect
+      styles={customStyles}
+      noOptionsMessage={() => "ไม่พบข้อมูล"}
+      formatCreateLabel={(v: string) => `ใช้ "${v}"`}
+      menuPortalTarget={document.body}
+      menuPosition="fixed"
+      {...(props as any)}
     />
   );
 }
