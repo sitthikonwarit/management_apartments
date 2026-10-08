@@ -2609,11 +2609,33 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
         );
       }
       case "remaining": {
-        // ยอดคงเหลือที่ยังต้องจ่าย = รวมสุทธิ - รับชำระแล้ว (เขียว "-" เมื่อไม่เหลือ)
-        const rem = remainingDue(item);
-        return rem > 0.005
-          ? <span className="fw-bold" style={{ color: "#dc3545" }}>{money(rem)}</span>
-          : <span className="text-muted">-</span>;
+        // ยอดคงเหลือที่ยังต้องจ่ายแยกตามเดือน (chip เหมือนคอลัมน์ค้างชำระ/รับชำระแล้ว) — เดือนเก่าที่ยกมาโชว์เฉพาะ
+        // เดือนที่ยังไม่ปิดครบ (คำนวณสดจากบิลต้นทาง) + ส่วนของเดือนนี้เอง (ไม่รวมยอดค้างยกมา) หักที่รับแล้ว
+        // จ่ายหมดแล้วทุกเดือนไม่โชว์อะไร ("-")
+        const chips: { label: string; amount: number }[] = [];
+        for (const o of item.outstandingItems) {
+          const group = allBills.find((b) => b.monthYear === o.monthYear);
+          const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
+          if (!roomBill) continue;
+          const ownOld = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
+          const remOld = Math.max(0, ownOld - (Number(roomBill.paidAmount) || 0));
+          if (roomBill.status !== "paid" && remOld > 0.005) chips.push({ label: monthYearLabel(o.monthYear), amount: remOld });
+        }
+        if (item.status !== "paid") {
+          const ownNow = Math.max(0, item.total - (item.outstandingAmount || 0));
+          const remNow = Math.max(0, ownNow - (Number(item.paidAmount) || 0));
+          if (remNow > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: remNow });
+        }
+        if (chips.length === 0) return "-";
+        return (
+          <div className="d-flex flex-wrap justify-content-end gap-1">
+            {chips.map((c, i) => (
+              <span key={i} className="bill-tag-chip" style={{ "--tag-color": "#dc3545" } as React.CSSProperties}>
+                <i className="fas fa-calendar-alt" style={{ fontSize: 10 }} />{c.label} ({money(c.amount)})
+              </span>
+            ))}
+          </div>
+        );
       }
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
