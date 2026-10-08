@@ -2061,23 +2061,37 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 // ── คำนวณสถิติสรุปของบิลกลุ่มหนึ่ง (เดือนหนึ่งๆ) — แยกออกมาจาก useMemo เดิมในตัว BillsPage ให้เรียกใช้ซ้ำได้
 // ทั้งจากเดือนที่กำลังเปิดแก้ไขอยู่ (billData สด) และจากเดือนอื่นในหน้ารายการที่ยังไม่ได้เปิดเข้าไป (ดูปุ่ม
 // "พิมพ์สรุป Dashboard" ใน BillGroupTableView) ซึ่งใช้ b.data ดิบจาก state ตรงๆ แทน
-function computeBillStats(billData: BillItem[], payments: any[], monthYear: string): DashboardStats {
+// เงินที่รับแล้วของห้องหนึ่ง แยกเป็น "ของเดือนนี้เอง" กับ "ของเดือนเก่าที่ยกมา" — ใช้ร่วมกันทั้งคอลัมน์รับชำระแล้ว
+// ในตาราง และแถบสรุป "เงินที่ได้รับแล้ว" ให้ผลรวมตรงกันเสมอ (เดิมสรุปนับจากรายการชำระ คนละฐานกับตาราง จึงเพี้ยน)
+// paidAmount ของเดือนนี้รวมเครดิตที่ไปปิดยอดเดือนเก่าไว้แล้ว จึงต้องหักส่วนเดือนเก่าออกก่อน กันนับซ้ำ
+function receivedBreakdown(item: BillItem, allBills: BillGroup[]) {
+  const paid = Number(item.paidAmount) || 0;
+  const old: { monthYear: string; amount: number; cleared: boolean }[] = [];
+  for (const o of item.outstandingItems) {
+    const group = allBills.find((b) => b.monthYear === o.monthYear);
+    const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
+    if (!roomBill) continue;
+    const ownAmount = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
+    const liveRemaining = Math.max(0, ownAmount - (Number(roomBill.paidAmount) || 0));
+    const received = Math.max(0, o.amount - liveRemaining);
+    if (received > 0) old.push({ monthYear: o.monthYear, amount: received, cleared: liveRemaining <= 0.005 });
+  }
+  const oldTotal = old.reduce((s, c) => s + c.amount, 0);
+  return { own: Math.max(0, paid - oldTotal), old, oldTotal, paid };
+}
+
+function computeBillStats(billData: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = []): DashboardStats {
   const totalRooms = billData.length;
   const paid = billData.filter((i) => i.status === "paid").length;
   const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
   const unpaid = totalRooms - paid - overdue;
   const totalExpected = billData.reduce((s, i) => s + i.total, 0);
   const totalFixed = billData.reduce((s, i) => s + (i.originalTotal ?? i.total), 0);
-  const activePayments = payments.filter((p) => !p?.data?.cancelled);
-  const receivedThisMonth = activePayments
-    .filter((p) => p?.data?.monthYear === monthYear && !p?.data?.settledViaMonthYear)
-    .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
-  const receivedOldMonthsClosedThisMonth = activePayments
-    .filter((p) => p?.data?.settledViaMonthYear === monthYear)
-    .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
+  // นับจากสถานะบิลจริง (ดู receivedBreakdown) ไม่ใช่รายการชำระ — ตรงกับคอลัมน์ "รับชำระแล้ว" ในตารางเป๊ะ
+  const breakdowns = billData.map((i) => receivedBreakdown(i, allBills));
+  const receivedThisMonth = breakdowns.reduce((s, b) => s + b.own, 0);
+  const receivedOldMonthsClosedThisMonth = breakdowns.reduce((s, b) => s + b.oldTotal, 0);
   const netReceived = receivedThisMonth + receivedOldMonthsClosedThisMonth;
-  // ขาดอีก = ผลรวมยอดคงเหลือของทุกห้อง (รวมสุทธิ - paidAmount ต่อห้อง) ให้ตรงกับคอลัมน์ "คงเหลือ" เป๊ะ — เดิมใช้
-  // totalExpected - receivedThisMonth (นับจากรายการชำระ) ซึ่งไม่ตรงถ้ามีเครดิตปิดยอดเดือนเก่า/ชำระข้ามเดือน
   const totalMissing = billData.reduce((s, i) => s + remainingDue(i), 0);
   const totalRent = billData.reduce((s, i) => s + (Number(i.priceRoom) || 0), 0);
   const totalWater = billData.reduce((s, i) => s + (Number(i.priceWater) || 0), 0);
@@ -2087,7 +2101,7 @@ function computeBillStats(billData: BillItem[], payments: any[], monthYear: stri
   const totalOther = totalExpected - totalRent - totalWater - totalElectric - totalFine - totalOutstandingCarried;
   const waterUnits = billData.reduce((s, i) => s + (Number(i.meterWater?.unit) || 0), 0);
   const electricUnits = billData.reduce((s, i) => s + (Number(i.meterElectric?.unit) || 0), 0);
-  const collectRate = totalExpected > 0 ? (receivedThisMonth / totalExpected) * 100 : 0;
+  const collectRate = totalExpected > 0 ? (billData.reduce((s, i) => s + (Number(i.paidAmount) || 0), 0) / totalExpected) * 100 : 0;
   return {
     totalRooms, paid, overdue, unpaid, totalExpected, totalFixed,
     receivedThisMonth, receivedOldMonthsClosedThisMonth, netReceived, totalMissing,
@@ -2583,28 +2597,9 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
         // ให้เห็นว่าเงินที่รับมาไปลงเดือนไหนบ้าง แทนที่จะไปลดยอด "ค้างชำระ" ของเดือนนั้นในคอลัมน์อื่น (ดู case
         // "outstanding" ด้านบน ที่ตั้งใจคงยอดแช่แข็งเดิมไว้เป็นบันทึกตอนออกบิล)
         const chips: { label: string; amount: number; cleared: boolean }[] = [];
-        const paid = Number(item.paidAmount) || 0;
-        const oldChips: { label: string; amount: number; cleared: boolean }[] = [];
-        for (const o of item.outstandingItems) {
-          const group = allBills.find((b) => b.monthYear === o.monthYear);
-          const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
-          if (!roomBill) continue;
-          // roomBill.paidAmount คือยอดจ่ายสะสมของ "บิลเดือนนั้นทั้งใบ" (รวมค่าใช้จ่ายของตัวมันเอง+ยอดค้างที่มัน
-          // ยกมาจากเดือนก่อนหน้ามันเองด้วย) ไม่ใช่แค่ส่วนที่ไหลมาเป็น "ค้างชำระ" ของเดือนนี้ (o.amount — เฉพาะ
-          // ownAmount ของเดือนนั้น) เอามาโชว์ตรงๆ จะดูสูงเกินจริง/ปนกับยอดอื่นที่ไม่เกี่ยวกับ chip นี้ — คำนวณ
-          // ย้อนกลับจากสูตรเดียวกับตอนสร้าง o.amount (getOutstandingBalance: o.amount = ownAmount - paidAmount
-          // ตอนสร้างบิลนี้) ได้ว่าเงินที่รับเพิ่มมาสำหรับก้อนนี้ตั้งแต่นั้น = o.amount - ยอดคงเหลือสดๆ ตอนนี้
-          const ownAmount = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
-          const liveRemaining = Math.max(0, ownAmount - (Number(roomBill.paidAmount) || 0));
-          const receivedForThis = Math.max(0, o.amount - liveRemaining);
-          if (receivedForThis > 0) oldChips.push({ label: monthYearLabel(o.monthYear), amount: receivedForThis, cleared: liveRemaining <= 0.005 });
-        }
-        // paidAmount ของเดือนนี้รวมเครดิตที่ไปปิดยอดเดือนเก่าไว้แล้ว (ดู handleConfirmPayment: oldMonthsCollected +
-        // settledCreditApplied) ถ้าโชว์เต็มจำนวนแล้วยังโชว์ chip เดือนเก่าซ้ำอีก ยอดจะนับซ้ำ (รวมเกินยอดจริง) —
-        // หักส่วนที่ไปโชว์เป็นเดือนเก่าออกก่อน เหลือเป็นยอดของเดือนนี้เองล้วนๆ
-        const ownPaid = Math.max(0, paid - oldChips.reduce((s, c) => s + c.amount, 0));
-        if (ownPaid > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: ownPaid, cleared: paid >= item.total - 0.005 });
-        chips.push(...oldChips);
+        const rb = receivedBreakdown(item, allBills);
+        if (rb.own > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: rb.own, cleared: rb.paid >= item.total - 0.005 });
+        rb.old.forEach((o) => chips.push({ label: monthYearLabel(o.monthYear), amount: o.amount, cleared: o.cleared }));
         if (chips.length === 0) return "-";
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
@@ -3303,7 +3298,7 @@ export default function BillsPage() {
   function printDashboardForGroup(group: BillGroup) {
     setPrintPayload(null);
     const items = (group.data ?? []).map(normalizeBillItem);
-    setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear) }]);
+    setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear, bills) }]);
     setPrintDashboardSections(readPersistedDashboardSections());
     setPrintDashboard(true);
     setTimeout(() => window.print(), 80);
@@ -3978,8 +3973,8 @@ export default function BillsPage() {
   }, [billData, search, statusFilter]);
 
   const stats = useMemo(
-    () => computeBillStats(billData, payments, editingMonthYear),
-    [billData, payments, editingMonthYear]
+    () => computeBillStats(billData, payments, editingMonthYear, bills),
+    [billData, payments, editingMonthYear, bills]
   );
 
   return (
@@ -4674,7 +4669,7 @@ export default function BillsPage() {
               setPrintDashboardGroups(
                 [...byMonth.entries()]
                   .sort(([a], [b]) => myScore(a) - myScore(b))
-                  .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear) }))
+                  .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear, bills) }))
               );
               setPrintDashboardSections(dashboardSections);
               setPrintDashboard(true);
