@@ -349,6 +349,37 @@ function VehicleTypesView({ types, onBack, onUpdate }: {
 
 // ── VehicleEditView (แก้ไขยานพาหนะ – หน้าเต็มแบบเดียวกับเพิ่มยานพาหนะ) ───────────
 // ช่องยี่ห้อ + รุ่นแยกกัน แต่ละช่องมีลิสต์ให้เลือก (datalist) พิมพ์เองนอกลิสต์ได้ — ลิสต์รุ่นเปลี่ยนตามยี่ห้อที่เลือก
+// เลือกตำแหน่งโฟกัสของรูปปก (รูปแรก) ที่ถูกครอปในการ์ด/รายละเอียด — ลากสไลเดอร์ซ้าย-ขวา/บน-ล่าง ดูตัวอย่างสดๆ
+// เก็บเป็นสตริง object-position เช่น "50% 30%" (ว่าง = กึ่งกลาง)
+function ImagePositionPicker({ src, value, onChange }: { src: string; value: string; onChange: (v: string) => void }) {
+  const [x, y] = (value || "50% 50%").split(" ").map((n) => parseInt(n, 10));
+  const px = Number.isFinite(x) ? x : 50;
+  const py = Number.isFinite(y) ? y : 50;
+  return (
+    <div className="col-12">
+      <label className="form-label">ตำแหน่งรูปในการ์ด <span className="text-muted fw-normal">(ปรับส่วนของรูปที่จะโชว์ตอนถูกครอป — ใช้รูปแรกเป็นรูปปก)</span></label>
+      <div className="row g-3 align-items-center">
+        <div className="col-md-5">
+          <div style={{ height: 120, borderRadius: "var(--border-radius-1)", overflow: "hidden", border: "1px solid var(--color-light)" }}>
+            <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${px}% ${py}%` }} />
+          </div>
+        </div>
+        <div className="col-md-7">
+          <div className="d-flex align-items-center gap-2 mb-1">
+            <span className="small text-muted" style={{ width: 70 }}>ซ้าย–ขวา</span>
+            <input type="range" min={0} max={100} value={px} className="form-range" onChange={(e) => onChange(`${e.target.value}% ${py}%`)} />
+          </div>
+          <div className="d-flex align-items-center gap-2 mb-1">
+            <span className="small text-muted" style={{ width: 70 }}>บน–ล่าง</span>
+            <input type="range" min={0} max={100} value={py} className="form-range" onChange={(e) => onChange(`${px}% ${e.target.value}%`)} />
+          </div>
+          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => onChange("")}>กึ่งกลาง</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BrandModelFields({ brand, model, onChange }: { brand: string; model: string; onChange: (brand: string, model: string) => void }) {
   const brandKey = VEHICLE_BRANDS.find((b) => b.toLowerCase() === brand.trim().toLowerCase());
   const models = brandKey ? VEHICLE_BRAND_MODELS[brandKey] : [];
@@ -390,6 +421,7 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
     licensePlate:  vehicle.licensePlate  ?? "",
     brand:         vehicle.brand         ?? "",
     model:         vehicle.model         ?? "",
+    imagePosition: vehicle.imagePosition ?? "",
     color:         vehicle.color         ?? "",
     customerId:    vehicle.customerId    ?? "",
     parkingFee:    vehicle.parkingFee    ?? 0,
@@ -489,6 +521,10 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
           )}
         </div>
 
+        {images.length > 0 && (
+          <ImagePositionPicker src={images[0]} value={form.imagePosition} onChange={(v) => setForm((p) => ({ ...p, imagePosition: v }))} />
+        )}
+
         <div className="col-md-6">
           <label className="form-label">ประเภทรถ</label>
           <CustomSelect2
@@ -551,7 +587,7 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
   onBack: () => void; onSuccess: (vehicle: any) => void;
 }) {
   const [form, setForm] = useState({
-    vehicleTypeId: "", licensePlate: "", brand: "", model: "", color: "", customerId: "", parkingFee: 0,
+    vehicleTypeId: "", licensePlate: "", brand: "", model: "", imagePosition: "", color: "", customerId: "", parkingFee: 0,
   });
   const [images, setImages] = useState<{ base64: string; name: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -635,6 +671,10 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
             onChange={(e) => { if (e.target.files?.length) handleAddImages(e.target.files); e.target.value = ""; }} />
         </div>
+
+        {images.length > 0 && (
+          <ImagePositionPicker src={images[0].base64} value={form.imagePosition} onChange={(v) => setForm((p) => ({ ...p, imagePosition: v }))} />
+        )}
 
         <div className="col-md-6">
           <label className="form-label">ประเภทรถ</label>
@@ -745,7 +785,7 @@ function VehicleDetailView({
                 <img
                   src={pictures[imgIdx]}
                   alt={vehicle.licensePlate}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: vehicle.imagePosition || "center" }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
@@ -1565,7 +1605,7 @@ export default function VehiclesPage() {
                     <div className="room-card-body">
                       <div style={{ height: 120, borderRadius: "var(--border-radius-1)", overflow: "hidden", background: "var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "0.75rem" }}>
                         {firstImg ? (
-                          <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }} alt=""
+                          <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: v.imagePosition || "center", cursor: "zoom-in" }} alt=""
                             onClick={(e) => { e.stopPropagation(); setPreviewUrl(firstImg); }}
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                         ) : (
@@ -1606,7 +1646,7 @@ export default function VehiclesPage() {
                     onClick={() => goToDetail(v)}>
                     <div style={{ width: 54, height: 54, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {firstImg ? (
-                        <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }} alt=""
+                        <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: v.imagePosition || "center", cursor: "zoom-in" }} alt=""
                           onClick={(e) => { e.stopPropagation(); setPreviewUrl(firstImg); }}
                           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (

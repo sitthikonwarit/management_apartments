@@ -25,6 +25,7 @@ function parseVehicle(r: typeof vehicles.$inferSelect) {
     vehicleTypeId: r.vehicleTypeId,
     brand: r.brand,
     model: r.model,
+    imagePosition: r.imagePosition,
     color: r.color,
     parkingFee: Number(r.parkingFee) || 0,
     // path เก็บดิบๆ ไม่มีลายเซ็นในฐานข้อมูล (ดู lib/encryption.ts) — เซ็นตอนส่งออกให้ frontend ตรงนี้เท่านั้น
@@ -114,7 +115,7 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
   })
   .post("/", async ({ authUser, body, set }) => {
     const orgId = authUser!.orgId;
-    const { customerId, licensePlate, vehicleTypeId, brand, model, color, parkingFee, newImages } = body as any;
+    const { customerId, licensePlate, vehicleTypeId, brand, model, color, parkingFee, newImages, imagePosition } = body as any;
     if (!licensePlate?.trim()) { set.status = 400; return { error: "ต้องระบุป้ายทะเบียน" }; }
     const id = `VH-${Date.now()}`;
     const ts = new Date().toISOString();
@@ -127,6 +128,7 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
       vehicleTypeId: vehicleTypeId ?? "",
       brand:         brand         ?? "",
       model:         model         ?? "",
+      imagePosition: imagePosition ?? "",
       color:         color         ?? "",
       parkingFee:    String(parkingFee ?? 0),
       images:        JSON.stringify(images),
@@ -137,7 +139,7 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
   })
   .put("/:id", async ({ authUser, params, body, set }) => {
     const { id } = params;
-    const { customerId, licensePlate, vehicleTypeId, brand, model, color, parkingFee } = body as any;
+    const { customerId, licensePlate, vehicleTypeId, brand, model, color, parkingFee, imagePosition } = body as any;
     const [existing] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบข้อมูล" }; }
     await db.update(vehicles).set({
@@ -146,6 +148,7 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
       vehicleTypeId: vehicleTypeId ?? existing.vehicleTypeId,
       brand:         brand         ?? existing.brand,
       model:         model         ?? existing.model,
+      imagePosition: imagePosition ?? existing.imagePosition,
       color:         color         ?? existing.color,
       parkingFee:    String(parkingFee ?? existing.parkingFee),
     }).where(eq(vehicles.id, id));

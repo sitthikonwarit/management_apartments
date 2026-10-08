@@ -161,6 +161,7 @@ export const vehicles = pgTable("vehicles", {
   vehicleTypeId: str("vehicle_type_id"),
   brand: str("brand"),
   model: str("model"),
+  imagePosition: str("image_position"),
   color: str("color"),
   parkingFee: str("parking_fee"),
   images: json("images"),
