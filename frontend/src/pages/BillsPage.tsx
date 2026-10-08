@@ -2584,7 +2584,7 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
         // "outstanding" ด้านบน ที่ตั้งใจคงยอดแช่แข็งเดิมไว้เป็นบันทึกตอนออกบิล)
         const chips: { label: string; amount: number; cleared: boolean }[] = [];
         const paid = Number(item.paidAmount) || 0;
-        if (paid > 0) chips.push({ label: monthYearLabel(monthYear), amount: paid, cleared: paid >= item.total - 0.005 });
+        const oldChips: { label: string; amount: number; cleared: boolean }[] = [];
         for (const o of item.outstandingItems) {
           const group = allBills.find((b) => b.monthYear === o.monthYear);
           const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
@@ -2597,8 +2597,14 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
           const ownAmount = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
           const liveRemaining = Math.max(0, ownAmount - (Number(roomBill.paidAmount) || 0));
           const receivedForThis = Math.max(0, o.amount - liveRemaining);
-          if (receivedForThis > 0) chips.push({ label: monthYearLabel(o.monthYear), amount: receivedForThis, cleared: liveRemaining <= 0.005 });
+          if (receivedForThis > 0) oldChips.push({ label: monthYearLabel(o.monthYear), amount: receivedForThis, cleared: liveRemaining <= 0.005 });
         }
+        // paidAmount ของเดือนนี้รวมเครดิตที่ไปปิดยอดเดือนเก่าไว้แล้ว (ดู handleConfirmPayment: oldMonthsCollected +
+        // settledCreditApplied) ถ้าโชว์เต็มจำนวนแล้วยังโชว์ chip เดือนเก่าซ้ำอีก ยอดจะนับซ้ำ (รวมเกินยอดจริง) —
+        // หักส่วนที่ไปโชว์เป็นเดือนเก่าออกก่อน เหลือเป็นยอดของเดือนนี้เองล้วนๆ
+        const ownPaid = Math.max(0, paid - oldChips.reduce((s, c) => s + c.amount, 0));
+        if (ownPaid > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: ownPaid, cleared: paid >= item.total - 0.005 });
+        chips.push(...oldChips);
         if (chips.length === 0) return "-";
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
