@@ -356,12 +356,15 @@ function ImagePositionPicker({ src, value, onChange }: { src: string; value: str
   const [open, setOpen] = useState(false);
   return (
     <div className="col-12">
-      <label className="form-label">มุมมองรูปปก <span className="text-muted fw-normal">(ใช้รูปแรก · ไม่แก้ไฟล์รูปต้นฉบับ)</span></label>
-      <div className="d-flex align-items-center gap-3">
-        <div style={{ width: 160, height: 90, borderRadius: "var(--border-radius-1)", overflow: "hidden", border: "1px solid var(--color-light)", flexShrink: 0 }}>
+      <div className="d-flex align-items-center gap-3 flex-wrap p-2" style={{ border: "1px dashed var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
+        <div style={{ width: 128, height: 72, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "var(--color-light)" }}>
           <img src={src} alt="" style={cropImgStyle(value)} />
         </div>
-        <div className="d-flex flex-column gap-2">
+        <div className="flex-grow-1" style={{ minWidth: 180 }}>
+          <div className="fw-semibold">มุมมองรูปปก</div>
+          <div className="text-muted small">ปรับตำแหน่ง/ซูมของรูปแรก · ไม่แก้ไฟล์รูปต้นฉบับ</div>
+        </div>
+        <div className="d-flex gap-2">
           <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setOpen(true)}><i className="fas fa-crop-alt me-1" />ปรับตำแหน่ง / ซูม</button>
           {value && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => onChange("")}>รีเซ็ต</button>}
         </div>
