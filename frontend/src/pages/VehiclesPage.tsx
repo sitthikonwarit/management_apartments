@@ -10,6 +10,7 @@
 
 
 import { useEffect, useState, useMemo, useRef, useLayoutEffect } from "react";
+import { VEHICLE_BRANDS, VEHICLE_BRAND_MODELS, vehicleBrandLabel } from "../utils/vehicleBrands";
 import { useNavigate, useLocation } from "react-router-dom";
 import Select from "react-select";
 import { vehiclesApi, tenantsApi, roomsApi } from "../api/client";
@@ -347,6 +348,29 @@ function VehicleTypesView({ types, onBack, onUpdate }: {
 }
 
 // ── VehicleEditView (แก้ไขยานพาหนะ – หน้าเต็มแบบเดียวกับเพิ่มยานพาหนะ) ───────────
+// ช่องยี่ห้อ + รุ่นแยกกัน แต่ละช่องมีลิสต์ให้เลือก (datalist) พิมพ์เองนอกลิสต์ได้ — ลิสต์รุ่นเปลี่ยนตามยี่ห้อที่เลือก
+function BrandModelFields({ brand, model, onChange }: { brand: string; model: string; onChange: (brand: string, model: string) => void }) {
+  const brandKey = VEHICLE_BRANDS.find((b) => b.toLowerCase() === brand.trim().toLowerCase());
+  const models = brandKey ? VEHICLE_BRAND_MODELS[brandKey] : [];
+  return (
+    <>
+      <div className="col-md-6">
+        <label className="form-label">ยี่ห้อ</label>
+        <input type="text" className="form-control" list="vehicle-brand-list" placeholder="เลือกหรือพิมพ์ เช่น Honda, Toyota"
+          value={brand} onChange={(e) => onChange(e.target.value, model)} />
+        <datalist id="vehicle-brand-list">{VEHICLE_BRANDS.map((b) => <option key={b} value={b} />)}</datalist>
+      </div>
+      <div className="col-md-6">
+        <label className="form-label">รุ่น</label>
+        <input type="text" className="form-control" list="vehicle-model-list"
+          placeholder={models.length ? "เลือกหรือพิมพ์รุ่น" : "พิมพ์รุ่น (เลือกยี่ห้อก่อนจะมีลิสต์รุ่นให้เลือก)"}
+          value={model} onChange={(e) => onChange(brand, e.target.value)} />
+        <datalist id="vehicle-model-list">{models.map((m) => <option key={m} value={m} />)}</datalist>
+      </div>
+    </>
+  );
+}
+
 function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: {
   vehicle: any; types: any[]; tenants: any[]; rooms: any[];
   onBack: () => void; onSuccess: (v: any) => void;
@@ -356,6 +380,7 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
     vehicleTypeId: vehicle.vehicleTypeId ?? "",
     licensePlate:  vehicle.licensePlate  ?? "",
     brand:         vehicle.brand         ?? "",
+    model:         vehicle.model         ?? "",
     color:         vehicle.color         ?? "",
     customerId:    vehicle.customerId    ?? "",
     parkingFee:    vehicle.parkingFee    ?? 0,
@@ -470,11 +495,8 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
           <input type="text" className="form-control" placeholder="เช่น กข 1234"
             value={form.licensePlate} onChange={(e) => setForm((p) => ({ ...p, licensePlate: e.target.value }))} />
         </div>
-        <div className="col-md-6">
-          <label className="form-label">ยี่ห้อ/รุ่น</label>
-          <input type="text" className="form-control" placeholder="เช่น Toyota Vios"
-            value={form.brand} onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))} />
-        </div>
+        <BrandModelFields brand={form.brand} model={form.model}
+          onChange={(brand, model) => setForm((p) => ({ ...p, brand, model }))} />
         <div className="col-md-6">
           <label className="form-label">สี</label>
           <input type="text" className="form-control" placeholder="เช่น ขาว, ดำ, เทา"
@@ -520,7 +542,7 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
   onBack: () => void; onSuccess: (vehicle: any) => void;
 }) {
   const [form, setForm] = useState({
-    vehicleTypeId: "", licensePlate: "", brand: "", color: "", customerId: "", parkingFee: 0,
+    vehicleTypeId: "", licensePlate: "", brand: "", model: "", color: "", customerId: "", parkingFee: 0,
   });
   const [images, setImages] = useState<{ base64: string; name: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -620,11 +642,8 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
           <input type="text" className="form-control" placeholder="เช่น กข 1234"
             value={form.licensePlate} onChange={(e) => setForm((p) => ({ ...p, licensePlate: e.target.value }))} />
         </div>
-        <div className="col-md-6">
-          <label className="form-label">ยี่ห้อ/รุ่น</label>
-          <input type="text" className="form-control" placeholder="เช่น Toyota Vios"
-            value={form.brand} onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))} />
-        </div>
+        <BrandModelFields brand={form.brand} model={form.model}
+          onChange={(brand, model) => setForm((p) => ({ ...p, brand, model }))} />
         <div className="col-md-6">
           <label className="form-label">สี</label>
           <input type="text" className="form-control" placeholder="เช่น ขาว, ดำ, เทา"
@@ -757,10 +776,10 @@ function VehicleDetailView({
         {/* ─── Vehicle Selector ─── */}
         <div className="tenant-selector-wrapper">
           <CustomSelect2
-            value={{ value: vehicle.id, label: `${vehicle.licensePlate}${vehicle.brand ? ` (${vehicle.brand})` : ""}` }}
+            value={{ value: vehicle.id, label: `${vehicle.licensePlate}${vehicleBrandLabel(vehicle) ? ` (${vehicleBrandLabel(vehicle)})` : ""}` }}
             options={allVehicles.map((v) => ({
               value: v.id,
-              label: `${v.licensePlate}${v.brand ? ` (${v.brand})` : ""}`,
+              label: `${v.licensePlate}${vehicleBrandLabel(v) ? ` (${vehicleBrandLabel(v)})` : ""}`,
             }))}
             onChange={(opt: any) => {
               const found = allVehicles.find((v) => String(v.id) === String(opt?.value));
@@ -785,7 +804,7 @@ function VehicleDetailView({
             </div>
             <div className="detail-item">
               <i className="fas fa-car" />
-              <div><div className="label">ยี่ห้อ/รุ่น</div><div className="value">{vehicle.brand || <span className="text-muted fst-italic">ไม่ระบุ</span>}</div></div>
+              <div><div className="label">ยี่ห้อ/รุ่น</div><div className="value">{vehicleBrandLabel(vehicle) || <span className="text-muted fst-italic">ไม่ระบุ</span>}</div></div>
             </div>
             <div className="detail-item">
               <i className="fas fa-palette" />
@@ -996,7 +1015,7 @@ function VehicleTableView({ vehicles, isFiltered = false, sortKey, types, tenant
       case "plate":
         return <span className="vehicle-plate-badge fw-bold" style={{ color: "var(--color-primary)" }}>{v.licensePlate}</span>;
       case "brand":
-        return v.brand ? <span>{v.brand}</span> : <span className="text-muted">-</span>;
+        return vehicleBrandLabel(v) ? <span>{vehicleBrandLabel(v)}</span> : <span className="text-muted">-</span>;
       case "color":
         return v.color ? <span>{v.color}</span> : <span className="text-muted">-</span>;
       case "owner":
@@ -1265,7 +1284,7 @@ export default function VehiclesPage() {
     const q = search.toLowerCase();
     let list = vehicles.filter((v) => {
       const { name: ownerName, room } = getTenantInfo(tenants, v.customerId, rooms);
-      const matchSearch = !q || `${v.licensePlate} ${v.brand} ${ownerName ?? ""} ${room ?? ""}`.toLowerCase().includes(q);
+      const matchSearch = !q || `${v.licensePlate} ${vehicleBrandLabel(v)} ${ownerName ?? ""} ${room ?? ""}`.toLowerCase().includes(q);
       const matchType   = !typeFilter || v.vehicleTypeId === typeFilter;
       return matchSearch && matchType;
     });
@@ -1547,7 +1566,7 @@ export default function VehiclesPage() {
                       <div className="room-card-info-grid">
                         <div className="room-card-info-item">
                           <span className="label">ยี่ห้อ</span>
-                          <span className="value">{v.brand || "-"}</span>
+                          <span className="value">{vehicleBrandLabel(v) || "-"}</span>
                         </div>
                         <div className="room-card-info-item">
                           <span className="label">สี</span>
@@ -1593,9 +1612,9 @@ export default function VehiclesPage() {
                         <small className="text-muted">
                           <i className={`${typeInfo.icon} me-1`} />{typeInfo.name}
                         </small>
-                        {v.brand && (
+                        {vehicleBrandLabel(v) && (
                           <small className="text-muted">
-                            <i className="fas fa-car me-1" />{v.brand}{v.color && ` · ${v.color}`}
+                            <i className="fas fa-car me-1" />{vehicleBrandLabel(v)}{v.color && ` · ${v.color}`}
                           </small>
                         )}
                       </div>

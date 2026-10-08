@@ -25,7 +25,7 @@ function getDriveImgSrc(url: string): string {
 type Status = "loading" | "linked" | "unlinked" | "error";
 
 interface CoResident { name: string; phone: string; lineId: string; image: string }
-interface TenantVehicle { id: string; licensePlate: string; brand: string; color: string; typeName: string; typeIcon: string; images: string[] }
+interface TenantVehicle { id: string; licensePlate: string; brand: string; model?: string; color: string; typeName: string; typeIcon: string; images: string[] }
 interface TenantFile { name: string; url: string }
 interface FullProfile {
   personal: {
@@ -299,7 +299,7 @@ export default function LiffProfilePage() {
                           <i className={`${v.typeIcon} text-muted`} />
                           <div className="flex-grow-1">
                             <div className="fw-bold">{v.licensePlate}</div>
-                            <div className="text-muted">{[v.typeName, v.brand, v.color].filter(Boolean).join(" · ") || "-"}</div>
+                            <div className="text-muted">{[v.typeName, [v.brand, v.model].filter(Boolean).join(" "), v.color].filter(Boolean).join(" · ") || "-"}</div>
                           </div>
                           {v.images.length > 0 && (
                             <img

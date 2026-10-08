@@ -621,6 +621,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       id: v.id,
       licensePlate: v.licensePlate,
       brand: v.brand,
+      model: v.model,
       color: v.color,
       typeName: typeMap.get(v.vehicleTypeId || "")?.name || "",
       typeIcon: typeMap.get(v.vehicleTypeId || "")?.icon || "fas fa-car",
