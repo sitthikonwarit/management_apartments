@@ -4,10 +4,11 @@ import { useAppConfig, resolveNameCharColor } from "../../context/AppConfigConte
 import { guardNavigation } from "../../utils/unsavedGuard";
 import { chatApi } from "../../api/client";
 import { useLiveRefreshTick } from "../../utils/useLiveSync";
+import { useHiddenMenus } from "../../utils/useHiddenMenus";
 
 const CLOSE_ANIM_MS = 400;
 
-const navItems = [
+export const navItems = [
   { to: "/tenants", icon: "person_outline", label: "ผู้เช่า" },
   { to: "/rooms", icon: "meeting_room", label: "ห้องพัก" },
   { to: "/meters", icon: "speed", label: "จดมิเตอร์" },
@@ -32,6 +33,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const [phase, setPhase] = useState<Phase>(open ? "open" : "closed");
   const prevOpenRef = useRef(open);
   const [chatUnread, setChatUnread] = useState(0);
+  const [hiddenMenus] = useHiddenMenus();
 
   // นับข้อความแชท LINE ที่ยังไม่อ่านรวมทุกการสนทนา ไว้ขึ้นแบดจ์ที่เมนู "แชท LINE" — โหลดครั้งแรกตอน mount
   // แล้วรีเฟรชทุกครั้งที่มีข้อความเข้าใหม่/มีการมาร์คอ่านจากที่อื่น (ผ่าน WebSocket "chat" broadcast เดียวกับ
@@ -84,7 +86,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         <div className="sidebar">
-          {navItems.map((item) => (
+          {navItems.filter((item) => item.to === "/settings" || !hiddenMenus.includes(item.to)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

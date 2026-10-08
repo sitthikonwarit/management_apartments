@@ -14,10 +14,13 @@ import { thaiDateOnlyString } from "../utils/yearFormat";
 import { THAI_BANKS, bankLogoUrl, loadBankLogoDataUri, generateBankBadge, type ThaiBank } from "../utils/thaiBanks";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
+import { useHiddenMenus } from "../utils/useHiddenMenus";
+import { navItems } from "../components/layout/Sidebar";
 
-type Tab = "appearance" | "bill" | "features" | "richmenu" | "users";
+type Tab = "appearance" | "menu" | "bill" | "features" | "richmenu" | "users";
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "appearance", label: "รูปลักษณ์ (Appearance)", icon: "fas fa-paint-brush" },
+  { key: "menu", label: "เมนู (Menu)", icon: "fas fa-bars" },
   { key: "bill", label: "ระบบบิล (Bill System)", icon: "fas fa-coins" },
   { key: "features", label: "ฟีเจอร์เสริม (Features)", icon: "fas fa-plug" },
   { key: "richmenu", label: "LINE Rich Menu", icon: "fas fa-border-all" },
@@ -242,6 +245,7 @@ export default function SettingsPage() {
   const { enabled: privacyModeEnabled, setEnabled: setPrivacyModeEnabled } = usePrivacyMode();
 
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
+  const [hiddenMenus, setHiddenMenus] = useHiddenMenus();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -856,6 +860,30 @@ export default function SettingsPage() {
             )}
 
             {/* ── ระบบบิล (Bill System) ── */}
+            {sectionVisible("menu") && (
+              <div style={CATEGORY_CARD_STYLE} className="mb-4">
+                <h6 className="form-section-title"><i className="fas fa-bars me-2" />เมนูด้านข้าง</h6>
+                <p className="text-muted small">เลือกเมนูที่ต้องการแสดง (เปิด = แสดง) การตั้งค่านี้บันทึกแยกตามผู้ใช้ในเครื่องนี้ ไม่กระทบคนอื่น</p>
+                {navItems.map((item) => {
+                  const locked = item.to === "/settings";
+                  const shown = locked || !hiddenMenus.includes(item.to);
+                  return (
+                    <div key={item.to} className="d-flex align-items-center justify-content-between py-2" style={{ borderBottom: "1px solid var(--color-light)" }}>
+                      <span className="d-flex align-items-center gap-2">
+                        <span className="material-icons-sharp" style={{ fontSize: 22 }}>{item.icon}</span>
+                        {item.label}
+                        {locked && <span className="text-muted small">(ซ่อนไม่ได้)</span>}
+                      </span>
+                      <div className="form-check form-switch m-0">
+                        <input className="form-check-input" type="checkbox" role="switch" checked={shown} disabled={locked}
+                          onChange={() => setHiddenMenus(shown ? [...hiddenMenus, item.to] : hiddenMenus.filter((t) => t !== item.to))} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {sectionVisible("bill") && (
               <>
                 <div className="detail-section" style={CATEGORY_CARD_STYLE}>
