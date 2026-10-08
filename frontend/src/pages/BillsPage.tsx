@@ -2316,6 +2316,7 @@ const BILL_TABLE_COLS: BillColDef[] = [
   { key: "ownMonth",    header: "ยอดเดือนนี้",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "total",       header: "รวมสุทธิ",    visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "received",    header: "รับชำระแล้ว",  visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
+  { key: "remaining",   header: "คงเหลือ",      visible: true, pinnable: true,  pin: false,   thClass: "text-end", tdClass: "text-end" },
   { key: "status",      header: "สถานะ",       visible: true, pinnable: true,  pin: false,   thClass: "text-center", tdClass: "text-center" },
   { key: "actions",     header: "จัดการ",      visible: true, pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
@@ -2409,7 +2410,7 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
   const { widths, startResize } = useColumnWidths("bills-room", {
     checkbox: 40, room: 90, tenant: 160, priceRoom: 100, water: 100,
     electric: 100, vehicle: 100, roomTag: 140, tenantTag: 140, discount: 110, other: 100, fine: 130, outstanding: 130,
-    ownMonth: 110, total: 110, received: 110, status: 110, actions: 130,
+    ownMonth: 110, total: 110, received: 110, remaining: 110, status: 110, actions: 130,
   });
   const { ordered: rowOrdered, moveRow } = useRowOrder("bills-room", data, (d) => String(d.item.roomId), isFiltered);
   const [draggingRowKey, setDraggingRowKey] = useState<string | null>(null);
@@ -2606,6 +2607,13 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
             ))}
           </div>
         );
+      }
+      case "remaining": {
+        // ยอดคงเหลือที่ยังต้องจ่าย = รวมสุทธิ - รับชำระแล้ว (เขียว "-" เมื่อไม่เหลือ)
+        const rem = remainingDue(item);
+        return rem > 0.005
+          ? <span className="fw-bold" style={{ color: "#dc3545" }}>{money(rem)}</span>
+          : <span className="text-muted">-</span>;
       }
       case "status": return <BillStatusBadge item={item} />;
       case "actions": {
