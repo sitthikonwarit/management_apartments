@@ -163,10 +163,9 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
   })
   .patch("/:id/images", async ({ authUser, params, body, set }) => {
     const { id } = params;
-    const { keepUrls, newImages, replaceUrl } = body as {
+    const { keepUrls, newImages } = body as {
       keepUrls: string[];
       newImages: { base64: string; name: string }[];
-      replaceUrl?: string;
     };
     const [existing] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบข้อมูล" }; }
@@ -177,11 +176,7 @@ export const vehiclesRoute = new Elysia({ prefix: "/vehicles" })
     const cleanKeepUrls = (keepUrls ?? []).map((u) => u.split("?")[0]);
     const kept = existingImages.filter((u) => cleanKeepUrls.includes(u));
     const uploaded = await uploadNewImages(authUser!.orgId, newImages);
-    // replaceUrl = แทนที่รูปเดิมตำแหน่งเดิมด้วยรูปที่เพิ่งครอปมา (คงลำดับ รูปปกไม่เลื่อน) แทนการต่อท้ายเหมือนเพิ่มรูปใหม่
-    const replaceClean = replaceUrl ? replaceUrl.split("?")[0] : "";
-    const allImages = replaceClean && uploaded.length > 0 && kept.includes(replaceClean)
-      ? [...kept.map((u) => (u === replaceClean ? uploaded[0] : u)), ...uploaded.slice(1)]
-      : [...kept, ...uploaded];
+    const allImages = [...kept, ...uploaded];
     await db.update(vehicles).set({ images: JSON.stringify(allImages) }).where(eq(vehicles.id, id));
     return { images: allImages.map(signUploadPath) };
   });

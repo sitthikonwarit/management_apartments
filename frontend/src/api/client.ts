@@ -146,8 +146,8 @@ export const vehiclesApi = {
   create:     (data: any) => api.post("/vehicles", data).then((r) => r.data),
   update:     (id: string, data: any) => api.put(`/vehicles/${id}`, data).then((r) => r.data),
   delete:     (id: string) => api.delete(`/vehicles/${id}`).then((r) => r.data),
-  updateImages: (id: string, keepUrls: string[], newImages: { base64: string; name: string }[], replaceUrl?: string) =>
-    api.patch(`/vehicles/${id}/images`, { keepUrls, newImages, replaceUrl }).then((r) => r.data),
+  updateImages: (id: string, keepUrls: string[], newImages: { base64: string; name: string }[]) =>
+    api.patch(`/vehicles/${id}/images`, { keepUrls, newImages }).then((r) => r.data),
   getTypes:   () => api.get("/vehicles/types").then((r) => r.data),
   createType: (data: any) => api.post("/vehicles/types", data).then((r) => r.data),
   updateType: (id: string, data: any) => api.put(`/vehicles/types/${id}`, data).then((r) => r.data),

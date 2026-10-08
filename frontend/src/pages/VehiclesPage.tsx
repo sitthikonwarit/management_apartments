@@ -11,12 +11,13 @@
 
 import { useEffect, useState, useMemo, useRef, useLayoutEffect } from "react";
 import { VEHICLE_BRANDS, VEHICLE_BRAND_MODELS, vehicleBrandLabel } from "../utils/vehicleBrands";
+import ImageCropper from "../components/ImageCropper";
+import { cropImgStyle } from "../utils/imageCrop";
 import { useNavigate, useLocation } from "react-router-dom";
 import Select from "react-select";
 import { vehiclesApi, tenantsApi, roomsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2, { CreatableSelect2 } from "../components/CustomSelect2";
-import ImageCropper from "../components/ImageCropper";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
@@ -350,6 +351,26 @@ function VehicleTypesView({ types, onBack, onUpdate }: {
 
 // ── VehicleEditView (แก้ไขยานพาหนะ – หน้าเต็มแบบเดียวกับเพิ่มยานพาหนะ) ───────────
 // ช่องยี่ห้อ + รุ่นแยกกัน แต่ละช่องมีลิสต์ให้เลือก (datalist) พิมพ์เองนอกลิสต์ได้ — ลิสต์รุ่นเปลี่ยนตามยี่ห้อที่เลือก
+// ปรับมุมมองรูปปก (รูปแรก) แบบแอปแต่งรูป: กรอบล็อก 16:9 ลาก/ซูมได้ — เก็บเป็นค่า "x% y% zoom" ไม่แก้ไฟล์รูปจริง
+function ImagePositionPicker({ src, value, onChange }: { src: string; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="col-12">
+      <label className="form-label">มุมมองรูปปก <span className="text-muted fw-normal">(ใช้รูปแรก · ไม่แก้ไฟล์รูปต้นฉบับ)</span></label>
+      <div className="d-flex align-items-center gap-3">
+        <div style={{ width: 160, height: 90, borderRadius: "var(--border-radius-1)", overflow: "hidden", border: "1px solid var(--color-light)", flexShrink: 0 }}>
+          <img src={src} alt="" style={cropImgStyle(value)} />
+        </div>
+        <div className="d-flex flex-column gap-2">
+          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setOpen(true)}><i className="fas fa-crop-alt me-1" />ปรับตำแหน่ง / ซูม</button>
+          {value && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => onChange("")}>รีเซ็ต</button>}
+        </div>
+      </div>
+      {open && <ImageCropper src={src} initial={value} onCancel={() => setOpen(false)} onConfirm={(v) => { onChange(v === "50% 50% 1" ? "" : v); setOpen(false); }} />}
+    </div>
+  );
+}
+
 function BrandModelFields({ brand, model, onChange }: { brand: string; model: string; onChange: (brand: string, model: string) => void }) {
   const brandKey = VEHICLE_BRANDS.find((b) => b.toLowerCase() === brand.trim().toLowerCase());
   const models = brandKey ? VEHICLE_BRAND_MODELS[brandKey] : [];
@@ -415,13 +436,8 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
     setForm((prev) => ({ ...prev, vehicleTypeId: typeId, parkingFee: t ? t.defaultFee : prev.parkingFee }));
   }
 
-  // เลือกไฟล์ → เข้าคิวตัดรูปทีละรูป (ตัด/ใช้รูปเดิม/ข้าม) แล้วอัปโหลดรวมตอนคิวหมด เหมือนแต่งรูปก่อนส่งบนมือถือ
-  const [cropQueue, setCropQueue] = useState<{ base64: string; name: string }[]>([]);
-  const [cropReady, setCropReady] = useState<{ base64: string; name: string }[]>([]);
-  const [cropExisting, setCropExisting] = useState<string | null>(null);
-
   async function handleAddImages(files: FileList) {
-    const picked: { base64: string; name: string }[] = [];
+    const newImages: { base64: string; name: string }[] = [];
     for (const file of Array.from(files)) {
       const base64 = await new Promise<string>((res, rej) => {
         const reader = new FileReader();
@@ -429,35 +445,11 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
         reader.onerror = rej;
         reader.readAsDataURL(file);
       });
-      picked.push({ base64, name: file.name });
+      newImages.push({ base64, name: file.name });
     }
-    setCropReady([]);
-    setCropQueue(picked);
-  }
-
-  async function uploadReady(list: { base64: string; name: string }[]) {
-    if (list.length === 0) return;
     setUploading(true);
     try {
-      const result = await vehiclesApi.updateImages(vehicle.id, images, list);
-      setImages(result.images);
-    } finally { setUploading(false); }
-  }
-
-  function advanceCrop(img: { base64: string; name: string } | null) {
-    const rest = cropQueue.slice(1);
-    const nextReady = img ? [...cropReady, img] : cropReady;
-    if (rest.length === 0) { setCropQueue([]); setCropReady([]); void uploadReady(nextReady); }
-    else { setCropQueue(rest); setCropReady(nextReady); }
-  }
-
-  async function applyExistingCrop(dataUrl: string) {
-    const url = cropExisting;
-    setCropExisting(null);
-    if (!url) return;
-    setUploading(true);
-    try {
-      const result = await vehiclesApi.updateImages(vehicle.id, images, [{ base64: dataUrl, name: "crop.jpg" }], url);
+      const result = await vehiclesApi.updateImages(vehicle.id, images, newImages);
       setImages(result.images);
     } finally { setUploading(false); }
   }
@@ -512,10 +504,6 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
                   <button type="button"
                     style={{ position: "absolute", top: -6, right: -6, background: "#dc3545", border: "none", borderRadius: "50%", width: 22, height: 22, color: "#fff", fontSize: "0.75rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     onClick={() => handleRemoveImage(url)} disabled={uploading} title="ลบรูป">×</button>
-                  <button type="button" title="ตัดรูป" disabled={uploading} onClick={() => setCropExisting(url)}
-                    style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,.6)", border: "none", borderRadius: 6, width: 24, height: 24, color: "#fff", fontSize: "0.7rem", cursor: "pointer" }}>
-                    <i className="fas fa-crop-alt" />
-                  </button>
                 </div>
               ))}
             </div>
@@ -523,6 +511,10 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
             <div className="file-view-empty"><i className="fas fa-image me-2 text-muted" />ยังไม่มีรูปภาพ คลิก "เพิ่มรูป" เพื่ออัปโหลด</div>
           )}
         </div>
+
+        {images.length > 0 && (
+          <ImagePositionPicker src={images[0]} value={form.imagePosition} onChange={(v) => setForm((p) => ({ ...p, imagePosition: v }))} />
+        )}
 
         <div className="col-md-6">
           <label className="form-label">ประเภทรถ</label>
@@ -576,13 +568,6 @@ function VehicleEditView({ vehicle, types, tenants, rooms, onBack, onSuccess }: 
       </div>
 
       {previewUrl && <SimpleImageLightbox src={previewUrl} onClose={() => setPreviewUrl(null)} />}
-      {cropQueue.length > 0 && (
-        <ImageCropper key={cropQueue[0].name + cropQueue.length} src={cropQueue[0].base64}
-          onCancel={() => advanceCrop(null)}
-          onSkip={() => advanceCrop(cropQueue[0])}
-          onConfirm={(d) => advanceCrop({ base64: d, name: cropQueue[0].name.replace(/\.[^.]+$/, "") + ".jpg" })} />
-      )}
-      {cropExisting && <ImageCropper src={cropExisting} onCancel={() => setCropExisting(null)} onConfirm={applyExistingCrop} />}
     </div>
   );
 }
@@ -626,15 +611,7 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
       });
       newOnes.push({ base64, name: file.name });
     }
-    setCropQueue(newOnes);
-  }
-
-  // คิวตัดรูปหลังเลือกไฟล์ (ตัด/ใช้รูปเดิม/ข้าม) และตัดซ้ำรูปที่เพิ่มแล้วผ่านปุ่มบนรูปย่อ
-  const [cropQueue, setCropQueue] = useState<{ base64: string; name: string }[]>([]);
-  const [cropIdx, setCropIdx] = useState<number | null>(null);
-  function advanceCrop(img: { base64: string; name: string } | null) {
-    if (img) setImages((prev) => [...prev, img]);
-    setCropQueue((q) => q.slice(1));
+    setImages((prev) => [...prev, ...newOnes]);
   }
 
   function removeImage(idx: number) {
@@ -675,10 +652,6 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
                 <button type="button" onClick={() => removeImage(idx)}
                   style={{ position: "absolute", top: -6, right: -6, background: "#dc3545", border: "none", borderRadius: "50%", width: 22, height: 22, color: "#fff", fontSize: "0.75rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                   title="ลบรูป">×</button>
-                <button type="button" title="ตัดรูป" onClick={() => setCropIdx(idx)}
-                  style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,.6)", border: "none", borderRadius: 6, width: 24, height: 24, color: "#fff", fontSize: "0.7rem", cursor: "pointer" }}>
-                  <i className="fas fa-crop-alt" />
-                </button>
               </div>
             ))}
             <div onClick={() => fileInputRef.current?.click()}
@@ -689,6 +662,10 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
             onChange={(e) => { if (e.target.files?.length) handleAddImages(e.target.files); e.target.value = ""; }} />
         </div>
+
+        {images.length > 0 && (
+          <ImagePositionPicker src={images[0].base64} value={form.imagePosition} onChange={(v) => setForm((p) => ({ ...p, imagePosition: v }))} />
+        )}
 
         <div className="col-md-6">
           <label className="form-label">ประเภทรถ</label>
@@ -748,16 +725,6 @@ function VehicleFormView({ types, tenants, rooms, onBack, onSuccess }: {
       </div>
 
       {previewUrl && <SimpleImageLightbox src={previewUrl} onClose={() => setPreviewUrl(null)} />}
-      {cropQueue.length > 0 && (
-        <ImageCropper key={cropQueue[0].name + cropQueue.length} src={cropQueue[0].base64}
-          onCancel={() => advanceCrop(null)}
-          onSkip={() => advanceCrop(cropQueue[0])}
-          onConfirm={(d) => advanceCrop({ base64: d, name: cropQueue[0].name.replace(/\.[^.]+$/, "") + ".jpg" })} />
-      )}
-      {cropIdx !== null && images[cropIdx] && (
-        <ImageCropper src={images[cropIdx].base64} onCancel={() => setCropIdx(null)}
-          onConfirm={(d) => { setImages((prev) => prev.map((im, i) => (i === cropIdx ? { ...im, base64: d } : im))); setCropIdx(null); }} />
-      )}
     </div>
   );
 }
@@ -809,7 +776,7 @@ function VehicleDetailView({
                 <img
                   src={pictures[imgIdx]}
                   alt={vehicle.licensePlate}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: vehicle.imagePosition || "center" }}
+                  style={imgIdx === 0 ? cropImgStyle(vehicle.imagePosition) : { width: "100%", height: "100%", objectFit: "cover" }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
@@ -1629,7 +1596,7 @@ export default function VehiclesPage() {
                     <div className="room-card-body">
                       <div style={{ height: 120, borderRadius: "var(--border-radius-1)", overflow: "hidden", background: "var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "0.75rem" }}>
                         {firstImg ? (
-                          <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: v.imagePosition || "center", cursor: "zoom-in" }} alt=""
+                          <img src={firstImg} style={{ ...cropImgStyle(v.imagePosition), cursor: "zoom-in" }} alt=""
                             onClick={(e) => { e.stopPropagation(); setPreviewUrl(firstImg); }}
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                         ) : (
@@ -1670,7 +1637,7 @@ export default function VehiclesPage() {
                     onClick={() => goToDetail(v)}>
                     <div style={{ width: 54, height: 54, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {firstImg ? (
-                        <img src={firstImg} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: v.imagePosition || "center", cursor: "zoom-in" }} alt=""
+                        <img src={firstImg} style={{ ...cropImgStyle(v.imagePosition), cursor: "zoom-in" }} alt=""
                           onClick={(e) => { e.stopPropagation(); setPreviewUrl(firstImg); }}
                           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (
