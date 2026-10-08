@@ -2076,7 +2076,9 @@ function computeBillStats(billData: BillItem[], payments: any[], monthYear: stri
     .filter((p) => p?.data?.settledViaMonthYear === monthYear)
     .reduce((s, p) => s + (Number(p?.data?.amount) || 0), 0);
   const netReceived = receivedThisMonth + receivedOldMonthsClosedThisMonth;
-  const totalMissing = totalExpected - receivedThisMonth;
+  // ขาดอีก = ผลรวมยอดคงเหลือของทุกห้อง (รวมสุทธิ - paidAmount ต่อห้อง) ให้ตรงกับคอลัมน์ "คงเหลือ" เป๊ะ — เดิมใช้
+  // totalExpected - receivedThisMonth (นับจากรายการชำระ) ซึ่งไม่ตรงถ้ามีเครดิตปิดยอดเดือนเก่า/ชำระข้ามเดือน
+  const totalMissing = billData.reduce((s, i) => s + remainingDue(i), 0);
   const totalRent = billData.reduce((s, i) => s + (Number(i.priceRoom) || 0), 0);
   const totalWater = billData.reduce((s, i) => s + (Number(i.priceWater) || 0), 0);
   const totalElectric = billData.reduce((s, i) => s + (Number(i.priceElectric) || 0), 0);
@@ -2621,11 +2623,11 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
           const remOld = Math.max(0, ownOld - (Number(roomBill.paidAmount) || 0));
           if (roomBill.status !== "paid" && remOld > 0.005) chips.push({ label: monthYearLabel(o.monthYear), amount: remOld });
         }
-        if (item.status !== "paid") {
-          const ownNow = Math.max(0, item.total - (item.outstandingAmount || 0));
-          const remNow = Math.max(0, ownNow - (Number(item.paidAmount) || 0));
-          if (remNow > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: remNow });
-        }
+        // เดือนนี้ = ยอดคงเหลือรวมของห้อง (รวมสุทธิ - รับแล้ว) หักส่วนที่แสดงเป็นเดือนเก่าไปแล้ว — ใช้ฐานเดียวกับ
+        // "ขาดอีก" เพื่อให้ผลรวมตรงกัน (paidAmount ของเดือนนี้อาจรวมเครดิตที่ปิดเดือนเก่าไปด้วย คิดแยก own-paid ตรงๆ จะพลาด)
+        const oldShown = chips.reduce((s, c) => s + c.amount, 0);
+        const remNow = remainingDue(item) - oldShown;
+        if (remNow > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: remNow });
         if (chips.length === 0) return "-";
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
