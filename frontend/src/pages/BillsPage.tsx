@@ -32,11 +32,13 @@ import { findTenantForRoom } from "../utils/tenantRoom";
 // หมายเหตุ: ข้อมูลเดือน/ปีของบิลและมิเตอร์ในระบบนี้เก็บเป็นปี ค.ศ. ตรงๆ เสมอ (ไม่แปลง)
 // เพื่อให้ตรงกับข้อมูลมิเตอร์/บิลเดิมที่มีอยู่แล้ว — การแปลงเป็น พ.ศ./ค.ศ. ตามที่ผู้ใช้เลือกไว้ในหน้าตั้งค่า
 // ทำแค่ตอนแสดงผล (label) เท่านั้น ผ่าน monthYearLabel()
+// ตัวกรองเลือกได้หลายอัน: กลุ่มสถานะ (ยังไม่จ่าย/จ่ายแล้ว/เกินกำหนด) เลือกหลายอัน = หรือ (OR) ส่วน "ค้างชำระเดือนเก่า"
+// เป็นเงื่อนไขเสริมที่ต้องตรงด้วย (AND) — ค้างเดือนเก่า = บิลนี้ยกยอดค้างของเดือนก่อนมา ไม่สนว่าจ่ายแล้วหรือยัง
 const STATUS_OPTIONS = [
-  { value: "all", label: "ทุกสถานะ" },
-  { value: "unpaid", label: "ค้างชำระ (Unpaid)" },
+  { value: "unpaid", label: "ยังไม่จ่าย (Unpaid)" },
   { value: "paid", label: "จ่ายแล้ว (Paid)" },
   { value: "overdue", label: "เกินกำหนด (Overdue)" },
+  { value: "oldDebt", label: "ค้างชำระเดือนเก่า" },
 ];
 const GROUP_SORT_OPTIONS = [
   { value: "desc", label: "ใหม่สุด - เก่าสุด" },
@@ -2421,6 +2423,29 @@ function ColValueContainer(props: any) {
     </components.ValueContainer>
   );
 }
+function StatusValueContainer(props: any) {
+  const sel = props.getValue() as { label: string }[];
+  const input = Array.isArray(props.children) ? props.children[props.children.length - 1] : props.children;
+  return (
+    <components.ValueContainer {...props}>
+      <span style={{ color: "var(--color-dark)", fontWeight: 500, fontSize: "0.9rem", whiteSpace: "nowrap" }}>
+        {sel.length === 0 ? "ทุกสถานะ" : sel.length === 1 ? sel[0].label : `กรอง ${sel.length} เงื่อนไข`}
+      </span>
+      {input}
+    </components.ValueContainer>
+  );
+}
+function BillStatusFilterDropdown({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <Select isMulti options={STATUS_OPTIONS} value={STATUS_OPTIONS.filter((o) => value.includes(o.value))}
+      onChange={(sel) => onChange((sel as any[]).map((s) => s.value))}
+      styles={colSelectStyles}
+      components={{ Option: ColCheckboxOption, ValueContainer: StatusValueContainer, MultiValue: () => null }}
+      closeMenuOnSelect={false} hideSelectedOptions={false} isSearchable={false} isClearable={false}
+      noOptionsMessage={() => "ไม่พบข้อมูล"} placeholder="ทุกสถานะ"
+    />
+  );
+}
 function BillColVisibilityDropdown({ cols, onChange }: { cols: BillColDef[]; onChange: (key: string, v: boolean) => void }) {
   const toggleable = cols.filter((c) => c.key !== "actions" && c.key !== "checkbox");
   const options = toggleable.map((c) => ({ value: c.key, label: c.header }));
@@ -3297,7 +3322,7 @@ export default function BillsPage() {
   const [confirmSendBulkIds, setConfirmSendBulkIds] = useState<string[] | null>(null);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newMonthYear, setNewMonthYear] = useState("");
@@ -4008,9 +4033,12 @@ export default function BillsPage() {
     return billData
       .map((item, idx) => ({ item, idx }))
       .filter(({ item }) => {
-        if (statusFilter === "overdue" && !(item.status !== "paid" && item.isOverdue)) return false;
-        if (statusFilter === "paid" && item.status !== "paid") return false;
-        if (statusFilter === "unpaid" && item.status !== "unpaid") return false;
+        const statusSel = statusFilter.filter((f) => f !== "oldDebt");
+        if (statusSel.length > 0 && !statusSel.some((f) =>
+          f === "overdue" ? (item.status !== "paid" && item.isOverdue)
+            : f === "paid" ? item.status === "paid"
+            : item.status === "unpaid")) return false;
+        if (statusFilter.includes("oldDebt") && !(item.outstandingItems.length > 0 || item.outstandingAmount > 0)) return false;
         if (!q) return true;
         return item.roomNumber.toLowerCase().includes(q) || item.tenantName.toLowerCase().includes(q);
       });
@@ -4273,8 +4301,7 @@ export default function BillsPage() {
               </div>
             </div>
             <div className="col-12 col-md-auto" style={{ minWidth: 200 }}>
-              <CustomSelect2 value={STATUS_OPTIONS.find((o) => o.value === statusFilter)} options={STATUS_OPTIONS}
-                onChange={(o: any) => setStatusFilter(o?.value ?? "all")} isSearchable={false} />
+              <BillStatusFilterDropdown value={statusFilter} onChange={setStatusFilter} />
             </div>
             <div className="col-12 col-md-auto">
               <div className="btn-group view-switch-group" role="group">
@@ -4291,7 +4318,7 @@ export default function BillsPage() {
           {roomViewMode === "table" ? (
             <BillTableView
               data={filteredData}
-              isFiltered={!!search.trim() || statusFilter !== "all"}
+              isFiltered={!!search.trim() || statusFilter.length > 0}
               payments={payments}
               monthYear={editingMonthYear}
               allBills={bills}
