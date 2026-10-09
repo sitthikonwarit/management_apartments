@@ -3280,17 +3280,6 @@ export default function BillsPage() {
   }
   const [printDashboardSections, setPrintDashboardSections] = useState<Set<string>>(() => new Set(DASHBOARD_SECTIONS_DEFAULT));
 
-  function printDashboardForCurrentMonth() {
-    // ต้องปิด printPayload (ตัวเดียวกับที่ BillPrintOnly ใช้โชว์โหมดใบแจก/ตารางสรุป) ก่อนเสมอ ไม่งั้นถ้าเพิ่ง
-    // พิมพ์โหมดอื่นไปก่อนหน้านี้ในเซสชันเดียวกัน (ค้าง state อยู่ ไม่เคยถูกเคลียร์) จะมี .bill-print-only
-    // สองก้อนโผล่พร้อมกันตอนสั่งพิมพ์ เนื้อหาปนกันในกระดาษแผ่นเดียว
-    setPrintPayload(null);
-    setPrintDashboardGroups([{ monthYear: editingMonthYear, stats }]);
-    setPrintDashboardSections(readPersistedDashboardSections());
-    setPrintDashboard(true);
-    setTimeout(() => window.print(), 80);
-  }
-
   const [printSlipLineKeys, setPrintSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [printSlipLayout, setPrintSlipLayout] = useState<BillSlipLayout>("auto");
   const [printConfigPool, setPrintConfigPool] = useState<{ item: BillItem; monthYear: string }[] | null>(null);
@@ -4098,9 +4087,6 @@ export default function BillsPage() {
               </div>
               <button className="btn btn-outline-primary d-inline-flex align-items-center" onClick={() => setShowSpecialDiscounts(true)}>
                 <i className="fas fa-percent me-2" /><span className="btn-text">ส่วนลดพิเศษ</span>
-              </button>
-              <button className="btn btn-outline-secondary d-inline-flex align-items-center" onClick={printDashboardForCurrentMonth}>
-                <i className="fas fa-print me-2" /><span className="btn-text">พิมพ์สรุป Dashboard</span>
               </button>
               <button className="btn btn-primary d-inline-flex align-items-center" onClick={handleSave} disabled={saving}>
                 {saving ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</> : <><i className="fas fa-save me-2" /><span className="btn-text">บันทึก</span></>}
