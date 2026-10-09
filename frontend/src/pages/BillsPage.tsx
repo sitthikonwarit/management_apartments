@@ -4079,7 +4079,7 @@ export default function BillsPage() {
         <div className="custom-card no-print">
           <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 pb-2 border-bottom">
             <div className="d-flex align-items-center gap-2">
-              <button className="btn btn-outline-secondary btn-sm" onClick={handleBackClick} title="กลับไปหน้ารายการ">
+              <button className="btn btn-outline-secondary" onClick={handleBackClick} title="กลับไปหน้ารายการ">
                 <i className="fas fa-arrow-left" />
               </button>
               <h5 className="form-section-title mb-0 border-0" style={{ padding: 0 }}>
@@ -4096,20 +4096,20 @@ export default function BillsPage() {
                   />
                 </div>
               </div>
-              <button className="btn btn-outline-primary btn-sm" onClick={() => setShowSpecialDiscounts(true)}>
-                <i className="fas fa-percent me-1" />ส่วนลดพิเศษ
+              <button className="btn btn-outline-primary d-inline-flex align-items-center" onClick={() => setShowSpecialDiscounts(true)}>
+                <i className="fas fa-percent me-2" /><span className="btn-text">ส่วนลดพิเศษ</span>
               </button>
-              <button className="btn btn-outline-secondary btn-sm" onClick={printDashboardForCurrentMonth}>
-                <i className="fas fa-print me-1" />พิมพ์สรุป Dashboard
+              <button className="btn btn-outline-secondary d-inline-flex align-items-center" onClick={printDashboardForCurrentMonth}>
+                <i className="fas fa-print me-2" /><span className="btn-text">พิมพ์สรุป Dashboard</span>
+              </button>
+              <button className="btn btn-primary d-inline-flex align-items-center" onClick={handleSave} disabled={saving}>
+                {saving ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</> : <><i className="fas fa-save me-2" /><span className="btn-text">บันทึก</span></>}
               </button>
               {editingId && (
-                <button className="btn btn-outline-danger btn-sm" onClick={() => setConfirmDeleteGroup({ id: editingId, monthYear: editingMonthYear, data: billData })}>
-                  <i className="fas fa-trash-alt me-1" />ลบบิลเดือนนี้
+                <button className="btn btn-danger d-inline-flex align-items-center" onClick={() => setConfirmDeleteGroup({ id: editingId, monthYear: editingMonthYear, data: billData })}>
+                  <i className="fas fa-trash-alt me-2" /><span className="btn-text">ลบบิลเดือนนี้</span>
                 </button>
               )}
-              <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-                {saving ? <><span className="spinner-border spinner-border-sm me-2" />กำลังบันทึก...</> : <><i className="fas fa-save me-1" />บันทึก</>}
-              </button>
             </div>
           </div>
 
