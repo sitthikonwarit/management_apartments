@@ -1047,7 +1047,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
     <div className="custom-card bill-detail-page no-print">
       <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 pb-2 border-bottom">
         <div className="d-flex align-items-center gap-2">
-          <button className="btn btn-outline-secondary btn-sm" onClick={onBack} title="กลับไปหน้าตารางบิล">
+          <button className="btn btn-outline-secondary" onClick={onBack} title="กลับไปหน้าตารางบิล">
             <i className="fas fa-arrow-left" />
           </button>
           <h5 className="form-section-title mb-0 border-0" style={{ padding: 0 }}>
@@ -1057,18 +1057,17 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
         <div className="d-flex align-items-center gap-2">
           <BillStatusBadge item={item} />
           {config.lineMessaging.enabled && (
-            <button type="button" className="btn btn-outline-success btn-sm" onClick={onSendLine} disabled={sendingLine}
+            <button type="button" className="btn btn-outline-success d-inline-flex align-items-center" onClick={onSendLine} disabled={sendingLine}
               title={sendLogSummary(item.sendLogs?.[0])}>
-              {sendingLine ? <span className="spinner-border spinner-border-sm me-1" /> : <i className="fab fa-line me-1" />}
-              ส่งบิลทาง LINE
+              {sendingLine ? <span className="spinner-border spinner-border-sm me-2" /> : <i className="fab fa-line me-2" />}
+              <span className="btn-text">ส่งบิลทาง LINE</span>
             </button>
           )}
-          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onPrint}>
-            <i className="fas fa-print me-1" />พิมพ์
+          <button type="button" className="btn btn-outline-secondary d-inline-flex align-items-center" onClick={onPrint}>
+            <i className="fas fa-print me-2" /><span className="btn-text">พิมพ์</span>
           </button>
-          <button type="button" className={`btn btn-sm ${item.status === "paid" ? "btn-outline-warning" : "btn-success"}`}
-            onClick={onTogglePaid}>
-            {item.status === "paid" ? <><i className="fas fa-undo me-1" />ยกเลิกการชำระ</> : <><i className="fas fa-check me-1" />บันทึกว่าจ่ายแล้ว</>}
+          <button type="button" className="btn btn-primary d-inline-flex align-items-center" onClick={onTogglePaid}>
+            <i className="fas fa-wallet me-2" /><span className="btn-text">บันทึกการชำระเงิน</span>
           </button>
         </div>
       </div>
@@ -4344,9 +4343,7 @@ export default function BillsPage() {
             billData.map((it) => ({ item: it, monthYear: editingMonthYear })),
             new Set([billEntryKey(editingMonthYear, billData[detailIndex].roomId)]),
           )}
-          onTogglePaid={() => billData[detailIndex].status === "paid"
-            ? updateItem(detailIndex, (d) => { d.status = "unpaid"; })
-            : openPaymentModal(detailIndex)}
+          onTogglePaid={() => openPaymentModal(detailIndex)}
           onCancelPayment={handleCancelPayment}
           onSendLine={() => setConfirmSendIdx(detailIndex)}
           sendingLine={sendingLineIdx === detailIndex}
