@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { chatApi, type ChatConversationInfo, type ChatMessage, type OutstandingBillItem } from "../api/client";
 import { monthYearLabel } from "../utils/billCalc";
 import { thaiDateTimeString } from "../utils/yearFormat";
@@ -156,6 +157,7 @@ function InfoTab({ lineUserId, displayName, pictureUrl }: { lineUserId: string; 
 function BillsTab({ lineUserId }: { lineUserId: string }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{ items: OutstandingBillItem[]; total: number } | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let alive = true;
@@ -186,7 +188,17 @@ function BillsTab({ lineUserId }: { lineUserId: string }) {
             <div className="small fw-semibold">{monthYearLabel(it.monthYear)}</div>
             <div className="text-muted" style={{ fontSize: 12 }}>ห้อง {it.roomNumber}</div>
           </div>
-          <div className="text-danger fw-semibold">{fmtMoney(it.amount)} ฿</div>
+          <div className="d-flex align-items-center gap-2">
+            <div className="text-danger fw-semibold">{fmtMoney(it.amount)} ฿</div>
+            <button type="button" className="btn btn-sm btn-outline-secondary" title="เปิดบิลนี้"
+              onClick={() => navigate("/bills", { state: { openBillId: it.billId, openRoomId: it.roomId } })}>
+              <i className="fas fa-arrow-up-right-from-square" />
+            </button>
+            <button type="button" className="btn btn-sm btn-primary" title="ยืนยันการชำระเงิน"
+              onClick={() => navigate("/bills", { state: { openBillId: it.billId, openRoomId: it.roomId, openPayment: true } })}>
+              <i className="fas fa-check me-1" />ชำระ
+            </button>
+          </div>
         </div>
       ))}
     </div>

@@ -3404,7 +3404,7 @@ export default function BillsPage() {
   // ผ่าน navigate("/bills", { state: { openBillId, openRoomId } }) — ทำครั้งเดียวหลังโหลดข้อมูลบิลเสร็จ
   const handledDeepLinkRef = useRef(false);
   useEffect(() => {
-    const state = location.state as { openBillId?: string; openRoomId?: string } | null;
+    const state = location.state as { openBillId?: string; openRoomId?: string; openPayment?: boolean } | null;
     if (!state?.openBillId || loading || handledDeepLinkRef.current) return;
     const group = bills.find((b) => b.id === state.openBillId);
     if (!group) return;
@@ -3419,6 +3419,7 @@ export default function BillsPage() {
     const idx = state.openRoomId ? data.findIndex((it) => String(it.roomId) === String(state.openRoomId)) : -1;
     setDetailIndex(idx >= 0 ? idx : null);
     setView(idx >= 0 ? "detail" : "editor");
+    if (state.openPayment && idx >= 0) setPayingIndex(idx);
   }, [bills, loading]);
 
   const defaults = useMemo(() => resolveDefaultFormulas(formulas), [formulas]);

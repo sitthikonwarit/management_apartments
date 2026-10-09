@@ -199,6 +199,7 @@ export interface ChatConversationInfo {
 
 export interface OutstandingBillItem {
   billId: string;
+  roomId?: string;
   monthYear: string;
   roomNumber: string;
   total: number;
