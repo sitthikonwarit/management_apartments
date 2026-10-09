@@ -465,6 +465,13 @@ body {
   background-color: var(--color-background);
   overflow-x: hidden;
 }
+/* nice scroll ทั้งเว็บ (รวมเมนู dropdown ของ react-select ที่ render ผ่าน portal ลง body) */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--color-light); border-radius: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--color-dark-variant); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-primary); background-clip: padding-box; }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+*::-webkit-scrollbar-corner { background: transparent; }
 body::-webkit-scrollbar { width: 10px; }
 body::-webkit-scrollbar-track { background: var(--color-light); border-radius: 10px; }
 body::-webkit-scrollbar-thumb { background: var(--color-dark-variant); border-radius: 10px; }
