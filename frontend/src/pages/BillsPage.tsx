@@ -2024,14 +2024,31 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
               <tfoot>
                 <tr>
                   {(() => {
-                    const sums: Record<string, number> = { total: grandTotal, remaining: grandRemaining };
+                    const sum = (f: (i: BillItem) => number) => uniqueItems.reduce((acc, i) => acc + (Number(f(i)) || 0), 0);
+                    const specialOf = (i: BillItem) => i.discountItems.filter((d) => d.id.startsWith("special-")).reduce((a, d) => a + (Number(d.price) || 0), 0);
+                    const sums: Record<string, number> = {
+                      priceRoom: sum((i) => i.priceRoom),
+                      water: sum((i) => i.priceWater),
+                      electric: sum((i) => i.priceElectric),
+                      vehicle: sum((i) => i.priceVehicle),
+                      roomTag: sum((i) => i.billTagItems.reduce((a, t) => a + (Number(t.price) || 0), 0)),
+                      tenantTag: sum((i) => i.billTenantTagItems.reduce((a, t) => a + (Number(t.price) || 0), 0)),
+                      customItems: sum((i) => i.customItems.reduce((a, c) => a + (Number(c.price) || 0), 0)),
+                      discount: sum((i) => i.discountItems.reduce((a, d) => a + (Number(d.price) || 0), 0)),
+                      other: sum((i) => otherChargesTotal(i)),
+                      ownMonth: sum((i) => Math.max(0, i.total - (i.outstandingAmount || 0))),
+                      outstanding: sum((i) => (i.outstandingAmount > 0 && i.status !== "paid" ? i.outstandingAmount : 0)),
+                      fine: sum((i) => i.fineAmount),
+                      total: totalDisplayMode === "excludeSpecialDiscount" ? sum((i) => i.total + specialOf(i)) : grandTotal,
+                      remaining: grandRemaining,
+                    };
                     const firstSum = cols.findIndex((c) => c.key in sums);
                     if (firstSum === -1) return <td colSpan={cols.length}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>;
                     return (
                       <>
                         {firstSum > 0 && <td colSpan={firstSum}>รวมทั้งหมด ({uniqueItems.length} ห้อง)</td>}
                         {cols.slice(firstSum).map((c) => (
-                          <td key={c.key} className={c.align === "end" ? "amt" : undefined}>{c.key in sums ? money(sums[c.key]) : ""}</td>
+                          <td key={c.key} className={c.align === "end" ? "amt" : undefined}>{c.key in sums ? (c.key === "discount" && sums[c.key] > 0 ? "-" : "") + money(sums[c.key]) : ""}</td>
                         ))}
                       </>
                     );
