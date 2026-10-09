@@ -2784,13 +2784,12 @@ const BILL_GROUP_TABLE_COLS: BillColDef[] = [
   { key: "actions",   header: "จัดการ",       visible: true, pinnable: true,  pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
 ];
 
-function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint, onPrintDashboard }: {
+function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint }: {
   data: BillGroup[];
   onEdit: (g: BillGroup) => void;
   onPrint: (g: BillGroup) => void;
   onDelete: (g: BillGroup) => void;
   onBulkPrint: (groups: BillGroup[]) => void;
-  onPrintDashboard: (g: BillGroup) => void;
 }) {
   const [cols, setCols, moveColumn] = useColumnVisibility("bills-group", BILL_GROUP_TABLE_COLS);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -2890,9 +2889,6 @@ function BillGroupTableView({ data, onEdit, onPrint, onDelete, onBulkPrint, onPr
             </button>
             <button type="button" className="btn btn-sm btn-secondary" title="พิมพ์ทั้งเดือน" onClick={(e) => { e.stopPropagation(); onPrint(g); }}>
               <i className="fas fa-print" />
-            </button>
-            <button type="button" className="btn btn-sm btn-outline-secondary" title="พิมพ์สรุป Dashboard" onClick={(e) => { e.stopPropagation(); onPrintDashboard(g); }}>
-              <i className="fas fa-chart-pie" />
             </button>
             <button type="button" className="btn btn-sm btn-danger" title="ลบ" onClick={(e) => { e.stopPropagation(); onDelete(g); }}>
               <i className="fas fa-trash-alt" />
@@ -3295,14 +3291,6 @@ export default function BillsPage() {
     setTimeout(() => window.print(), 80);
   }
 
-  function printDashboardForGroup(group: BillGroup) {
-    setPrintPayload(null);
-    const items = (group.data ?? []).map(normalizeBillItem);
-    setPrintDashboardGroups([{ monthYear: group.monthYear, stats: computeBillStats(items, payments, group.monthYear, bills) }]);
-    setPrintDashboardSections(readPersistedDashboardSections());
-    setPrintDashboard(true);
-    setTimeout(() => window.print(), 80);
-  }
   const [printSlipLineKeys, setPrintSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [printSlipLayout, setPrintSlipLayout] = useState<BillSlipLayout>("auto");
   const [printConfigPool, setPrintConfigPool] = useState<{ item: BillItem; monthYear: string }[] | null>(null);
@@ -4024,7 +4012,6 @@ export default function BillsPage() {
               onPrint={(g) => openPrintConfig(g.data.map((item) => ({ item, monthYear: g.monthYear })))}
               onDelete={(g) => setConfirmDeleteGroup(g)}
               onBulkPrint={(groups) => openPrintConfig(groups.flatMap((g) => g.data.map((item) => ({ item, monthYear: g.monthYear }))))}
-              onPrintDashboard={printDashboardForGroup}
             />
           ) : groupViewMode === "grid" ? (
             sortedBills.length === 0 ? (
