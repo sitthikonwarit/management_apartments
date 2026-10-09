@@ -1633,6 +1633,24 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
   const [slipLineKeys, setSlipLineKeys] = useState<Set<string>>(DEFAULT_SLIP_LINE_KEYS);
   const [slipLayout, setSlipLayout] = useState<BillSlipLayout>("auto");
 
+  // คอลัมน์ที่ "มีข้อมูลจริง" ในห้องที่เลือกอยู่ — ติดดาว * แนะนำให้เลือก ไม่งั้นยอดรวมท้ายตารางจะดูไม่ตรงกับผลรวมที่เห็น
+  const colsWithData = useMemo(() => {
+    const has = new Set<string>();
+    pool.forEach((e) => {
+      if (!selected.has(billEntryKey(e.monthYear, e.item.roomId))) return;
+      const i = e.item;
+      if (i.priceVehicle > 0) has.add("vehicle");
+      if (i.billTagItems.length > 0) has.add("roomTag");
+      if (i.billTenantTagItems.length > 0) has.add("tenantTag");
+      if (i.customItems.length > 0) has.add("customItems");
+      if (i.discountItems.length > 0) has.add("discount");
+      if (otherChargesTotal(i) !== 0) has.add("other");
+      if (i.outstandingAmount > 0 && i.status !== "paid") has.add("outstanding");
+      if (i.fineAmount > 0) has.add("fine");
+    });
+    return has;
+  }, [pool, selected]);
+
   const activeTowers = towers.filter((t: any) => t.isActive !== false);
   // ห้องที่เลือกพิมพ์อยู่ตอนนี้ มีห้องไหนที่มีผู้ร่วมพักหลายคนบ้าง — ใช้โชว์ตัวเลือกแยกใบตามคน
   const selectedMultiResidentCount = useMemo(
@@ -1792,6 +1810,11 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                     <button className="pcp-btn" onClick={() => setColKeys(new Set())}>ล้าง</button>
                   </div>
                 </div>
+                {colsWithData.size > 0 && (
+                  <div className="text-muted" style={{ fontSize: "0.72rem", padding: "0 0 6px" }}>
+                    <b style={{ color: "var(--color-danger)" }}>*</b> มีข้อมูลในส่วนนี้ — แนะนำให้เลือก เพื่อให้ผลรวมถูกต้อง
+                  </div>
+                )}
                 <div className="nicescrollbar" style={{ overflowY: "auto", flex: 1 }}>
                   {BILL_RECORD_COL_GROUPS.map((grp) => (
                     <div key={grp.label} style={{ marginBottom: 10 }}>
@@ -1810,6 +1833,7 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
                             }}
                           />
                           <span>{col.header}</span>
+                          {colsWithData.has(col.key) && <span title="มีข้อมูลในส่วนนี้ — แนะนำให้เลือกเพื่อให้ผลรวมถูกต้อง" style={{ color: colKeys.has(col.key) ? "var(--color-success)" : "var(--color-danger)", fontWeight: 700 }}>*</span>}
                         </label>
                       ))}
                     </div>
