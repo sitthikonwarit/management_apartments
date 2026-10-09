@@ -140,6 +140,7 @@ export const specialDiscounts = pgTable("special_discounts", {
   value: str("value"), // จำนวนเงิน หรือ เปอร์เซ็นต์ แล้วแต่ type
   roomIds: json("room_ids"),
   expiryDate: str("expiry_date"), // "YYYY-MM-DD" — ว่าง = ไม่มีวันหมดอายุ
+  startMonth: str("start_month"), // "MM/YYYY" เดือนแรกที่เริ่มใช้ส่วนลด — เดือนก่อนหน้านี้ไม่นำมาคิด
   createdAt: str("created_at"),
 });
 

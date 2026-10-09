@@ -101,6 +101,8 @@ export interface SpecialDiscount {
   value: number;
   roomIds: string[];
   expiryDate: string; // "YYYY-MM-DD" ว่าง = ไม่หมดอายุ
+  startMonth?: string; // "MM/YYYY" เดือนแรกที่เริ่มใช้ — เดือนก่อนหน้านี้ไม่คิด (ว่าง = ดูจากวันที่สร้าง)
+  createdAt?: string;
 }
 
 export interface GenCtx {
@@ -489,7 +491,18 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
 }
 
 // ── ส่วนลดพิเศษเฉพาะห้อง — ไม่หมดอายุในเดือนนี้หรือยังไม่มีวันหมดอายุเลย = ยังใช้ได้ ──
+// เดือนเริ่มต้นของส่วนลด: ใช้ startMonth ที่ตั้งไว้ ถ้าไม่มี (ส่วนลดเก่า) ใช้เดือนก่อนเดือนที่สร้าง (บิลมักออกของเดือนก่อนหน้า)
+// กันไม่ให้ส่วนลดที่เพิ่งตั้งไปย้อนปนในบิลเดือนเก่าที่ปิดไปแล้ว
+function specialDiscountStart(d: SpecialDiscount): string {
+  if (d.startMonth) return d.startMonth;
+  const t = d.createdAt ? new Date(d.createdAt) : null;
+  if (!t || Number.isNaN(t.getTime())) return "";
+  return prevMY(`${padZ(t.getMonth() + 1)}/${t.getFullYear()}`);
+}
+
 function specialDiscountActiveForMonth(d: SpecialDiscount, monthYear: string): boolean {
+  const start = specialDiscountStart(d);
+  if (start && myScore(monthYear) < myScore(start)) return false;
   if (!d.expiryDate) return true;
   const [m, y] = monthYear.split("/");
   const monthStart = new Date(Number(y), Number(m) - 1, 1).getTime();

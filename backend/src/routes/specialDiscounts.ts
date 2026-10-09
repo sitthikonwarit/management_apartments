@@ -14,6 +14,7 @@ function parseDiscount(r: typeof specialDiscounts.$inferSelect) {
     value: Number(r.value) || 0,
     roomIds: Array.isArray(roomIds) ? roomIds : [],
     expiryDate: r.expiryDate,
+    startMonth: r.startMonth ?? "",
     createdAt: r.createdAt,
   };
 }
@@ -26,7 +27,7 @@ export const specialDiscountsRoute = new Elysia({ prefix: "/special-discounts" }
   })
   .post("/", async ({ authUser, body, set }) => {
     const orgId = authUser!.orgId;
-    const { name, type, value, roomIds, expiryDate } = body as any;
+    const { name, type, value, roomIds, expiryDate, startMonth } = body as any;
     if (!name?.trim()) { set.status = 400; return { error: "ต้องระบุชื่อส่วนลด" }; }
     if (!Array.isArray(roomIds) || roomIds.length === 0) { set.status = 400; return { error: "ต้องเลือกห้องอย่างน้อย 1 ห้อง" }; }
     const id = `SD-${Date.now()}`;
@@ -38,6 +39,7 @@ export const specialDiscountsRoute = new Elysia({ prefix: "/special-discounts" }
       value: String(value ?? 0),
       roomIds: JSON.stringify(roomIds),
       expiryDate: String(expiryDate ?? ""),
+      startMonth: String(startMonth ?? ""),
       createdAt: new Date().toISOString(),
     });
     const [row] = await db.select().from(specialDiscounts).where(eq(specialDiscounts.id, id));
@@ -45,7 +47,7 @@ export const specialDiscountsRoute = new Elysia({ prefix: "/special-discounts" }
   })
   .put("/:id", async ({ authUser, params, body, set }) => {
     const { id } = params;
-    const { name, type, value, roomIds, expiryDate } = body as any;
+    const { name, type, value, roomIds, expiryDate, startMonth } = body as any;
     const [existing] = await db.select().from(specialDiscounts).where(and(eq(specialDiscounts.id, id), eq(specialDiscounts.orgId, authUser!.orgId)));
     if (!existing) { set.status = 404; return { error: "ไม่พบข้อมูล" }; }
     await db.update(specialDiscounts).set({
@@ -54,6 +56,7 @@ export const specialDiscountsRoute = new Elysia({ prefix: "/special-discounts" }
       value:      value !== undefined ? String(value) : existing.value,
       roomIds:    Array.isArray(roomIds) ? JSON.stringify(roomIds) : existing.roomIds,
       expiryDate: expiryDate !== undefined ? String(expiryDate) : existing.expiryDate,
+      startMonth: startMonth !== undefined ? String(startMonth) : existing.startMonth,
     }).where(eq(specialDiscounts.id, id));
     const [row] = await db.select().from(specialDiscounts).where(eq(specialDiscounts.id, id));
     return parseDiscount(row);

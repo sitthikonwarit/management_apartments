@@ -14,7 +14,7 @@ import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   type SpecialDiscount,
-  monthYearLabel, myScore, prevMY,
+  monthYearLabel, myScore, prevMY, padZ,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
   adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
@@ -2981,8 +2981,9 @@ interface BulkSendItem { roomId: string; roomNumber: string; status: "pending" |
 // ── ป็อปอัพส่วนลดพิเศษเฉพาะห้อง ───────────────────────────────────────────────
 // ตั้งส่วนลด (จำนวนเงินตรงๆ หรือเปอร์เซ็นต์) ผูกกับห้องที่เลือกไว้ ให้คิดซ้ำเข้าบิลทุกเดือนอัตโนมัติจนกว่าจะถึง
 // เดือนหลังวันหมดอายุที่ตั้งไว้ (ไม่ตั้งวันหมดอายุ = ใช้ได้ตลอดไป) — ดู applySpecialDiscounts ใน utils/billCalc.ts
-function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onChange }: {
+function SpecialDiscountsModal({ rooms, tenants, towers, discounts, monthOptions, defaultStartMonth, onClose, onChange }: {
   rooms: any[]; tenants: any[]; towers: any[]; discounts: SpecialDiscount[];
+  monthOptions: string[]; defaultStartMonth: string;
   onClose: () => void;
   onChange: (next: SpecialDiscount[]) => void;
 }) {
@@ -2992,6 +2993,7 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
   const [value, setValue] = useState("");
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [expiryDate, setExpiryDate] = useState("");
+  const [startMonth, setStartMonth] = useState(defaultStartMonth);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -3017,10 +3019,10 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
   const allFilteredSelected = filteredRooms.length > 0 && filteredRooms.every((r) => roomIds.includes(r.id));
 
   function resetForm() {
-    setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setError("");
+    setEditingId(null); setName(""); setType("fixed"); setValue(""); setRoomIds([]); setExpiryDate(""); setStartMonth(defaultStartMonth); setError("");
   }
   function startEdit(d: SpecialDiscount) {
-    setEditingId(d.id); setName(d.name); setType(d.type); setValue(String(d.value)); setRoomIds(d.roomIds); setExpiryDate(d.expiryDate); setError("");
+    setEditingId(d.id); setName(d.name); setType(d.type); setValue(String(d.value)); setRoomIds(d.roomIds); setExpiryDate(d.expiryDate); setStartMonth(d.startMonth || ""); setError("");
   }
 
   async function handleSubmit() {
@@ -3029,7 +3031,7 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
     if (!(Number(value) > 0)) { setError("กรุณาระบุจำนวน/เปอร์เซ็นต์ให้ถูกต้อง"); return; }
     setSaving(true); setError("");
     try {
-      const payload = { name: name.trim(), type, value: Number(value), roomIds, expiryDate };
+      const payload = { name: name.trim(), type, value: Number(value), roomIds, expiryDate, startMonth };
       const saved = editingId ? await specialDiscountsApi.update(editingId, payload) : await specialDiscountsApi.create(payload);
       // บันทึกลง backend สำเร็จแล้ว ณ จุดนี้ — reset ฟอร์ม/แจ้งเตือนสำเร็จก่อนเลย ไม่รอ onChange ด้านล่าง
       // (ซึ่งแค่รีคำนวณบิลเดือนที่เปิดอยู่ให้เห็นผลทันที เป็นแค่ side effect ของหน้านี้ ไม่ใช่ส่วนที่ตัดสินว่า
@@ -3115,6 +3117,14 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, onClose, onC
               <div className="col-12">
                 <label className="form-label small mb-1">วันหมดอายุ <span className="text-muted fw-normal">(ไม่ระบุ = ไม่มีวันหมดอายุ)</span></label>
                 <ThaiDatePicker value={expiryDate} onChange={setExpiryDate} />
+              </div>
+              <div className="col-12">
+                <label className="form-label small mb-1">เริ่มใช้ตั้งแต่เดือน <span className="text-muted fw-normal">(เดือนก่อนหน้านี้จะไม่ถูกนำส่วนลดไปคิด)</span></label>
+                <select className="form-select" value={startMonth} onChange={(e) => setStartMonth(e.target.value)}>
+                  {startMonth && !monthOptions.includes(startMonth) && <option value={startMonth}>{monthYearLabel(startMonth)}</option>}
+                  {!startMonth && <option value="">ตามวันที่สร้าง (ส่วนลดเดิม)</option>}
+                  {monthOptions.map((m) => <option key={m} value={m}>{monthYearLabel(m)}</option>)}
+                </select>
               </div>
             </div>
           </div>
@@ -3397,6 +3407,18 @@ export default function BillsPage() {
     setView(idx >= 0 ? "detail" : "editor");
     if (state.openPayment && idx >= 0) setPayingIndex(idx);
   }, [bills, loading]);
+
+  // เดือนที่เลือกเป็น "เริ่มใช้ส่วนลดพิเศษตั้งแต่เดือน" ได้: เดือนของบิลที่มีอยู่ + เดือนถัดจากเดือนล่าสุด (เรียงล่าสุดก่อน)
+  const specialDiscountMonthOptions = useMemo(() => {
+    const set = new Set(bills.map((b) => b.monthYear).filter(Boolean));
+    const latest = [...set].sort((a, b) => myScore(b) - myScore(a))[0];
+    if (latest) {
+      const [m, y] = latest.split("/");
+      const mi = parseInt(m, 10) + 1;
+      set.add(mi > 12 ? `01/${parseInt(y, 10) + 1}` : `${padZ(mi)}/${y}`);
+    }
+    return [...set].sort((a, b) => myScore(b) - myScore(a));
+  }, [bills]);
 
   const defaults = useMemo(() => resolveDefaultFormulas(formulas), [formulas]);
 
@@ -4601,6 +4623,8 @@ export default function BillsPage() {
           tenants={tenants}
           towers={towers}
           discounts={specialDiscounts}
+          monthOptions={specialDiscountMonthOptions}
+          defaultStartMonth={view === "editor" && editingMonthYear ? editingMonthYear : (specialDiscountMonthOptions[1] ?? specialDiscountMonthOptions[0] ?? "")}
           onClose={() => setShowSpecialDiscounts(false)}
           onChange={(next) => {
             setSpecialDiscounts(next);
