@@ -4,7 +4,7 @@ import Select, { components } from "react-select";
 import { billsApi, roomsApi, tenantsApi, vehiclesApi, metersApi, settingsApi, specialDiscountsApi } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig, type AppConfig } from "../context/AppConfigContext";
-import CustomSelect2 from "../components/CustomSelect2";
+import CustomSelect2, { customStyles } from "../components/CustomSelect2";
 import { BillLinePreview } from "../components/BillLinePreviewCard";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
@@ -2428,7 +2428,7 @@ function StatusValueContainer(props: any) {
   const input = Array.isArray(props.children) ? props.children[props.children.length - 1] : props.children;
   return (
     <components.ValueContainer {...props}>
-      <span style={{ color: "var(--color-dark)", fontWeight: 500, fontSize: "0.9rem", whiteSpace: "nowrap" }}>
+      <span style={{ color: "var(--color-dark)", fontWeight: 500, fontSize: "0.9rem", whiteSpace: "nowrap", lineHeight: 1.5 }}>
         {sel.length === 0 ? "ทุกสถานะ" : sel.length === 1 ? sel[0].label : `กรอง ${sel.length} เงื่อนไข`}
       </span>
       {input}
@@ -2439,7 +2439,8 @@ function BillStatusFilterDropdown({ value, onChange }: { value: string[]; onChan
   return (
     <Select isMulti options={STATUS_OPTIONS} value={STATUS_OPTIONS.filter((o) => value.includes(o.value))}
       onChange={(sel) => onChange((sel as any[]).map((s) => s.value))}
-      styles={colSelectStyles}
+      styles={{ ...(customStyles as any), valueContainer: (b: any) => ({ ...b, padding: "0.375rem 0.75rem", flexWrap: "nowrap", overflow: "hidden" }) }}
+      menuPortalTarget={document.body} menuPosition="fixed"
       components={{ Option: ColCheckboxOption, ValueContainer: StatusValueContainer, MultiValue: () => null }}
       closeMenuOnSelect={false} hideSelectedOptions={false} isSearchable={false} isClearable={false}
       noOptionsMessage={() => "ไม่พบข้อมูล"} placeholder="ทุกสถานะ"
