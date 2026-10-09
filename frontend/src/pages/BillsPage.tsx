@@ -2994,6 +2994,11 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, monthOptions
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [expiryDate, setExpiryDate] = useState("");
   const [startMonth, setStartMonth] = useState(defaultStartMonth);
+  const startMonthOptions = [
+    ...(startMonth && !monthOptions.includes(startMonth) ? [{ value: startMonth, label: monthYearLabel(startMonth) }] : []),
+    ...(!startMonth ? [{ value: "", label: "ตามวันที่สร้าง (ส่วนลดเดิม)" }] : []),
+    ...monthOptions.map((m) => ({ value: m, label: monthYearLabel(m) })),
+  ];
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -3105,10 +3110,10 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, monthOptions
                   value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="col-6">
-                <select className="form-select" value={type} onChange={(e) => setType(e.target.value as "fixed" | "percent")}>
-                  <option value="fixed">จำนวนเงิน (บาท)</option>
-                  <option value="percent">เปอร์เซ็นต์ (%)</option>
-                </select>
+                <CustomSelect2
+                  value={[{ value: "fixed", label: "จำนวนเงิน (บาท)" }, { value: "percent", label: "เปอร์เซ็นต์ (%)" }].find((o) => o.value === type)}
+                  options={[{ value: "fixed", label: "จำนวนเงิน (บาท)" }, { value: "percent", label: "เปอร์เซ็นต์ (%)" }]}
+                  onChange={(o: any) => setType(o?.value === "percent" ? "percent" : "fixed")} isSearchable={false} />
               </div>
               <div className="col-6">
                 <input type="number" min={0} className="form-control" placeholder={type === "percent" ? "เช่น 10" : "เช่น 500"}
@@ -3120,11 +3125,10 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, monthOptions
               </div>
               <div className="col-12">
                 <label className="form-label small mb-1">เริ่มใช้ตั้งแต่เดือน <span className="text-muted fw-normal">(เดือนก่อนหน้านี้จะไม่ถูกนำส่วนลดไปคิด)</span></label>
-                <select className="form-select" value={startMonth} onChange={(e) => setStartMonth(e.target.value)}>
-                  {startMonth && !monthOptions.includes(startMonth) && <option value={startMonth}>{monthYearLabel(startMonth)}</option>}
-                  {!startMonth && <option value="">ตามวันที่สร้าง (ส่วนลดเดิม)</option>}
-                  {monthOptions.map((m) => <option key={m} value={m}>{monthYearLabel(m)}</option>)}
-                </select>
+                <CustomSelect2
+                  value={startMonthOptions.find((o) => o.value === startMonth) ?? null}
+                  options={startMonthOptions}
+                  onChange={(o: any) => setStartMonth(o?.value ?? "")} isSearchable={false} menuPlacement="auto" />
               </div>
             </div>
           </div>
