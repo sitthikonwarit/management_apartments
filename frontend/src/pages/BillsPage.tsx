@@ -2439,7 +2439,7 @@ function BillStatusFilterDropdown({ value, onChange }: { value: string[]; onChan
   return (
     <Select isMulti options={STATUS_OPTIONS} value={STATUS_OPTIONS.filter((o) => value.includes(o.value))}
       onChange={(sel) => onChange((sel as any[]).map((s) => s.value))}
-      styles={{ ...(customStyles as any), valueContainer: (b: any) => ({ ...b, padding: "0.375rem 0.75rem", flexWrap: "nowrap", overflow: "hidden" }) }}
+      styles={{ ...(customStyles as any), valueContainer: (b: any) => ({ ...b, display: "flex", alignItems: "center", padding: "0.375rem 0.75rem", flexWrap: "nowrap", overflow: "hidden" }) }}
       menuPortalTarget={document.body} menuPosition="fixed"
       components={{ Option: ColCheckboxOption, ValueContainer: StatusValueContainer, MultiValue: () => null }}
       closeMenuOnSelect={false} hideSelectedOptions={false} isSearchable={false} isClearable={false}
