@@ -4,6 +4,8 @@ import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ThaiDatePicker from "../components/ThaiDatePicker";
 import EmptyState from "../components/EmptyState";
+import DataTable, { type DataCol } from "../components/DataTable";
+import { usePersistedViewMode } from "../utils/usePersistedViewMode";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { thaiDateOnlyString } from "../utils/yearFormat";
@@ -15,6 +17,31 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "history", label: "ประวัติรับเข้า/เบิกใช้", icon: "fa-clock-rotate-left" },
   { key: "rooms", label: "สรุปค่าใช้จ่ายตามห้อง", icon: "fa-door-open" },
 ];
+
+const STOCK_COLS: DataCol[] = [
+  { key: "checkbox", header: "checkbox", visible: true, pinnable: true, pin: "left", thClass: "text-center checkbox-cell", tdClass: "text-center checkbox-cell" },
+  { key: "name", header: "ชื่อของ", visible: true, pinnable: true, pin: false },
+  { key: "stock", header: "คงเหลือ", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "unit", header: "หน่วย", visible: false, pinnable: true, pin: false },
+  { key: "price", header: "ราคาล่าสุด/หน่วย", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "value", header: "มูลค่าคงเหลือ", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "actions", header: "จัดการ", visible: true, pinnable: true, pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
+];
+const STOCK_WIDTHS = { checkbox: 40, name: 220, stock: 130, unit: 90, price: 150, value: 150, actions: 170 };
+const MOVE_COLS: DataCol[] = [
+  { key: "checkbox", header: "checkbox", visible: true, pinnable: true, pin: "left", thClass: "text-center checkbox-cell", tdClass: "text-center checkbox-cell" },
+  { key: "date", header: "วันที่", visible: true, pinnable: true, pin: false },
+  { key: "type", header: "ประเภท", visible: true, pinnable: true, pin: false },
+  { key: "item", header: "ของ", visible: true, pinnable: true, pin: false },
+  { key: "qty", header: "จำนวน", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "price", header: "ราคา/หน่วย", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "total", header: "รวม", visible: true, pinnable: true, pin: false, thClass: "text-end", tdClass: "text-end" },
+  { key: "room", header: "ห้อง", visible: true, pinnable: true, pin: false, thClass: "text-center", tdClass: "text-center" },
+  { key: "note", header: "หมายเหตุ", visible: true, pinnable: true, pin: false },
+  { key: "by", header: "บันทึกโดย", visible: false, pinnable: true, pin: false },
+  { key: "actions", header: "จัดการ", visible: true, pinnable: true, pin: "right", thClass: "text-center action-cell", tdClass: "text-center action-cell" },
+];
+const MOVE_WIDTHS = { checkbox: 40, date: 110, type: 100, item: 180, qty: 110, price: 110, total: 110, room: 90, note: 180, by: 110, actions: 90 };
 
 const TAB_OPTIONS = TABS.map((t) => ({ value: t.key, label: t.label }));
 const TYPE_OPTIONS = [
@@ -208,8 +235,9 @@ export default function RepairsPage() {
   const [search, setSearch] = useState("");
   const [itemModal, setItemModal] = useState<{ item: RepairItem | null } | null>(null);
   const [moveModal, setMoveModal] = useState<{ type: "in" | "out"; itemId?: string } | null>(null);
-  const [delItem, setDelItem] = useState<RepairItem | null>(null);
-  const [delMove, setDelMove] = useState<RepairMovement | null>(null);
+  const [delItems, setDelItems] = useState<RepairItem[] | null>(null);
+  const [delMoves, setDelMoves] = useState<RepairMovement[] | null>(null);
+  const [view, setView] = usePersistedViewMode<"list" | "grid" | "table">("repairs", "table", ["list", "grid", "table"]);
   // ตัวกรองประวัติ
   const [typeFilter, setTypeFilter] = useState<"all" | "in" | "out">("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -263,6 +291,11 @@ export default function RepairsPage() {
     return [...map.values()].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
   }, [moves, dateFrom, dateTo]);
 
+  const roomSummaryFiltered = useMemo(
+    () => roomSummary.filter((g) => !q || g.roomNumber.toLowerCase().includes(q) || g.lines.some((m) => (itemById.get(m.itemId)?.name ?? "").toLowerCase().includes(q) || m.note.toLowerCase().includes(q))),
+    [roomSummary, q, itemById]
+  );
+
   const dateFilters = (
     <>
       <div style={{ width: 170 }}><ThaiDatePicker value={dateFrom} onChange={setDateFrom} placeholder="ตั้งแต่วันที่" /></div>
@@ -270,6 +303,72 @@ export default function RepairsPage() {
       {(dateFrom || dateTo) && <button className="btn btn-outline-secondary" onClick={() => { setDateFrom(""); setDateTo(""); }}>ล้างวันที่</button>}
     </>
   );
+
+  // ── ฟังก์ชันลบ (ลบทีละรายการหรือหลายรายการ) ──
+  async function runDelete(kind: "item" | "move", list: { id: string }[]) {
+    let ok = 0; let lastErr = "";
+    for (const x of list) {
+      try { kind === "item" ? await repairsApi.deleteItem(x.id) : await repairsApi.deleteMovement(x.id); ok++; }
+      catch (e) { lastErr = errMsg(e); }
+    }
+    if (ok > 0) toastSuccess(kind === "item" ? `ลบแล้ว ${ok} รายการ` : `ยกเลิกแล้ว ${ok} รายการ`);
+    if (lastErr) toastError(lastErr);
+    setDelItems(null); setDelMoves(null); load();
+  }
+
+  const showViewSwitch = tab !== "rooms";
+  const itemName = (id: string) => itemById.get(id)?.name ?? "(ของถูกลบ)";
+  const itemUnit = (id: string) => itemById.get(id)?.unit ?? "";
+
+  const itemActions = (i: RepairItem) => (
+    <div className="btn-group" role="group">
+      <button type="button" className="btn btn-sm btn-success" title="เติมของ" onClick={(e) => { e.stopPropagation(); setMoveModal({ type: "in", itemId: i.id }); }}><i className="fas fa-plus" /></button>
+      <button type="button" className="btn btn-sm btn-danger" title="เบิกใช้" disabled={i.stock <= 0} onClick={(e) => { e.stopPropagation(); setMoveModal({ type: "out", itemId: i.id }); }}><i className="fas fa-arrow-right-from-bracket" /></button>
+      <button type="button" className="btn btn-sm btn-warning" title="แก้ไข" onClick={(e) => { e.stopPropagation(); setItemModal({ item: i }); }}><i className="fas fa-edit" /></button>
+      <button type="button" className="btn btn-sm btn-outline-danger" title="ลบ" onClick={(e) => { e.stopPropagation(); setDelItems([i]); }}><i className="fas fa-trash-alt" /></button>
+    </div>
+  );
+  const stockBadge = (i: RepairItem) => {
+    const low = i.minStock > 0 && i.stock <= i.minStock;
+    return <span className={`status-badge ${i.stock <= 0 ? "status-overdue" : low ? "status-unpaid" : "status-paid"}`}>{qtyFmt(i.stock)} {i.unit}</span>;
+  };
+  const typeBadge = (m: RepairMovement) => (
+    <span className={`status-badge ${m.type === "out" ? "status-overdue" : "status-paid"}`}>{m.type === "out" ? "เบิกใช้" : "เติมของ"}</span>
+  );
+  const moveDeleteBtn = (m: RepairMovement) => (
+    <button type="button" className="btn btn-sm btn-danger" title="ยกเลิกรายการ" onClick={(e) => { e.stopPropagation(); setDelMoves([m]); }}>
+      <i className="fas fa-trash-alt" />
+    </button>
+  );
+
+  function renderStockCell(col: DataCol, i: RepairItem) {
+    switch (col.key) {
+      case "name": return <span className="fw-bold">{i.name}{i.note && <div className="text-muted small fw-normal">{i.note}</div>}</span>;
+      case "stock": return stockBadge(i);
+      case "unit": return i.unit;
+      case "price": return i.lastPrice > 0 ? money(i.lastPrice) : "-";
+      case "value": return i.lastPrice > 0 ? money(i.stock * i.lastPrice) : "-";
+      case "actions": return itemActions(i);
+      default: return "-";
+    }
+  }
+  function renderMoveCell(col: DataCol, m: RepairMovement) {
+    switch (col.key) {
+      case "date": return <span style={{ whiteSpace: "nowrap" }}>{dateLabel(m.date)}</span>;
+      case "type": return typeBadge(m);
+      case "item": return <span className="fw-bold">{itemName(m.itemId)}</span>;
+      case "qty": return `${qtyFmt(m.quantity)} ${itemUnit(m.itemId)}`;
+      case "price": return money(m.unitPrice);
+      case "total": return <span className="fw-bold">{money(m.quantity * m.unitPrice)}</span>;
+      case "room": return m.type === "out" ? `ห้อง ${m.roomNumber}` : "-";
+      case "note": return <span className="text-muted small">{m.note || "-"}</span>;
+      case "by": return <span className="text-muted small">{m.createdBy || "-"}</span>;
+      case "actions": return moveDeleteBtn(m);
+      default: return "-";
+    }
+  }
+
+  const stockEmptyText = items.length === 0 ? "ยังไม่มีของในคลัง กด \"เพิ่มของใหม่\" เพื่อเริ่มต้น" : "ไม่พบของที่ค้นหา";
 
   return (
     <div className="custom-card">
@@ -308,127 +407,170 @@ export default function RepairsPage() {
         </div>
       )}
 
-      <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">
-        <div style={{ minWidth: 250 }}>
+      {/* ค้นหา → หมวด → ตัวกรอง → โหมดแสดงผล */}
+      <div className="row g-2 mb-3 align-items-center">
+        <div className="col-12 col-lg">
+          <div className="search-container">
+            <i className="fas fa-search" />
+            <input className="form-control" style={{ paddingLeft: 40 }}
+              placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
+              value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </div>
+        <div className="col-12 col-md-auto" style={{ minWidth: 250 }}>
           <CustomSelect2 value={TAB_OPTIONS.find((o) => o.value === tab)} options={TAB_OPTIONS}
             onChange={(o: any) => setTab((o?.value ?? "stock") as Tab)} isSearchable={false} />
         </div>
-        {tab !== "rooms" && (
-          <div className="search-container flex-grow-1" style={{ minWidth: 220 }}>
-            <i className="fas fa-search" />
-            <input className="form-control" style={{ paddingLeft: 40 }} placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
-              value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-        )}
         {tab === "history" && (
-          <div style={{ minWidth: 160 }}>
+          <div className="col-12 col-md-auto" style={{ minWidth: 160 }}>
             <CustomSelect2 value={TYPE_OPTIONS.find((o) => o.value === typeFilter)} options={TYPE_OPTIONS}
               onChange={(o: any) => setTypeFilter(o?.value ?? "all")} isSearchable={false} />
           </div>
         )}
-        {tab !== "stock" && dateFilters}
+        {tab !== "stock" && <div className="col-12 col-md-auto d-flex gap-2 align-items-center flex-wrap">{dateFilters}</div>}
+        {showViewSwitch && (
+          <div className="col-12 col-md-auto">
+            <div className="btn-group view-switch-group" role="group">
+              <button type="button" className={`btn btn-outline-secondary${view === "list" ? " active" : ""}`} title="List View" onClick={() => setView("list")}><i className="fas fa-list" /></button>
+              <button type="button" className={`btn btn-outline-secondary${view === "grid" ? " active" : ""}`} title="Grid View" onClick={() => setView("grid")}><i className="fas fa-th-large" /></button>
+              <button type="button" className={`btn btn-outline-secondary${view === "table" ? " active" : ""}`} title="Table View" onClick={() => setView("table")}><i className="fas fa-table" /></button>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading ? (
-        <div className="text-center text-muted py-5"><span className="spinner-border spinner-border-sm me-2" />กำลังโหลด...</div>
+        <div className="text-center p-5"><div className="spinner-border" style={{ color: "var(--color-primary)" }} /></div>
       ) : tab === "stock" ? (
-        filteredItems.length === 0 ? (
-          <EmptyState icon="fa-boxes-stacked" text={items.length === 0 ? "ยังไม่มีของในคลัง กด \"เพิ่มของใหม่\" เพื่อเริ่มต้น" : "ไม่พบของที่ค้นหา"} />
+        view === "table" ? (
+          <DataTable<RepairItem> storageKey="repair-stock" defaultCols={STOCK_COLS} defaultWidths={STOCK_WIDTHS}
+            rows={filteredItems} rowKey={(i) => i.id} renderCell={renderStockCell} isFiltered={!!q}
+            emptyIcon="fa-boxes-stacked" emptyText={stockEmptyText}
+            onBulkDelete={(rs) => setDelItems(rs)} minWidth={720} />
+        ) : filteredItems.length === 0 ? (
+          <EmptyState icon="fa-boxes-stacked" text={stockEmptyText} />
+        ) : view === "grid" ? (
+          <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
+            <div className="room-grid">
+              {filteredItems.map((i) => (
+                <div key={i.id} className="room-card">
+                  <div className="room-card-header">
+                    <h5 className="text-truncate mb-0" style={{ fontSize: "0.95rem" }} title={i.name}><i className="fas fa-box me-2 text-primary" />{i.name}</h5>
+                    {stockBadge(i)}
+                  </div>
+                  <div className="room-card-body">
+                    <div className="room-card-info-grid">
+                      <div className="room-card-info-item"><span className="label">ราคาล่าสุด/หน่วย</span><span className="value">{i.lastPrice > 0 ? money(i.lastPrice) : "-"}</span></div>
+                      <div className="room-card-info-item"><span className="label">มูลค่าคงเหลือ</span><span className="value">{i.lastPrice > 0 ? money(i.stock * i.lastPrice) : "-"}</span></div>
+                    </div>
+                    {i.note && <div className="text-muted small mt-2">{i.note}</div>}
+                    <div className="mt-3 text-end">{itemActions(i)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
-          <div className="nicescrollbar" style={{ overflow: "auto" }}>
-            <table className="table-mainstyle table-hover" style={{ width: "100%", minWidth: 720 }}>
-              <thead>
-                <tr>
-                  <th>ชื่อของ</th><th className="text-end">คงเหลือ</th><th>หน่วย</th>
-                  <th className="text-end">ราคาล่าสุด/หน่วย</th><th className="text-end">มูลค่าคงเหลือ</th><th className="text-center">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((i) => {
-                  const low = i.minStock > 0 && i.stock <= i.minStock;
-                  return (
-                    <tr key={i.id}>
-                      <td className="fw-bold">{i.name}{i.note && <div className="text-muted small fw-normal">{i.note}</div>}</td>
-                      <td className="text-end">
-                        <span className={`status-badge ${i.stock <= 0 ? "status-overdue" : low ? "status-unpaid" : "status-paid"}`}>{qtyFmt(i.stock)}</span>
-                      </td>
-                      <td>{i.unit}</td>
-                      <td className="text-end">{i.lastPrice > 0 ? money(i.lastPrice) : "-"}</td>
-                      <td className="text-end">{i.lastPrice > 0 ? money(i.stock * i.lastPrice) : "-"}</td>
-                      <td className="text-center">
-                        <div className="btn-group">
-                          <button className="btn btn-sm btn-outline-success" title="เติมของ" onClick={() => setMoveModal({ type: "in", itemId: i.id })}><i className="fas fa-plus" /></button>
-                          <button className="btn btn-sm btn-outline-danger" title="เบิกใช้" disabled={i.stock <= 0} onClick={() => setMoveModal({ type: "out", itemId: i.id })}><i className="fas fa-arrow-right-from-bracket" /></button>
-                          <button className="btn btn-sm btn-outline-secondary" title="แก้ไข" onClick={() => setItemModal({ item: i })}><i className="fas fa-pen" /></button>
-                          <button className="btn btn-sm btn-outline-secondary" title="ลบ" onClick={() => setDelItem(i)}><i className="fas fa-trash-alt" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
+            {filteredItems.map((i) => (
+              <div key={i.id} className="d-flex align-items-center gap-3 p-3" style={{ borderBottom: "1px solid var(--color-light)" }}>
+                <div style={{ width: 44, height: 44, borderRadius: 8, background: "var(--color-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <i className="fas fa-box" style={{ color: "var(--color-info-dark)" }} />
+                </div>
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <span className="fw-bold">{i.name}</span>{stockBadge(i)}
+                  </div>
+                  <small className="text-muted">ราคาล่าสุด {i.lastPrice > 0 ? `${money(i.lastPrice)} ฿/${i.unit}` : "-"} · มูลค่า {i.lastPrice > 0 ? `${money(i.stock * i.lastPrice)} ฿` : "-"}{i.note ? ` · ${i.note}` : ""}</small>
+                </div>
+                {itemActions(i)}
+              </div>
+            ))}
           </div>
         )
       ) : tab === "history" ? (
-        filteredMoves.length === 0 ? (
-          <EmptyState icon="fa-clock-rotate-left" text="ไม่มีประวัติตามเงื่อนไขที่เลือก" />
-        ) : (
-          <>
-            <div className="nicescrollbar" style={{ overflow: "auto" }}>
-              <table className="table-mainstyle table-hover" style={{ width: "100%", minWidth: 860 }}>
-                <thead>
-                  <tr>
-                    <th>วันที่</th><th>ประเภท</th><th>ของ</th><th className="text-end">จำนวน</th>
-                    <th className="text-end">ราคา/หน่วย</th><th className="text-end">รวม</th><th>ห้อง</th><th>หมายเหตุ</th><th>บันทึกโดย</th><th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMoves.map((m) => {
-                    const it = itemById.get(m.itemId);
-                    return (
-                      <tr key={m.id}>
-                        <td style={{ whiteSpace: "nowrap" }}>{dateLabel(m.date)}</td>
-                        <td><span className={`status-badge ${m.type === "out" ? "status-overdue" : "status-paid"}`}>{m.type === "out" ? "เบิกใช้" : "เติมของ"}</span></td>
-                        <td className="fw-bold">{it?.name ?? "(ของถูกลบ)"}</td>
-                        <td className="text-end">{qtyFmt(m.quantity)} {it?.unit}</td>
-                        <td className="text-end">{money(m.unitPrice)}</td>
-                        <td className="text-end fw-bold">{money(m.quantity * m.unitPrice)}</td>
-                        <td>{m.type === "out" ? `ห้อง ${m.roomNumber}` : "-"}</td>
-                        <td className="text-muted small">{m.note || "-"}</td>
-                        <td className="text-muted small">{m.createdBy || "-"}</td>
-                        <td><button className="btn btn-sm btn-outline-secondary" title="ยกเลิกรายการ" onClick={() => setDelMove(m)}><i className="fas fa-trash-alt" /></button></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <>
+          {view === "table" ? (
+            <DataTable<RepairMovement> storageKey="repair-history" defaultCols={MOVE_COLS} defaultWidths={MOVE_WIDTHS}
+              rows={filteredMoves} rowKey={(m) => m.id} renderCell={renderMoveCell} isFiltered={!!q || typeFilter !== "all" || !!dateFrom || !!dateTo}
+              emptyIcon="fa-clock-rotate-left" emptyText="ไม่มีประวัติตามเงื่อนไขที่เลือก"
+              onBulkDelete={(rs) => setDelMoves(rs)} bulkLabel="ยกเลิกรายการที่เลือก" minWidth={860} />
+          ) : filteredMoves.length === 0 ? (
+            <EmptyState icon="fa-clock-rotate-left" text="ไม่มีประวัติตามเงื่อนไขที่เลือก" />
+          ) : view === "grid" ? (
+            <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
+              <div className="room-grid">
+                {filteredMoves.map((m) => (
+                  <div key={m.id} className="room-card">
+                    <div className="room-card-header">
+                      <h5 className="text-truncate mb-0" style={{ fontSize: "0.95rem" }} title={itemName(m.itemId)}>{itemName(m.itemId)}</h5>
+                      {typeBadge(m)}
+                    </div>
+                    <div className="room-card-body">
+                      <div className="room-card-info-grid">
+                        <div className="room-card-info-item"><span className="label">วันที่</span><span className="value">{dateLabel(m.date)}</span></div>
+                        <div className="room-card-info-item"><span className="label">จำนวน</span><span className="value">{qtyFmt(m.quantity)} {itemUnit(m.itemId)}</span></div>
+                        <div className="room-card-info-item"><span className="label">ราคา/หน่วย</span><span className="value">{money(m.unitPrice)}</span></div>
+                        <div className="room-card-info-item"><span className="label">รวม</span><span className="value">{money(m.quantity * m.unitPrice)}</span></div>
+                      </div>
+                      {(m.type === "out" || m.note) && (
+                        <div className="room-card-tenant-info">
+                          {m.type === "out" && <p><i className="fas fa-door-open" />ห้อง {m.roomNumber}</p>}
+                          {m.note && <p><i className="fas fa-comment" />{m.note}</p>}
+                        </div>
+                      )}
+                      <div className="mt-3 d-flex justify-content-between align-items-center">
+                        <small className="text-muted">{m.createdBy || ""}</small>
+                        {moveDeleteBtn(m)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+          ) : (
+            <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
+              {filteredMoves.map((m) => (
+                <div key={m.id} className="d-flex align-items-center gap-3 p-3" style={{ borderBottom: "1px solid var(--color-light)" }}>
+                  <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      {typeBadge(m)}<span className="fw-bold">{itemName(m.itemId)} × {qtyFmt(m.quantity)} {itemUnit(m.itemId)}</span>
+                      {m.type === "out" && <small className="text-muted"><i className="fas fa-door-open me-1" />ห้อง {m.roomNumber}</small>}
+                    </div>
+                    <small className="text-muted">{dateLabel(m.date)} · {money(m.unitPrice)} ฿/หน่วย{m.note ? ` · ${m.note}` : ""}{m.createdBy ? ` · ${m.createdBy}` : ""}</small>
+                  </div>
+                  <strong>{money(m.quantity * m.unitPrice)} ฿</strong>
+                  {moveDeleteBtn(m)}
+                </div>
+              ))}
+            </div>
+          )}
+          {filteredMoves.length > 0 && (
             <div className="d-flex justify-content-end gap-4 mt-3 flex-wrap">
               <span>ซื้อเข้า (เติมของ): <strong className="text-success">{money(inTotal)} ฿</strong></span>
               <span>เบิกใช้: <strong className="text-danger">{money(outTotal)} ฿</strong></span>
             </div>
-          </>
-        )
-      ) : roomSummary.length === 0 ? (
+          )}
+        </>
+      ) : roomSummaryFiltered.length === 0 ? (
         <EmptyState icon="fa-door-open" text="ยังไม่มีการเบิกของไปใช้กับห้อง" />
       ) : (
         <>
-          {roomSummary.map((g) => (
+          {roomSummaryFiltered.map((g) => (
             <div key={g.roomNumber} className="mb-3 p-3" style={{ border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <strong><i className="fas fa-door-open me-2 text-primary" />ห้อง {g.roomNumber}</strong>
                 <strong className="text-danger">{money(g.total)} ฿</strong>
               </div>
-              {g.lines.sort((a, b) => b.date.localeCompare(a.date)).map((m) => (
+              {[...g.lines].sort((a, b) => b.date.localeCompare(a.date)).map((m) => (
                 <div key={m.id} className="d-flex justify-content-between small py-1" style={{ borderTop: "1px solid var(--color-light)" }}>
-                  <span>{dateLabel(m.date)} · {itemById.get(m.itemId)?.name ?? "(ของถูกลบ)"} × {qtyFmt(m.quantity)} {itemById.get(m.itemId)?.unit}{m.note ? ` — ${m.note}` : ""}</span>
+                  <span>{dateLabel(m.date)} · {itemName(m.itemId)} × {qtyFmt(m.quantity)} {itemUnit(m.itemId)}{m.note ? ` — ${m.note}` : ""}</span>
                   <span>{money(m.quantity * m.unitPrice)} ฿</span>
                 </div>
               ))}
             </div>
           ))}
-          <div className="text-end">รวมทุกห้อง: <strong className="text-danger">{money(roomSummary.reduce((s, g) => s + g.total, 0))} ฿</strong></div>
+          <div className="text-end">รวมทุกห้อง: <strong className="text-danger">{money(roomSummaryFiltered.reduce((s, g) => s + g.total, 0))} ฿</strong></div>
         </>
       )}
 
@@ -437,21 +579,14 @@ export default function RepairsPage() {
         <MovementModal type={moveModal.type} items={items} rooms={rooms} presetItemId={moveModal.itemId}
           onClose={() => setMoveModal(null)} onSaved={() => { setMoveModal(null); load(); }} />
       )}
-      {delItem && (
-        <ConfirmDelete text={<>ลบ <strong>{delItem.name}</strong> ออกจากคลังใช่หรือไม่?</>}
-          onCancel={() => setDelItem(null)}
-          onConfirm={async () => {
-            try { await repairsApi.deleteItem(delItem.id); toastSuccess("ลบแล้ว"); setDelItem(null); load(); }
-            catch (e) { toastError(errMsg(e)); setDelItem(null); }
-          }} />
+      {delItems && (
+        <ConfirmDelete text={delItems.length === 1 ? <>ลบ <strong>{delItems[0].name}</strong> ออกจากคลังใช่หรือไม่?</> : <>ลบของ <strong>{delItems.length} รายการ</strong> ที่เลือกใช่หรือไม่?</>}
+          onCancel={() => setDelItems(null)} onConfirm={() => runDelete("item", delItems)} />
       )}
-      {delMove && (
-        <ConfirmDelete text={<>ยกเลิกรายการ{delMove.type === "out" ? "เบิกใช้" : "เติมของ"} <strong>{itemById.get(delMove.itemId)?.name}</strong> × {qtyFmt(delMove.quantity)} ใช่หรือไม่? ยอดคงเหลือจะถูกปรับกลับให้</>}
-          onCancel={() => setDelMove(null)}
-          onConfirm={async () => {
-            try { await repairsApi.deleteMovement(delMove.id); toastSuccess("ยกเลิกรายการแล้ว"); setDelMove(null); load(); }
-            catch (e) { toastError(errMsg(e)); setDelMove(null); }
-          }} />
+      {delMoves && (
+        <ConfirmDelete text={delMoves.length === 1
+            ? <>ยกเลิกรายการ{delMoves[0].type === "out" ? "เบิกใช้" : "เติมของ"} <strong>{itemName(delMoves[0].itemId)}</strong> × {qtyFmt(delMoves[0].quantity)} ใช่หรือไม่? ยอดคงเหลือจะถูกปรับกลับให้</> : <>ยกเลิก <strong>{delMoves.length} รายการ</strong> ที่เลือกใช่หรือไม่? ยอดคงเหลือจะถูกปรับกลับให้</>}
+          onCancel={() => setDelMoves(null)} onConfirm={() => runDelete("move", delMoves)} />
       )}
     </div>
   );
