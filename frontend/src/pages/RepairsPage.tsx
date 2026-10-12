@@ -4,6 +4,7 @@ import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ThaiDatePicker from "../components/ThaiDatePicker";
 import EmptyState from "../components/EmptyState";
+import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { thaiDateOnlyString } from "../utils/yearFormat";
 import { toastSuccess, toastError } from "../utils/toast";
@@ -265,10 +266,10 @@ export default function RepairsPage() {
 
   return (
     <div className="custom-card">
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
-        <h5 className="form-section-title mb-0" style={{ borderBottom: "none" }}><i className="fas fa-screwdriver-wrench me-2 text-primary" />ซ่อมแซม</h5>
-        <div className="d-flex gap-2 flex-wrap">
-          <button className="btn btn-outline-primary d-inline-flex align-items-center" onClick={() => setItemModal({ item: null })}>
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 page-list-toolbar">
+        <h5 className="form-section-title mb-0" style={{ borderBottom: "none" }}>รายการซ่อมแซม</h5>
+        <ToolbarActionsMenu>
+          <button className="btn btn-primary d-inline-flex align-items-center" onClick={() => setItemModal({ item: null })}>
             <i className="fas fa-box me-2" /><span className="btn-text">เพิ่มของใหม่</span>
           </button>
           <button className="btn btn-success d-inline-flex align-items-center" onClick={() => setMoveModal({ type: "in" })} disabled={items.length === 0}>
@@ -277,23 +278,28 @@ export default function RepairsPage() {
           <button className="btn btn-danger d-inline-flex align-items-center" onClick={() => setMoveModal({ type: "out" })} disabled={items.length === 0}>
             <i className="fas fa-arrow-right-from-bracket me-2" /><span className="btn-text">เบิกใช้</span>
           </button>
-        </div>
+        </ToolbarActionsMenu>
       </div>
 
-      <div className="row g-2 mb-3">
-        {[
-          { label: "รายการของทั้งหมด", value: String(items.length), color: "var(--color-primary)" },
-          { label: "ใกล้หมด / หมด", value: String(lowStockCount), color: lowStockCount > 0 ? "var(--color-danger)" : "var(--color-success)" },
-          { label: "มูลค่าของคงคลัง (ราคารับเข้าล่าสุด)", value: `${money(stockValue)} ฿`, color: "var(--color-dark)" },
-        ].map((c) => (
-          <div key={c.label} className="col-12 col-md-4">
-            <div className="p-3" style={{ background: "var(--color-background)", borderRadius: "var(--border-radius-1)", textAlign: "center" }}>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: c.color }}>{c.value}</div>
-              <div className="text-muted small">{c.label}</div>
+      {!loading && (
+        <div className="row g-3 mb-4">
+          {[
+            { icon: "fa-boxes-stacked text-primary", label: "รายการของทั้งหมด", val: `${items.length} รายการ` },
+            { icon: `fa-triangle-exclamation ${lowStockCount > 0 ? "text-danger" : "text-success"}`, label: "ใกล้หมด / หมด", val: `${lowStockCount} รายการ` },
+            { icon: "fa-coins text-warning", label: "มูลค่าของคงคลัง", val: `${money(stockValue)} ฿` },
+          ].map(({ icon, label, val }) => (
+            <div key={label} className="col-6 col-md-4">
+              <div className="detail-item">
+                <i className={`fas ${icon}`} />
+                <div>
+                  <div className="label">{label}</div>
+                  <div className="value">{val}</div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="d-flex gap-2 mb-3 flex-wrap">
         {TABS.map((t) => (
