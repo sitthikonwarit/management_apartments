@@ -16,6 +16,13 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "rooms", label: "สรุปค่าใช้จ่ายตามห้อง", icon: "fa-door-open" },
 ];
 
+const TAB_OPTIONS = TABS.map((t) => ({ value: t.key, label: t.label }));
+const TYPE_OPTIONS = [
+  { value: "all", label: "ทุกประเภท" },
+  { value: "in", label: "เติมของ" },
+  { value: "out", label: "เบิกใช้" },
+];
+
 const money = (n: number) => (Number(n) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qtyFmt = (n: number) => (Number(n) || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
 function todayISO() {
@@ -301,34 +308,26 @@ export default function RepairsPage() {
         </div>
       )}
 
-      <div className="d-flex gap-2 mb-3 flex-wrap">
-        {TABS.map((t) => (
-          <button key={t.key} className={`btn ${tab === t.key ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => setTab(t.key)}>
-            <i className={`fas ${t.icon} me-2`} />{t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab !== "rooms" && (
-        <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">
+      <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">
+        <div style={{ minWidth: 250 }}>
+          <CustomSelect2 value={TAB_OPTIONS.find((o) => o.value === tab)} options={TAB_OPTIONS}
+            onChange={(o: any) => setTab((o?.value ?? "stock") as Tab)} isSearchable={false} />
+        </div>
+        {tab !== "rooms" && (
           <div className="search-container flex-grow-1" style={{ minWidth: 220 }}>
             <i className="fas fa-search" />
             <input className="form-control" style={{ paddingLeft: 40 }} placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          {tab === "history" && (
-            <>
-              <div className="btn-group">
-                {([["all", "ทั้งหมด"], ["in", "เติมของ"], ["out", "เบิกใช้"]] as const).map(([k, l]) => (
-                  <button key={k} className={`btn ${typeFilter === k ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => setTypeFilter(k)}>{l}</button>
-                ))}
-              </div>
-              {dateFilters}
-            </>
-          )}
-        </div>
-      )}
-      {tab === "rooms" && <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">{dateFilters}</div>}
+        )}
+        {tab === "history" && (
+          <div style={{ minWidth: 160 }}>
+            <CustomSelect2 value={TYPE_OPTIONS.find((o) => o.value === typeFilter)} options={TYPE_OPTIONS}
+              onChange={(o: any) => setTypeFilter(o?.value ?? "all")} isSearchable={false} />
+          </div>
+        )}
+        {tab !== "stock" && dateFilters}
+      </div>
 
       {loading ? (
         <div className="text-center text-muted py-5"><span className="spinner-border spinner-border-sm me-2" />กำลังโหลด...</div>
