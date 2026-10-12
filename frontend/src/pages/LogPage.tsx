@@ -33,6 +33,8 @@ const ENTITY_META: Record<string, { label: string; icon: string; color: string }
   payment: { label: "การชำระเงิน", icon: "fa-hand-holding-usd", color: "var(--color-success)" },
   vehicle: { label: "ยานพาหนะ", icon: "fa-car", color: "#fd7e14" },
   "vehicle-type": { label: "ประเภทยานพาหนะ", icon: "fa-car", color: "#fd7e14" },
+  "repair-item": { label: "คลังซ่อมแซม", icon: "fa-screwdriver-wrench", color: "#20c997" },
+  "repair-movement": { label: "เบิก/เติมของซ่อมแซม", icon: "fa-screwdriver-wrench", color: "#20c997" },
   formula: { label: "สูตรคำนวณ", icon: "fa-calculator", color: "#b8860b" },
   settings: { label: "การตั้งค่า", icon: "fa-cog", color: "var(--color-info-dark)" },
   chat: { label: "แชท LINE", icon: "fa-comment", color: "#06C755" },

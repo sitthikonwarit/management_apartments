@@ -169,6 +169,32 @@ export const vehicles = pgTable("vehicles", {
   createdAt: str("created_at"),
 });
 
+// ── ซ่อมแซม: คลังวัสดุ/อุปกรณ์ + ประวัติรับเข้า/เบิกใช้ (ยอดคงเหลือ = รับเข้า − เบิกใช้ คำนวณจาก movements) ──
+export const repairItems = pgTable("repair_items", {
+  id: text("id").primaryKey(),
+  orgId: orgId(),
+  name: str("name"),
+  unit: str("unit"), // หน่วยนับ เช่น ชิ้น, อัน, เมตร
+  minStock: str("min_stock"), // ต่ำกว่านี้ให้เตือน (0 = ไม่เตือน)
+  note: str("note"),
+  createdAt: str("created_at"),
+});
+
+export const repairMovements = pgTable("repair_movements", {
+  id: text("id").primaryKey(),
+  orgId: orgId(),
+  itemId: str("item_id"),
+  type: str("type"), // "in" เติมของ | "out" เบิกใช้
+  quantity: str("quantity"),
+  unitPrice: str("unit_price"), // ราคาต่อหน่วย ณ ตอนนั้น
+  roomId: str("room_id"), // เฉพาะ out — เอาไปใช้กับห้องไหน
+  roomNumber: str("room_number"),
+  date: str("date"), // "YYYY-MM-DD"
+  note: str("note"),
+  createdBy: str("created_by"),
+  createdAt: str("created_at"),
+});
+
 export const vehicleTypes = pgTable("vehicle_types", {
   id: text("id").primaryKey(),
   orgId: orgId(),

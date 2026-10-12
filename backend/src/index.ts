@@ -9,6 +9,7 @@ import { tenantsRoute } from "./routes/tenants";
 import { metersRoute } from "./routes/meters";
 import { billsRoute } from "./routes/bills";
 import { vehiclesRoute } from "./routes/vehicles";
+import { repairsRoute } from "./routes/repairs";
 import { specialDiscountsRoute } from "./routes/specialDiscounts";
 import { settingsRoute } from "./routes/settings";
 import { addressRoute } from "./routes/address";
@@ -216,6 +217,7 @@ const app = new Elysia()
   .use(metersRoute)
   .use(billsRoute)
   .use(vehiclesRoute)
+  .use(repairsRoute)
   .use(specialDiscountsRoute)
   .use(settingsRoute)
   .use(logsRoute)

@@ -516,3 +516,18 @@ export const superAdminApi = {
       warning?: string;
     }),
 };
+
+export interface RepairItem { id: string; name: string; unit: string; minStock: number; note: string; createdAt: string; stock: number; lastPrice: number }
+export interface RepairMovement {
+  id: string; itemId: string; type: "in" | "out"; quantity: number; unitPrice: number;
+  roomId: string; roomNumber: string; date: string; note: string; createdBy: string; createdAt: string;
+}
+export const repairsApi = {
+  getItems: (): Promise<RepairItem[]> => api.get("/repairs/items").then((r) => r.data),
+  createItem: (data: any): Promise<RepairItem> => api.post("/repairs/items", data).then((r) => r.data),
+  updateItem: (id: string, data: any): Promise<RepairItem> => api.put(`/repairs/items/${id}`, data).then((r) => r.data),
+  deleteItem: (id: string) => api.delete(`/repairs/items/${id}`).then((r) => r.data),
+  getMovements: (): Promise<RepairMovement[]> => api.get("/repairs/movements").then((r) => r.data),
+  createMovement: (data: any): Promise<RepairMovement> => api.post("/repairs/movements", data).then((r) => r.data),
+  deleteMovement: (id: string) => api.delete(`/repairs/movements/${id}`).then((r) => r.data),
+};

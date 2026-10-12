@@ -45,6 +45,13 @@ const RULES: LogRule[] = [
   { method: "PUT", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "update", label: "แก้ไขบิล" },
   { method: "DELETE", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "delete", label: "ลบบิล" },
 
+  // repairs (ซ่อมแซม/คลังของ)
+  { method: "POST", pattern: /^\/repairs\/items$/, entityType: "repair-item", action: "create", label: "เพิ่มของในคลังซ่อมแซม" },
+  { method: "PUT", pattern: /^\/repairs\/items\/[^/]+$/, entityType: "repair-item", action: "update", label: "แก้ไขของในคลังซ่อมแซม" },
+  { method: "DELETE", pattern: /^\/repairs\/items\/[^/]+$/, entityType: "repair-item", action: "delete", label: "ลบของในคลังซ่อมแซม" },
+  { method: "POST", pattern: /^\/repairs\/movements$/, entityType: "repair-movement", action: "create", label: "บันทึกรับเข้า/เบิกใช้ของซ่อมแซม" },
+  { method: "DELETE", pattern: /^\/repairs\/movements\/[^/]+$/, entityType: "repair-movement", action: "delete", label: "ยกเลิกรายการรับเข้า/เบิกใช้ของซ่อมแซม" },
+
   // vehicles
   { method: "POST", pattern: /^\/vehicles\/types$/, entityType: "vehicle-type", action: "create", label: "เพิ่มประเภทยานพาหนะ" },
   { method: "PUT", pattern: /^\/vehicles\/types\/[^/]+$/, entityType: "vehicle-type", action: "update", label: "แก้ไขประเภทยานพาหนะ" },
