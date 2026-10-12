@@ -311,7 +311,7 @@ export default function RepairsPage() {
 
       {tab !== "rooms" && (
         <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">
-          <div className="search-box flex-grow-1" style={{ minWidth: 220, position: "relative" }}>
+          <div className="search-container flex-grow-1" style={{ minWidth: 220 }}>
             <i className="fas fa-search" />
             <input className="form-control" style={{ paddingLeft: 40 }} placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
               value={search} onChange={(e) => setSearch(e.target.value)} />
