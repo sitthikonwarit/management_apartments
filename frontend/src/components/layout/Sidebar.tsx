@@ -15,6 +15,7 @@ export const navItems = [
   { to: "/bills", icon: "receipt", label: "บิล/แจ้งหนี้" },
   { to: "/vehicles", icon: "directions_car", label: "ยานพาหนะ" },
   { to: "/repairs", icon: "build", label: "ซ่อมแซม" },
+  { to: "/tax", icon: "calculate", label: "คำนวณภาษี" },
   { to: "/chat", icon: "chat", label: "แชท LINE" },
   { to: "/settings", icon: "settings", label: "Settings" },
   { to: "/logs", icon: "history", label: "Log กิจกรรม" },

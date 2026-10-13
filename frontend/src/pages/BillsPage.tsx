@@ -2122,7 +2122,7 @@ function receivedBreakdown(item: BillItem, allBills: BillGroup[]) {
   return { own: Math.max(0, paid - oldTotal), old, oldTotal, paid };
 }
 
-function computeBillStats(billData: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = []): DashboardStats {
+export function computeBillStats(billData: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = []): DashboardStats {
   const totalRooms = billData.length;
   const paid = billData.filter((i) => i.status === "paid").length;
   const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
