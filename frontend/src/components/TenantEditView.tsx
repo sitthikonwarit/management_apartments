@@ -80,6 +80,7 @@ export default function TenantEditView({
   // ── ค่าปรับเกินกำหนดเฉพาะบุคคล — ไม่ตั้งก็ได้ (จะใช้ค่ากลางจากหน้าตั้งค่าระบบแทน) ──
   const initOverdueDay = tenant.overdue?.override ? tenant.overdue.day : config.overdue.day;
   const [overdueOverride, setOverdueOverride] = useState<boolean>(!!tenant.overdue?.override);
+  const [isTest, setIsTest] = useState<boolean>(!!tenant.isTest);
   const [overdueEnabled, setOverdueEnabled] = useState<boolean>(
     tenant.overdue?.override ? !!tenant.overdue.enabled : config.overdue.enabled
   );
@@ -183,6 +184,7 @@ export default function TenantEditView({
       const updated = await tenantsApi.update(tenant.id, {
         formData: {
           ...form,
+          isTest,
           overdue: {
             override: overdueOverride,
             enabled: overdueEnabled,
@@ -360,6 +362,24 @@ export default function TenantEditView({
             onChange={(v) => set("contractEndDate", v)}
             placeholder="เลือกวันหมดสัญญา"
           />
+        </div>
+
+        {/* ── ผู้เช่าทดสอบ ── */}
+        <div className="col-12 mt-2">
+          <h5 className="form-section-title">ผู้เช่าทดสอบ</h5>
+        </div>
+        <div className="col-12">
+          <div className="detail-section" style={{ border: "1px solid var(--color-light)", borderRadius: 12, padding: "1rem" }}>
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <div className="fw-bold"><i className="fas fa-flask me-2" style={{ color: "#fd7e14" }} />ผู้เช่านี้เป็นข้อมูลทดสอบ</div>
+                <small className="text-muted">แสดงในตารางบิลตามเดิม (มีไฮไลต์ TEST) แต่ไม่นับรวมในสรุป Dashboard ผลประกอบการ และภาษี</small>
+              </div>
+              <div className="form-check form-switch mb-0">
+                <input className="form-check-input" type="checkbox" id="tenantIsTest" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── ค่าปรับเกินกำหนดเฉพาะบุคคล ── */}

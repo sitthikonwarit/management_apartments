@@ -75,6 +75,8 @@ export const tenants = pgTable("tenants", {
   // overdueOverride = "false" (ค่าเริ่มต้น) หมายถึงผู้เช่าคนนี้ยังไม่ได้ตั้งค่าเอง ใช้ค่ากลางจากหน้า Settings
   // เสมอ ถ้าเป็น "true" ฟิลด์ overdueEnabled/Day/FineType/FineAmount ด้านล่างจะถูกใช้แทนค่ากลางสำหรับคนนี้
   overdueOverride: text("overdue_override").notNull().default("false"),
+  // ผู้เช่า/ห้องทดสอบ — แสดงในตารางบิลตามปกติ (มีไฮไลต์) แต่ไม่นับรวมในสรุป Dashboard/ผลประกอบการ/ภาษี
+  isTest: text("is_test").notNull().default("false"),
   overdueEnabled: text("overdue_enabled").notNull().default("false"),
   overdueDay: str("overdue_day"),
   overdueFineType: str("overdue_fine_type"),

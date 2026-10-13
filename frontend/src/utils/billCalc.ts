@@ -62,6 +62,8 @@ export interface BillItem {
   // ในแดชบอร์ดสรุปยอดของหน้ารายการบิล (ดู recalcItem: ล็อกด้วยรูปแบบ ?? เหมือน waterDefaultFormula ด้านล่าง)
   // undefined = บิลเก่าก่อนมีระบบนี้ (จะถูก backfill ด้วยค่า total ปัจจุบันครั้งแรกที่เปิด แล้วล็อกไว้ตั้งแต่นั้น)
   originalTotal?: number;
+  // ผู้เช่าทดสอบ (ตั้งที่หน้าแก้ไขผู้เช่า) — โชว์ในตารางบิลตามปกติแต่ไม่นับรวมใน Dashboard/ผลประกอบการ/ภาษี
+  isTest?: boolean;
   status: "unpaid" | "paid";
   // ยอดที่รับชำระสะสมแล้วสำหรับบิลนี้ (รองรับจ่ายไม่ครบยอด/จ่ายเป็นงวด) — ยอดคงเหลือที่ต้องชำระ = total - paidAmount
   // เมื่อ paidAmount >= total ถือว่าจ่ายครบ (status เปลี่ยนเป็น paid) ส่วนที่ยังขาดจะค้างไว้ให้จ่ายในครั้งถัดไป
@@ -542,6 +544,13 @@ export function applySpecialDiscounts(item: BillItem, monthYear: string, discoun
 }
 
 // ── Recalc หนึ่งแถว (หลังแก้มิเตอร์/สูตร/รายการ) ─────────────────────────────
+// แถวบิลของผู้เช่าทดสอบหรือไม่ — ใช้ flag ในแถวเอง (ตั้งตอนเปิด/คำนวณบิล) หรือค้นจากรายชื่อผู้เช่าถ้าส่งมา (บิลดิบที่ยังไม่ได้เปิด)
+export function isTestItem(item: { isTest?: boolean; tenantId?: string | null }, tenants?: any[]): boolean {
+  if (item.isTest) return true;
+  if (!tenants || !item.tenantId) return false;
+  return !!tenants.find((t) => String(t.id) === String(item.tenantId))?.isTest;
+}
+
 export function recalcItem(
   item: BillItem,
   config: AppConfig,
@@ -550,6 +559,7 @@ export function recalcItem(
   tenant?: any,
   specialDiscounts?: SpecialDiscount[]
 ) {
+  if (tenant) item.isTest = !!tenant.isTest;
   const meterBase = Math.pow(10, config.meterDigits || 4);
   item.meterWater.unit = item.waterActive ? calcUnit(item.meterWater.curr, item.meterWater.prev, meterBase) : 0;
   item.meterElectric.unit = item.electricActive ? calcUnit(item.meterElectric.curr, item.meterElectric.prev, meterBase) : 0;

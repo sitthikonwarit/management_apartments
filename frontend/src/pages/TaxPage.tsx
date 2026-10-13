@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { billsApi, repairsApi, type RepairMovement } from "../api/client";
+import { billsApi, repairsApi, tenantsApi, type RepairMovement } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import EmptyState from "../components/EmptyState";
@@ -49,6 +49,7 @@ export default function TaxPage() {
   const { setBreadcrumb } = useBreadcrumb();
   const [bills, setBills] = useState<BillGroup[]>([]);
   const [moves, setMoves] = useState<RepairMovement[]>([]);
+  const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState<number | null>(null);
   const [method, setMethod] = usePersistedPref<string>("tax-method", "ytd");
@@ -65,8 +66,8 @@ export default function TaxPage() {
 
   const tick = useLiveRefreshTick(["bill", "payment", "repair-movement"]);
   useEffect(() => {
-    Promise.all([billsApi.getAll(), repairsApi.getMovements()])
-      .then(([b, m]) => { setBills(b); setMoves(m); })
+    Promise.all([billsApi.getAll(), repairsApi.getMovements(), tenantsApi.getAll()])
+      .then(([b, m, t]) => { setBills(b); setMoves(m); setTenants(t); })
       .catch((e) => toastError(e?.response?.data?.error ?? e?.message ?? "โหลดข้อมูลไม่สำเร็จ"))
       .finally(() => setLoading(false));
   }, [tick]);
@@ -84,9 +85,9 @@ export default function TaxPage() {
       const group = bills.find((b) => b.monthYear === my);
       if (!group) return { my, hasBill: false, net: 0 };
       const items = (group.data ?? []).map(normalizeBillItem);
-      return { my, hasBill: true, net: computeBillStats(items, [], my, bills).netReceived };
+      return { my, hasBill: true, net: computeBillStats(items, [], my, bills, tenants).netReceived };
     });
-  }, [bills, selYear]);
+  }, [bills, selYear, tenants]);
 
   const billMonths = monthly.filter((m) => m.hasBill).length;
   const ytd = monthly.reduce((s, m) => s + m.net, 0);

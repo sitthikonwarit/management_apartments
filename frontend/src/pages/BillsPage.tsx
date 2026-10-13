@@ -15,7 +15,7 @@ import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   type SpecialDiscount,
-  monthYearLabel, myScore, prevMY, padZ, specialDiscountExpiredToday,
+  monthYearLabel, myScore, prevMY, padZ, specialDiscountExpiredToday, isTestItem,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
   adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
@@ -2123,7 +2123,9 @@ function receivedBreakdown(item: BillItem, allBills: BillGroup[]) {
   return { own: Math.max(0, paid - oldTotal), old, oldTotal, paid };
 }
 
-export function computeBillStats(billData: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = []): DashboardStats {
+export function computeBillStats(allItems: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = [], tenants?: any[]): DashboardStats {
+  // ผู้เช่าทดสอบไม่นับรวมในสรุปใดๆ (ห้อง/ยอด/เงินที่รับ)
+  const billData = allItems.filter((i) => !isTestItem(i, tenants));
   const totalRooms = billData.length;
   const paid = billData.filter((i) => i.status === "paid").length;
   const overdue = billData.filter((i) => i.status !== "paid" && i.isOverdue).length;
@@ -2567,7 +2569,7 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
               onClick={(e) => e.stopPropagation()} />
           </>
         );
-      case "room": return <span className="fw-bold">ห้อง {item.roomNumber}</span>;
+      case "room": return <span className="fw-bold">ห้อง {item.roomNumber}{item.isTest && <span className="badge ms-2" style={{ background: "#fd7e14", color: "#fff", fontWeight: 600 }} title="ผู้เช่าทดสอบ — ไม่นับรวมใน Dashboard">TEST</span>}</span>;
       case "tenant": return item.tenantId
         ? `${item.tenantTitle} ${item.tenantName}`
         : <span className="text-muted fst-italic">{item.tenantName || "ว่าง"}</span>;
@@ -2819,6 +2821,7 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
               const rowKey = String(item.roomId);
               return (
                 <tr key={item.roomId}
+                  style={item.isTest ? { background: "rgba(253,126,20,0.10)", boxShadow: "inset 3px 0 0 #fd7e14" } : undefined}
                   className={`${draggingRowKey === rowKey ? "row-dragging" : ""} ${dropTargetKey === rowKey ? "row-drop-target" : ""}`}
                   onDragOver={(e) => { e.preventDefault(); if (draggingRowKey && draggingRowKey !== rowKey) setDropTargetKey(rowKey); }}
                   onDragLeave={() => setDropTargetKey((k) => (k === rowKey ? null : k))}
@@ -4047,18 +4050,18 @@ export default function BillsPage() {
   }, [billData, search, statusFilter]);
 
   const stats = useMemo(
-    () => computeBillStats(billData, payments, editingMonthYear, bills),
-    [billData, payments, editingMonthYear, bills]
+    () => computeBillStats(billData, payments, editingMonthYear, bills, tenants),
+    [billData, payments, editingMonthYear, bills, tenants]
   );
 
   // สรุปรายเดือนของทุกบิล ไว้ทำรายงานผลประกอบการรายปีในหน้ารายการ (ดู BillYearlyReport)
   const yearlyMonthly = useMemo<MonthlyBillSummary[]>(() => bills.map((g) => {
-    const st = computeBillStats((g.data ?? []).map(normalizeBillItem), [], g.monthYear, bills);
+    const st = computeBillStats((g.data ?? []).map(normalizeBillItem), [], g.monthYear, bills, tenants);
     return {
       monthYear: g.monthYear, water: st.totalWater, electric: st.totalElectric, waterUnits: st.waterUnits, electricUnits: st.electricUnits,
       billed: st.totalExpected - st.totalOutstandingCarried, received: st.netReceived,
     };
-  }), [bills]);
+  }), [bills, tenants]);
 
   return (
     <>
@@ -4749,7 +4752,7 @@ export default function BillsPage() {
               setPrintDashboardGroups(
                 [...byMonth.entries()]
                   .sort(([a], [b]) => myScore(a) - myScore(b))
-                  .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear, bills) }))
+                  .map(([monthYear, items]) => ({ monthYear, stats: computeBillStats(items, payments, monthYear, bills, tenants) }))
               );
               setPrintDashboardSections(dashboardSections);
               setPrintDashboard(true);
