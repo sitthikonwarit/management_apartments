@@ -5,6 +5,7 @@ import { billsApi, roomsApi, tenantsApi, vehiclesApi, metersApi, settingsApi, sp
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import { useAppConfig, type AppConfig } from "../context/AppConfigContext";
 import CustomSelect2, { customStyles } from "../components/CustomSelect2";
+import BillYearlyReport, { type MonthlyBillSummary } from "../components/BillYearlyReport";
 import { BillLinePreview } from "../components/BillLinePreviewCard";
 import ToolbarActionsMenu from "../components/ToolbarActionsMenu";
 import ColResizeHandle from "../components/ColResizeHandle";
@@ -4050,6 +4051,15 @@ export default function BillsPage() {
     [billData, payments, editingMonthYear, bills]
   );
 
+  // สรุปรายเดือนของทุกบิล ไว้ทำรายงานผลประกอบการรายปีในหน้ารายการ (ดู BillYearlyReport)
+  const yearlyMonthly = useMemo<MonthlyBillSummary[]>(() => bills.map((g) => {
+    const st = computeBillStats((g.data ?? []).map(normalizeBillItem), [], g.monthYear, bills);
+    return {
+      monthYear: g.monthYear, water: st.totalWater, electric: st.totalElectric, waterUnits: st.waterUnits, electricUnits: st.electricUnits,
+      billed: st.totalExpected - st.totalOutstandingCarried, received: st.netReceived,
+    };
+  }), [bills]);
+
   return (
     <>
       {view === "list" ? (
@@ -4062,6 +4072,8 @@ export default function BillsPage() {
               </button>
             </ToolbarActionsMenu>
           </div>
+
+          {bills.length > 0 && <BillYearlyReport monthly={yearlyMonthly} />}
 
           <div className="row g-2 mb-3 align-items-center">
             <div className="col-12 col-lg">
