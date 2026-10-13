@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { db } from "../db";
-import { repairItems, repairMovements, rooms } from "../db/schema";
+import { repairItems, repairMovements, rooms, chatMessages } from "../db/schema";
+import { signUploadPath } from "../lib/encryption";
 import { and, eq } from "drizzle-orm";
 import { authDerive } from "../lib/authDerive";
 
@@ -28,8 +29,41 @@ function summarize(items: (typeof repairItems.$inferSelect)[], moves: (typeof re
   });
 }
 
+// คำขอแจ้งซ่อมจากผู้เช่า (ปุ่ม "แจ้งซ่อม" ใน LIFF) เก็บเป็นข้อความแชท messageType "repair" — snapshot อยู่ใน text (JSON)
+// status: "pending" รอซ่อม | "completed" พนักงานยืนยันปิดงานแล้ว (ดู PATCH /chat/.../repair)
+async function loadRepairRequests(orgId: string) {
+  const rows = await db.select().from(chatMessages).where(and(eq(chatMessages.orgId, orgId), eq(chatMessages.messageType, "repair")));
+  return rows.map((r) => {
+    let snap: any = {};
+    try { snap = r.text ? JSON.parse(r.text) : {}; } catch {}
+    const photos = (arr: unknown) => (Array.isArray(arr) ? arr.filter((u) => typeof u === "string").map(signUploadPath) : []);
+    return {
+      id: r.id,
+      lineUserId: r.lineUserId,
+      tenantName: r.senderName || "",
+      roomNumber: String(snap.roomNumber ?? ""),
+      title: String(snap.title ?? ""),
+      details: String(snap.details ?? ""),
+      tenantPhotos: photos(snap.tenantPhotos),
+      status: snap.status === "completed" ? "completed" : "pending",
+      adminNote: String(snap.adminNote ?? ""),
+      confirmedBy: String(snap.confirmedBy ?? ""),
+      confirmedAt: String(snap.confirmedAt ?? ""),
+      createdAt: r.createdAt,
+    };
+  });
+}
+
 export const repairsRoute = new Elysia({ prefix: "/repairs" })
   .use(authDerive)
+  .get("/requests", async ({ authUser }) => {
+    const list = await loadRepairRequests(authUser!.orgId);
+    return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  })
+  .get("/requests/pending-count", async ({ authUser }) => {
+    const list = await loadRepairRequests(authUser!.orgId);
+    return { count: list.filter((r) => r.status === "pending").length };
+  })
   .get("/items", async ({ authUser }) => {
     const orgId = authUser!.orgId;
     const items = await db.select().from(repairItems).where(eq(repairItems.orgId, orgId));

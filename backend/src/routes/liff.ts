@@ -714,7 +714,7 @@ export const liffRoute = new Elysia({ prefix: "/liff" })
       pictureUrl: profileCache?.pictureUrl || profile.pictureUrl || null,
       preview: `🔧 แจ้งซ่อม: ${title.trim()}`,
     });
-    broadcastChange(orgId, "chat", "create", "มีการแจ้งซ่อมใหม่", senderName);
+    broadcastChange(orgId, "repair-request", "create", `มีการแจ้งซ่อมใหม่${roomNumber ? ` ห้อง ${roomNumber}` : ""}: ${title.trim()}`, senderName);
 
     return { ok: true, messageId: id };
   })

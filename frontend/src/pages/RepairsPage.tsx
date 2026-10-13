@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { repairsApi, roomsApi, type RepairItem, type RepairMovement } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import { repairsApi, roomsApi, type RepairItem, type RepairMovement, type RepairRequest } from "../api/client";
+import ImageLightbox from "../components/ImageLightbox";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
 import CustomSelect2 from "../components/CustomSelect2";
 import ThaiDatePicker from "../components/ThaiDatePicker";
@@ -11,8 +13,9 @@ import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { thaiDateOnlyString } from "../utils/yearFormat";
 import { toastSuccess, toastError } from "../utils/toast";
 
-type Tab = "stock" | "history" | "rooms";
+type Tab = "requests" | "stock" | "history" | "rooms";
 const TABS: { key: Tab; label: string; icon: string }[] = [
+  { key: "requests", label: "รอซ่อม (แจ้งซ่อมจากผู้เช่า)", icon: "fa-screwdriver-wrench" },
   { key: "stock", label: "คลังของ", icon: "fa-boxes-stacked" },
   { key: "history", label: "ประวัติรับเข้า/เบิกใช้", icon: "fa-clock-rotate-left" },
   { key: "rooms", label: "สรุปค่าใช้จ่ายตามห้อง", icon: "fa-door-open" },
@@ -43,7 +46,11 @@ const MOVE_COLS: DataCol[] = [
 ];
 const MOVE_WIDTHS = { checkbox: 40, date: 110, type: 100, item: 180, qty: 110, price: 110, total: 110, room: 90, note: 180, by: 110, actions: 90 };
 
-const TAB_OPTIONS = TABS.map((t) => ({ value: t.key, label: t.label }));
+const REQ_STATUS_OPTIONS = [
+  { value: "pending", label: "รอซ่อม" },
+  { value: "completed", label: "ซ่อมเสร็จแล้ว" },
+  { value: "all", label: "ทั้งหมด" },
+];
 const TYPE_OPTIONS = [
   { value: "all", label: "ทุกประเภท" },
   { value: "in", label: "เติมของ" },
@@ -112,8 +119,8 @@ function ItemModal({ item, onClose, onSaved }: { item: RepairItem | null; onClos
 }
 
 // ── ป็อปอัพเติมของ (in) / เบิกใช้ (out) ───────────────────────────────────────
-function MovementModal({ type, items, rooms, presetItemId, onClose, onSaved }: {
-  type: "in" | "out"; items: RepairItem[]; rooms: any[]; presetItemId?: string; onClose: () => void; onSaved: () => void;
+function MovementModal({ type, items, rooms, presetItemId, presetRoomNumber, onClose, onSaved }: {
+  type: "in" | "out"; items: RepairItem[]; rooms: any[]; presetItemId?: string; presetRoomNumber?: string; onClose: () => void; onSaved: () => void;
 }) {
   const [itemId, setItemId] = useState(presetItemId ?? "");
   const [qty, setQty] = useState("1");
@@ -122,7 +129,7 @@ function MovementModal({ type, items, rooms, presetItemId, onClose, onSaved }: {
     const it = items.find((i) => i.id === presetItemId);
     return it && it.lastPrice > 0 ? String(it.lastPrice) : "";
   });
-  const [roomId, setRoomId] = useState("");
+  const [roomId, setRoomId] = useState(() => (presetRoomNumber ? String(rooms.find((r) => String(r.number) === presetRoomNumber)?.id ?? "") : ""));
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -227,14 +234,18 @@ function ConfirmDelete({ text, onCancel, onConfirm }: { text: React.ReactNode; o
 
 export default function RepairsPage() {
   const { setBreadcrumb } = useBreadcrumb();
-  const [tab, setTab] = useState<Tab>("stock");
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("requests");
+  const [requests, setRequests] = useState<RepairRequest[]>([]);
+  const [reqStatus, setReqStatus] = useState<"pending" | "completed" | "all">("pending");
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [items, setItems] = useState<RepairItem[]>([]);
   const [moves, setMoves] = useState<RepairMovement[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [itemModal, setItemModal] = useState<{ item: RepairItem | null } | null>(null);
-  const [moveModal, setMoveModal] = useState<{ type: "in" | "out"; itemId?: string } | null>(null);
+  const [moveModal, setMoveModal] = useState<{ type: "in" | "out"; itemId?: string; roomNumber?: string } | null>(null);
   const [delItems, setDelItems] = useState<RepairItem[] | null>(null);
   const [delMoves, setDelMoves] = useState<RepairMovement[] | null>(null);
   const [view, setView] = usePersistedViewMode<"list" | "grid" | "table">("repairs", "table", ["list", "grid", "table"]);
@@ -248,11 +259,11 @@ export default function RepairsPage() {
     return () => setBreadcrumb([]);
   }, [setBreadcrumb]);
 
-  const tick = useLiveRefreshTick(["repair-item", "repair-movement"]);
+  const tick = useLiveRefreshTick(["repair-item", "repair-movement", "repair-request"]);
   async function load() {
     try {
-      const [it, mv, rm] = await Promise.all([repairsApi.getItems(), repairsApi.getMovements(), roomsApi.getAll()]);
-      setItems(it); setMoves(mv); setRooms(rm);
+      const [it, mv, rm, rq] = await Promise.all([repairsApi.getItems(), repairsApi.getMovements(), roomsApi.getAll(), repairsApi.getRequests()]);
+      setItems(it); setMoves(mv); setRooms(rm); setRequests(rq);
     } catch (e) { toastError(errMsg(e)); } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [tick]);
@@ -264,6 +275,15 @@ export default function RepairsPage() {
     () => items.filter((i) => !q || i.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name, "th")),
     [items, q]
   );
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const filteredRequests = useMemo(
+    () => requests
+      .filter((r) => (reqStatus === "all" || r.status === reqStatus)
+        && (!q || r.roomNumber.toLowerCase().includes(q) || r.title.toLowerCase().includes(q) || r.details.toLowerCase().includes(q) || r.tenantName.toLowerCase().includes(q)))
+      .sort((a, b) => (reqStatus === "completed" ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt))),
+    [requests, reqStatus, q]
+  );
+  const tabOptions = TABS.map((t) => ({ value: t.key, label: t.key === "requests" && pendingCount > 0 ? `${t.label} (${pendingCount})` : t.label }));
   const lowStockCount = items.filter((i) => i.minStock > 0 && i.stock <= i.minStock).length;
   const stockValue = items.reduce((s, i) => s + i.stock * i.lastPrice, 0);
 
@@ -316,7 +336,7 @@ export default function RepairsPage() {
     setDelItems(null); setDelMoves(null); load();
   }
 
-  const showViewSwitch = tab !== "rooms";
+  const showViewSwitch = tab === "stock" || tab === "history";
   const itemName = (id: string) => itemById.get(id)?.name ?? "(ของถูกลบ)";
   const itemUnit = (id: string) => itemById.get(id)?.unit ?? "";
 
@@ -390,11 +410,12 @@ export default function RepairsPage() {
       {!loading && (
         <div className="row g-3 mb-4">
           {[
+            { icon: `fa-screwdriver-wrench ${pendingCount > 0 ? "text-danger" : "text-success"}`, label: "รอซ่อม", val: `${pendingCount} งาน` },
             { icon: "fa-boxes-stacked text-primary", label: "รายการของทั้งหมด", val: `${items.length} รายการ` },
             { icon: `fa-triangle-exclamation ${lowStockCount > 0 ? "text-danger" : "text-success"}`, label: "ใกล้หมด / หมด", val: `${lowStockCount} รายการ` },
             { icon: "fa-coins text-warning", label: "มูลค่าของคงคลัง", val: `${money(stockValue)} ฿` },
           ].map(({ icon, label, val }) => (
-            <div key={label} className="col-6 col-md-4">
+            <div key={label} className="col-6 col-md-3">
               <div className="detail-item">
                 <i className={`fas ${icon}`} />
                 <div>
@@ -413,21 +434,27 @@ export default function RepairsPage() {
           <div className="search-container">
             <i className="fas fa-search" />
             <input className="form-control" style={{ paddingLeft: 40 }}
-              placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
+              placeholder={tab === "stock" ? "ค้นหาชื่อของ..." : tab === "requests" ? "ค้นหาห้อง / ผู้เช่า / เรื่องที่แจ้ง..." : "ค้นหาของ / ห้อง / หมายเหตุ..."}
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
         <div className="col-12 col-md-auto" style={{ minWidth: 250 }}>
-          <CustomSelect2 value={TAB_OPTIONS.find((o) => o.value === tab)} options={TAB_OPTIONS}
+          <CustomSelect2 value={tabOptions.find((o) => o.value === tab)} options={tabOptions}
             onChange={(o: any) => setTab((o?.value ?? "stock") as Tab)} isSearchable={false} />
         </div>
+        {tab === "requests" && (
+          <div className="col-12 col-md-auto" style={{ minWidth: 180 }}>
+            <CustomSelect2 value={REQ_STATUS_OPTIONS.find((o) => o.value === reqStatus)} options={REQ_STATUS_OPTIONS}
+              onChange={(o: any) => setReqStatus(o?.value ?? "pending")} isSearchable={false} />
+          </div>
+        )}
         {tab === "history" && (
           <div className="col-12 col-md-auto" style={{ minWidth: 160 }}>
             <CustomSelect2 value={TYPE_OPTIONS.find((o) => o.value === typeFilter)} options={TYPE_OPTIONS}
               onChange={(o: any) => setTypeFilter(o?.value ?? "all")} isSearchable={false} />
           </div>
         )}
-        {tab !== "stock" && <div className="col-12 col-md-auto d-flex gap-2 align-items-center flex-wrap">{dateFilters}</div>}
+        {(tab === "history" || tab === "rooms") && <div className="col-12 col-md-auto d-flex gap-2 align-items-center flex-wrap">{dateFilters}</div>}
         {showViewSwitch && (
           <div className="col-12 col-md-auto">
             <div className="btn-group view-switch-group" role="group">
@@ -441,6 +468,51 @@ export default function RepairsPage() {
 
       {loading ? (
         <div className="text-center p-5"><div className="spinner-border" style={{ color: "var(--color-primary)" }} /></div>
+      ) : tab === "requests" ? (
+        filteredRequests.length === 0 ? (
+          <EmptyState icon="fa-screwdriver-wrench" text={reqStatus === "pending" && !q ? "ไม่มีงานรอซ่อม" : "ไม่พบรายการแจ้งซ่อม"} />
+        ) : (
+          <div className="nicescrollbar" style={{ maxHeight: 650, overflow: "auto" }}>
+            {filteredRequests.map((r) => (
+              <div key={r.id} className="mb-3 p-3" style={{ border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)", borderLeft: `4px solid ${r.status === "pending" ? "var(--color-danger)" : "var(--color-success)"}` }}>
+                <div className="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
+                      <span className="fw-bold" style={{ color: "var(--color-primary)" }}><i className="fas fa-door-open me-1" />{r.roomNumber ? `ห้อง ${r.roomNumber}` : "ไม่ระบุห้อง"}</span>
+                      <span className={`status-badge ${r.status === "pending" ? "status-overdue" : "status-paid"}`}>{r.status === "pending" ? "รอซ่อม" : "ซ่อมเสร็จแล้ว"}</span>
+                    </div>
+                    <div className="fw-bold">{r.title}</div>
+                    <small className="text-muted"><i className="fas fa-user me-1" />{r.tenantName || "ผู้เช่า"} · แจ้งเมื่อ {dateLabel(r.createdAt.slice(0, 10))} {new Date(r.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>
+                  </div>
+                  <div className="d-flex gap-2 flex-wrap">
+                    <button className="btn btn-sm btn-primary" onClick={() => navigate("/chat", { state: { openLineUserId: r.lineUserId } })}>
+                      <i className="fas fa-comment me-1" />{r.status === "pending" ? "เปิดแชท / ปิดงาน" : "ดูในแชท"}
+                    </button>
+                    {r.status === "pending" && items.length > 0 && r.roomNumber && (
+                      <button className="btn btn-sm btn-danger" onClick={() => setMoveModal({ type: "out", roomNumber: r.roomNumber })}>
+                        <i className="fas fa-arrow-right-from-bracket me-1" />เบิกของให้ห้องนี้
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {r.details && <div className="mt-2" style={{ whiteSpace: "pre-wrap" }}>{r.details}</div>}
+                {r.tenantPhotos.length > 0 && (
+                  <div className="d-flex gap-2 flex-wrap mt-2">
+                    {r.tenantPhotos.map((src, idx) => (
+                      <img key={idx} src={src} alt="รูปแจ้งซ่อม" onClick={() => setLightbox({ images: r.tenantPhotos, index: idx })}
+                        style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 8, cursor: "zoom-in" }} />
+                    ))}
+                  </div>
+                )}
+                {r.status === "completed" && (
+                  <small className="text-muted d-block mt-2">
+                    <i className="fas fa-check-circle text-success me-1" />ปิดงานโดย {r.confirmedBy || "-"}{r.confirmedAt ? ` · ${dateLabel(r.confirmedAt.slice(0, 10))}` : ""}{r.adminNote ? ` · ${r.adminNote}` : ""}
+                  </small>
+                )}
+              </div>
+            ))}
+          </div>
+        )
       ) : tab === "stock" ? (
         view === "table" ? (
           <DataTable<RepairItem> storageKey="repair-stock" defaultCols={STOCK_COLS} defaultWidths={STOCK_WIDTHS}
@@ -572,9 +644,10 @@ export default function RepairsPage() {
         </>
       )}
 
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={(i) => setLightbox({ ...lightbox, index: i })} />}
       {itemModal && <ItemModal item={itemModal.item} onClose={() => setItemModal(null)} onSaved={() => { setItemModal(null); load(); }} />}
       {moveModal && (
-        <MovementModal type={moveModal.type} items={items} rooms={rooms} presetItemId={moveModal.itemId}
+        <MovementModal type={moveModal.type} items={items} rooms={rooms} presetItemId={moveModal.itemId} presetRoomNumber={moveModal.roomNumber}
           onClose={() => setMoveModal(null)} onSaved={() => { setMoveModal(null); load(); }} />
       )}
       {delItems && (

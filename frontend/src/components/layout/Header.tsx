@@ -20,6 +20,7 @@ const NOTIF_ICONS: Record<string, string> = {
   vehicle: "directions_car", "vehicle-type": "directions_car",
   settings: "settings", formula: "calculate",
   user: "manage_accounts",
+  "repair-request": "build", "repair-item": "build", "repair-movement": "build",
 };
 
 export default function Header({ titles, onMenuClick }: HeaderProps) {

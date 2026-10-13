@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAppConfig, resolveNameCharColor } from "../../context/AppConfigContext";
 import { guardNavigation } from "../../utils/unsavedGuard";
-import { chatApi } from "../../api/client";
+import { chatApi, repairsApi } from "../../api/client";
 import { useLiveRefreshTick } from "../../utils/useLiveSync";
 import { useHiddenMenus } from "../../utils/useHiddenMenus";
 
@@ -34,6 +34,12 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const [phase, setPhase] = useState<Phase>(open ? "open" : "closed");
   const prevOpenRef = useRef(open);
   const [chatUnread, setChatUnread] = useState(0);
+  const [repairPending, setRepairPending] = useState(0);
+  // จำนวนงานแจ้งซ่อมที่ยังรออยู่ — แบดจ์ที่เมนู "ซ่อมแซม" รีเฟรชเมื่อมีแจ้งซ่อมใหม่/ปิดงาน (WebSocket "repair-request")
+  const repairLiveTick = useLiveRefreshTick(["repair-request"]);
+  useEffect(() => {
+    repairsApi.getPendingCount().then((r) => setRepairPending(r.count)).catch(() => {});
+  }, [repairLiveTick]);
   const [hiddenMenus] = useHiddenMenus();
 
   // นับข้อความแชท LINE ที่ยังไม่อ่านรวมทุกการสนทนา ไว้ขึ้นแบดจ์ที่เมนู "แชท LINE" — โหลดครั้งแรกตอน mount
@@ -100,6 +106,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             >
               <span className="sidebar-icon-wrap">
                 <span className="material-icons-sharp">{item.icon}</span>
+                {item.to === "/repairs" && repairPending > 0 && (
+                  <span className="sidebar-badge">{repairPending > 99 ? "99+" : repairPending}</span>
+                )}
                 {item.to === "/chat" && chatUnread > 0 && (
                   <span className="sidebar-badge">{chatUnread > 99 ? "99+" : chatUnread}</span>
                 )}

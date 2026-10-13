@@ -46,6 +46,7 @@ const RULES: LogRule[] = [
   { method: "DELETE", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "delete", label: "ลบบิล" },
 
   // repairs (ซ่อมแซม/คลังของ)
+  { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/messages\/[^/]+\/repair$/, entityType: "repair-request", action: "update", label: "ยืนยันปิดงานแจ้งซ่อม" },
   { method: "POST", pattern: /^\/repairs\/items$/, entityType: "repair-item", action: "create", label: "เพิ่มของในคลังซ่อมแซม" },
   { method: "PUT", pattern: /^\/repairs\/items\/[^/]+$/, entityType: "repair-item", action: "update", label: "แก้ไขของในคลังซ่อมแซม" },
   { method: "DELETE", pattern: /^\/repairs\/items\/[^/]+$/, entityType: "repair-item", action: "delete", label: "ลบของในคลังซ่อมแซม" },

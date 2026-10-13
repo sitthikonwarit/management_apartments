@@ -522,7 +522,13 @@ export interface RepairMovement {
   id: string; itemId: string; type: "in" | "out"; quantity: number; unitPrice: number;
   roomId: string; roomNumber: string; date: string; note: string; createdBy: string; createdAt: string;
 }
+export interface RepairRequest {
+  id: string; lineUserId: string; tenantName: string; roomNumber: string; title: string; details: string;
+  tenantPhotos: string[]; status: "pending" | "completed"; adminNote: string; confirmedBy: string; confirmedAt: string; createdAt: string;
+}
 export const repairsApi = {
+  getRequests: (): Promise<RepairRequest[]> => api.get("/repairs/requests").then((r) => r.data),
+  getPendingCount: (): Promise<{ count: number }> => api.get("/repairs/requests/pending-count").then((r) => r.data),
   getItems: (): Promise<RepairItem[]> => api.get("/repairs/items").then((r) => r.data),
   createItem: (data: any): Promise<RepairItem> => api.post("/repairs/items", data).then((r) => r.data),
   updateItem: (id: string, data: any): Promise<RepairItem> => api.put(`/repairs/items/${id}`, data).then((r) => r.data),
