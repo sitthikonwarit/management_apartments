@@ -15,8 +15,10 @@ async function check(url: string): Promise<boolean> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    const res = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    // LINE CDN ตอบ HEAD ด้วย 405 เสมอ ต้องใช้ GET (ขอแค่ไบต์แรก แล้วทิ้งตัวไฟล์ ไม่โหลดทั้งรูป)
+    const res = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, signal: ctrl.signal });
     clearTimeout(timer);
+    res.body?.cancel().catch(() => {});
     if (res.status === 404 || res.status === 410) { ok = false; definitive = true; }
     else if (res.ok) definitive = true;
   } catch { /* เช็คไม่ได้ = ถือว่าใช้ได้ */ }
