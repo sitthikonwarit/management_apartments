@@ -10,7 +10,6 @@ import { metersRoute } from "./routes/meters";
 import { billsRoute } from "./routes/bills";
 import { vehiclesRoute } from "./routes/vehicles";
 import { repairsRoute } from "./routes/repairs";
-import { cctvRoute, cctvStreamRoute } from "./routes/cctv";
 import { specialDiscountsRoute } from "./routes/specialDiscounts";
 import { settingsRoute } from "./routes/settings";
 import { addressRoute } from "./routes/address";
@@ -131,8 +130,6 @@ const app = new Elysia()
   // /liff/* — หน้า LIFF ฝั่งผู้เช่า (Login/Payment) ผู้เช่าไม่มีบัญชีพนักงาน เปิดสาธารณะเช่นกัน (ยืนยัน
   // ตัวตนด้วย LIFF access token ของ LINE เองแทน ดู verifyLiffAccessToken ใน services/line.ts)
   .use(liffRoute)
-  // /cctv/stream/:id — <img> ส่ง Authorization ไม่ได้ จึงเปิดสาธารณะแต่ต้องมีตั๋วอายุสั้นที่ออกให้ผู้ล็อกอิน (ดู routes/cctv.ts)
-  .use(cctvStreamRoute)
   // /auth/superadmin/authorize, /callback — เปิดสาธารณะ (ยังไม่มี token ตอนนี้เหมือน lineLoginRoute)
   // /superadmin/* — มีการ์ดของตัวเอง (superAdminDerive + onBeforeHandle ในไฟล์เดียวกัน) ไม่ได้พึ่งการ์ด
   // authDerive ของพนักงานด้านล่าง (คนละระบบสิทธิ์กันโดยสิ้นเชิง ดู routes/superadmin.ts) ต้องเมานต์ "ก่อน"
@@ -221,7 +218,6 @@ const app = new Elysia()
   .use(billsRoute)
   .use(vehiclesRoute)
   .use(repairsRoute)
-  .use(cctvRoute)
   .use(specialDiscountsRoute)
   .use(settingsRoute)
   .use(logsRoute)
