@@ -464,7 +464,6 @@ export default function RepairsPage() {
                       <div className="room-card-info-item"><span className="label">มูลค่าคงเหลือ</span><span className="value">{i.lastPrice > 0 ? money(i.stock * i.lastPrice) : "-"}</span></div>
                     </div>
                     {i.note && <div className="text-muted small mt-2">{i.note}</div>}
-                    <div className="mt-3 text-end">{itemActions(i)}</div>
                   </div>
                 </div>
               ))}
@@ -483,7 +482,6 @@ export default function RepairsPage() {
                   </div>
                   <small className="text-muted">ราคาล่าสุด {i.lastPrice > 0 ? `${money(i.lastPrice)} ฿/${i.unit}` : "-"} · มูลค่า {i.lastPrice > 0 ? `${money(i.stock * i.lastPrice)} ฿` : "-"}{i.note ? ` · ${i.note}` : ""}</small>
                 </div>
-                {itemActions(i)}
               </div>
             ))}
           </div>
