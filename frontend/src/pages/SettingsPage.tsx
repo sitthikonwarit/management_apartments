@@ -218,7 +218,7 @@ function UserFormModal({ editingUser, onClose, onSaved }: {
           <label className="form-label small fw-bold">
             {editingUser ? "รหัสผ่านใหม่ (เว้นว่างถ้าไม่ต้องการเปลี่ยน)" : "รหัสผ่าน"}
           </label>
-          <input type="password" className="form-control" value={password}
+          <input type="password" autoComplete="new-password" className="form-control" value={password}
             onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
         </div>
 

@@ -58,7 +58,7 @@ export default function SuperAdminLoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
             <label className="form-label small fw-bold">รหัสผ่าน</label>
-            <input type="password" className="form-control" autoFocus value={password}
+            <input type="password" autoComplete="current-password" className="form-control" autoFocus value={password}
               onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" disabled={submitting} />
           </div>
           <button type="submit" className="btn btn-primary w-100" disabled={submitting}>

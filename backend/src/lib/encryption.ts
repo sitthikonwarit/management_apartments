@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { resolve } from "path";
 // ── เข้ารหัสข้อมูลอ่อนไหว "at rest" (ในฐานข้อมูล) + เซ็นลายเซ็น URL ไฟล์อัปโหลด ────────────────
 // ใช้กุญแจแม่ตัวเดียว (FIELD_ENCRYPTION_KEY ใน .env) แล้วแตกเป็น 2 กุญแจย่อยแยกวัตถุประสงค์กันด้วย HMAC
 // domain separation (ไม่ใช้กุญแจเดียวกันข้าม algorithm/วัตถุประสงค์ — best practice มาตรฐาน) เพื่อให้ดูแล
@@ -70,6 +72,8 @@ export function signUploadPath(relativePath: unknown): string {
   if (typeof relativePath !== "string" || !relativePath || !relativePath.startsWith("/uploads/")) return relativePath as string;
   const cleanPath = relativePath.split("?")[0];
   if (hasTraversalSegment(cleanPath)) return "";
+  // ไฟล์ไม่มีอยู่จริงบนดิสก์ (ถูกลบ/ไม่ได้ย้ายมาตอน deploy) ไม่ส่ง URL ออกไป กันหน้าเว็บยิงขอไฟล์แล้วได้ 404 ค้างใน console
+  if (!existsSync(resolve(process.cwd(), "uploads", cleanPath.slice("/uploads/".length)))) return "";
   const sig = createHmac("sha256", SIGNING_KEY).update(cleanPath).digest("base64url");
   return `${cleanPath}?sig=${sig}`;
 }

@@ -36,7 +36,7 @@ export default function LockScreen() {
           </p>
         </div>
         <form onSubmit={handleSubmit}>
-          <input type="password" className="form-control mb-3" autoFocus placeholder="••••••••"
+          <input type="password" autoComplete="current-password" className="form-control mb-3" autoFocus placeholder="••••••••"
             value={password} onChange={(e) => setPassword(e.target.value)} />
 
           {error && <div className="room-modal-error mb-3"><i className="fas fa-exclamation-circle me-2" />{error}</div>}

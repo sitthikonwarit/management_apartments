@@ -162,9 +162,9 @@ export default function LoginPage() {
                   onChange={(e) => setFirstTimeUsername(e.target.value)} placeholder="username" />
 
                 <label className="form-label small fw-bold">3. ตั้งรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
-                <input type="password" className="form-control mb-2" value={firstTimePassword}
+                <input type="password" autoComplete="new-password" className="form-control mb-2" value={firstTimePassword}
                   onChange={(e) => setFirstTimePassword(e.target.value)} placeholder="••••••••" />
-                <input type="password" className="form-control mb-2" value={firstTimeConfirmPassword}
+                <input type="password" autoComplete="new-password" className="form-control mb-2" value={firstTimeConfirmPassword}
                   onChange={(e) => setFirstTimeConfirmPassword(e.target.value)} placeholder="ยืนยันรหัสผ่านอีกครั้ง"
                   onKeyDown={(e) => { if (e.key === "Enter") handleSetCredentials(); }} />
 
@@ -210,7 +210,7 @@ export default function LoginPage() {
 
           <div className="mb-3">
             <label className="form-label small fw-bold">รหัสผ่าน</label>
-            <input type="password" className="form-control" value={password}
+            <input type="password" autoComplete="current-password" className="form-control" value={password}
               onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
           </div>
 
