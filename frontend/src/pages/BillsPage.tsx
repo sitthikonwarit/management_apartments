@@ -14,7 +14,7 @@ import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   type SpecialDiscount,
-  monthYearLabel, myScore, prevMY, padZ,
+  monthYearLabel, myScore, prevMY, padZ, specialDiscountExpiredToday,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
   adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
@@ -3153,7 +3153,7 @@ function SpecialDiscountsModal({ rooms, tenants, towers, discounts, monthOptions
                     {d.name} <span className="text-muted small">({d.type === "percent" ? `${d.value}%` : `${d.value.toLocaleString()} บาท`})</span>
                   </div>
                   <div className="text-muted" style={{ fontSize: 11 }}>
-                    {d.roomIds.length} ห้อง · {d.expiryDate ? `หมดอายุ ${thaiDateOnlyString(new Date(d.expiryDate))}` : "ไม่มีวันหมดอายุ"}
+                    {d.roomIds.length} ห้อง · {d.expiryDate ? `${specialDiscountExpiredToday(d) ? "หมดอายุแล้ว" : "หมดอายุ"} ${thaiDateOnlyString(new Date(d.expiryDate))}` : "ไม่มีวันหมดอายุ"}
                   </div>
                 </div>
                 <div className="d-flex gap-1 flex-shrink-0">

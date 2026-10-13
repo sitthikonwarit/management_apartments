@@ -500,6 +500,12 @@ function specialDiscountStart(d: SpecialDiscount): string {
   return prevMY(`${padZ(t.getMonth() + 1)}/${t.getFullYear()}`);
 }
 
+export function specialDiscountExpiredToday(d: { expiryDate: string }): boolean {
+  if (!d.expiryDate) return false;
+  const end = new Date(`${d.expiryDate}T23:59:59`).getTime();
+  return !Number.isNaN(end) && Date.now() > end;
+}
+
 function specialDiscountActiveForMonth(d: SpecialDiscount, monthYear: string): boolean {
   const start = specialDiscountStart(d);
   if (start && myScore(monthYear) < myScore(start)) return false;
@@ -517,7 +523,14 @@ function specialDiscountActiveForMonth(d: SpecialDiscount, monthYear: string): b
 // — ส่วนลดแบบเปอร์เซ็นต์คิดจากยอดก่อนหักส่วนลดทั้งหมด (ค่าเช่า+น้ำ+ไฟ+รถ+Tag+รายการอื่นๆ+ค่าปรับ+ยอดค้างยกมา)
 export function applySpecialDiscounts(item: BillItem, monthYear: string, discounts: SpecialDiscount[]) {
   const others = (item.discountItems || []).filter((d) => !d.id.startsWith("special-"));
-  const applicable = discounts.filter((d) => d.roomIds.includes(item.roomId) && specialDiscountActiveForMonth(d, monthYear));
+  // หมดอายุตามวันที่จริง (วันนี้เลยวันหมดอายุไปแล้ว) = ไม่ให้ส่วนลดกับบิลที่ยังไม่จ่าย — แต่บิลที่จ่ายไปแล้ว/จ่ายบางส่วน
+  // ต้องคงส่วนลดเดิมไว้ตามที่เคยคิดตอนนั้น ไม่ให้ยอดย้อนหลังเปลี่ยน
+  const applicable = discounts.filter((d) => {
+    if (!d.roomIds.includes(item.roomId) || !specialDiscountActiveForMonth(d, monthYear)) return false;
+    if (!specialDiscountExpiredToday(d)) return true;
+    const had = (item.discountItems || []).some((x) => x.id === `special-${d.id}`);
+    return had && (item.status === "paid" || (Number(item.paidAmount) || 0) > 0);
+  });
   if (applicable.length === 0) { item.discountItems = others; return; }
   const base = calcItemTotal({ ...item, discountItems: [] });
   const specialItems: BillLineItem[] = applicable.map((d) => ({
