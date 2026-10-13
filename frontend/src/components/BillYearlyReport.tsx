@@ -26,7 +26,7 @@ const MONTH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.
 
 // ผลประกอบการรายปี: ค่าน้ำ/ค่าไฟ + หน่วยที่ใช้ + ยอดเรียกเก็บ + รายได้ที่รับแล้วสุทธิ + รายจ่าย (ซื้อของซ่อมแซมเข้าคลัง) + กำไรสุทธิ พร้อมกราฟ
 export default function BillYearlyReport({ monthly }: { monthly: MonthlyBillSummary[] }) {
-  const [open, setOpen] = usePersistedPref<boolean>("bills-yearly-open", true);
+  const [open, setOpen] = usePersistedPref<boolean>("bills-yearly-open", false);
   const [year, setYear] = useState<number | null>(null);
   const [moves, setMoves] = useState<RepairMovement[]>([]);
   const tick = useLiveRefreshTick(["repair-movement"]);
