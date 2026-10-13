@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { billsApi, repairsApi, tenantsApi, type RepairMovement } from "../api/client";
+import Select from "react-select";
+import { billsApi, repairsApi, tenantsApi, roomsApi, type RepairMovement } from "../api/client";
 import { useBreadcrumb } from "../context/BreadcrumbContext";
-import CustomSelect2 from "../components/CustomSelect2";
+import CustomSelect2, { customStyles } from "../components/CustomSelect2";
 import EmptyState from "../components/EmptyState";
-import { computeBillStats } from "./BillsPage";
-import { normalizeBillItem, monthYearLabel, type BillGroup } from "../utils/billCalc";
+import { receivedByComponent, type ReceivedByComponent } from "./BillsPage";
+import { normalizeBillItem, monthYearLabel, isTestItem, type BillGroup } from "../utils/billCalc";
 import { usePersistedPref } from "../utils/useColumnWidths";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toDisplayYear } from "../utils/yearFormat";
@@ -45,11 +46,28 @@ const DEDUCT_OPTIONS = [
   { value: "actual", label: "หักตามจริง (ค่าซ่อม + ค่าใช้จ่ายอื่น)" },
 ];
 
+// ── ชุดรายได้ที่นำมาคิดภาษี: เลือกตึก/ชั้น/ห้อง + หมวดรายได้ที่รับจริง ได้หลายชุด แล้วบวกรวมกัน ──
+interface IncomeSet { id: string; name: string; towerIds: string[]; floors: string[]; roomIds: string[]; comps: (keyof ReceivedByComponent)[] }
+const COMP_OPTIONS: { key: keyof ReceivedByComponent; label: string }[] = [
+  { key: "rent", label: "ค่าห้อง" },
+  { key: "water", label: "ค่าน้ำ" },
+  { key: "electric", label: "ค่าไฟ" },
+  { key: "other", label: "ค่าอื่นๆ (จอดรถ/แท็ก/รายการเพิ่ม)" },
+  { key: "fine", label: "ค่าปรับ" },
+  { key: "old", label: "ยอดค้างเดือนเก่าที่รับในเดือนนี้" },
+];
+const ALL_COMPS = COMP_OPTIONS.map((c) => c.key);
+const newSet = (n: number): IncomeSet => ({ id: `S${Date.now()}${n}`, name: `ชุดที่ ${n}`, towerIds: [], floors: [], roomIds: [], comps: [...ALL_COMPS] });
+const multiStyles = { ...(customStyles as any), valueContainer: (b: any) => ({ ...b, padding: "0.25rem 0.5rem" }) };
+
 export default function TaxPage() {
   const { setBreadcrumb } = useBreadcrumb();
   const [bills, setBills] = useState<BillGroup[]>([]);
   const [moves, setMoves] = useState<RepairMovement[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [towers, setTowers] = useState<any[]>([]);
+  const [sets, setSets] = usePersistedPref<IncomeSet[]>("tax-income-sets", [newSet(1)]);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState<number | null>(null);
   const [method, setMethod] = usePersistedPref<string>("tax-method", "ytd");
@@ -66,8 +84,8 @@ export default function TaxPage() {
 
   const tick = useLiveRefreshTick(["bill", "payment", "repair-movement"]);
   useEffect(() => {
-    Promise.all([billsApi.getAll(), repairsApi.getMovements(), tenantsApi.getAll()])
-      .then(([b, m, t]) => { setBills(b); setMoves(m); setTenants(t); })
+    Promise.all([billsApi.getAll(), repairsApi.getMovements(), tenantsApi.getAll(), roomsApi.getAll(), roomsApi.getTowers()])
+      .then(([b, m, t, r, tw]) => { setBills(b); setMoves(m); setTenants(t); setRooms(r); setTowers(tw); })
       .catch((e) => toastError(e?.response?.data?.error ?? e?.message ?? "โหลดข้อมูลไม่สำเร็จ"))
       .finally(() => setLoading(false));
   }, [tick]);
@@ -78,16 +96,28 @@ export default function TaxPage() {
   );
   const selYear = year ?? years[0] ?? new Date().getFullYear();
 
-  // ยอดรับแล้วสุทธิของแต่ละเดือน (ตัวเลขเดียวกับการ์ด "ยอดรับแล้วสุทธิ" ในหน้าบิล)
+  const roomById = useMemo(() => new Map(rooms.map((r) => [String(r.id), r])), [rooms]);
+
+  // รายได้ที่รับจริงของแต่ละเดือน แยกตามชุดรายได้ (ผู้เช่าทดสอบไม่นับ) — ชุดละหลายหมวด/ตึก/ชั้น/ห้อง แล้วรวมทุกชุด
   const monthly = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
       const my = `${String(i + 1).padStart(2, "0")}/${selYear}`;
       const group = bills.find((b) => b.monthYear === my);
-      if (!group) return { my, hasBill: false, net: 0 };
-      const items = (group.data ?? []).map(normalizeBillItem);
-      return { my, hasBill: true, net: computeBillStats(items, [], my, bills, tenants).netReceived };
+      if (!group) return { my, hasBill: false, net: 0, perSet: sets.map(() => 0) };
+      const items = (group.data ?? []).map(normalizeBillItem).filter((it) => !isTestItem(it, tenants));
+      const comps = items.map((it) => ({ it, rc: receivedByComponent(it, bills), room: roomById.get(String(it.roomId)) }));
+      const perSet = sets.map((s) => comps
+        .filter(({ it, room }) =>
+          (s.towerIds.length === 0 || s.towerIds.includes(String(room?.towerId ?? ""))) &&
+          (s.floors.length === 0 || s.floors.includes(String(room?.floor ?? ""))) &&
+          (s.roomIds.length === 0 || s.roomIds.includes(String(it.roomId))))
+        .reduce((sum, { rc }) => sum + s.comps.reduce((a, k) => a + (rc[k] || 0), 0), 0));
+      return { my, hasBill: true, net: perSet.reduce((a, b) => a + b, 0), perSet };
     });
-  }, [bills, selYear, tenants]);
+  }, [bills, selYear, tenants, sets, roomById]);
+
+  const updateSet = (id: string, patch: Partial<IncomeSet>) => setSets(sets.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const setTotals = sets.map((_, i) => monthly.reduce((a, m) => a + (m.perSet[i] ?? 0), 0));
 
   const billMonths = monthly.filter((m) => m.hasBill).length;
   const ytd = monthly.reduce((s, m) => s + m.net, 0);
@@ -108,7 +138,7 @@ export default function TaxPage() {
   const yearOptions = (years.length ? years : [selYear]).map((y) => ({ value: y, label: `ปี ${toDisplayYear(y, "CE")}` }));
 
   const cards = [
-    { icon: "fa-hand-holding-dollar text-success", label: method === "projected" ? "รายได้ (ประมาณการทั้งปี)" : "รายได้รับแล้วสุทธิ (ถึงปัจจุบัน)", val: `${money(income)} ฿` },
+    { icon: "fa-hand-holding-dollar text-success", label: method === "projected" ? "รายได้ (ประมาณการทั้งปี)" : "รายได้ที่เลือก (รับจริงถึงปัจจุบัน)", val: `${money(income)} ฿` },
     { icon: "fa-receipt text-warning", label: deduct === "flat30" ? "หักค่าใช้จ่ายเหมา 30%" : "หักค่าใช้จ่ายตามจริง", val: `${money(expense)} ฿` },
     { icon: "fa-user-shield text-info", label: "หักค่าลดหย่อน", val: `${money(allowance)} ฿` },
     { icon: "fa-scale-balanced text-primary", label: "เงินได้สุทธิ", val: `${money(netIncome)} ฿` },
@@ -142,6 +172,61 @@ export default function TaxPage() {
               </div>
             ))}
           </div>
+
+          <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <h6 className="mb-0">ชุดรายได้ที่นำมาคิดภาษี</h6>
+            <button className="btn btn-sm btn-primary" onClick={() => setSets([...sets, newSet(sets.length + 1)])}><i className="fas fa-plus me-1" />เพิ่มชุด</button>
+          </div>
+          <div className="text-muted small mb-2">แต่ละชุดเลือกตึก/ชั้น/ห้อง และหมวดรายได้ที่รับจริงได้ แล้วระบบบวกทุกชุดเข้าด้วยกัน (ผู้เช่าทดสอบไม่นับ) — ระวังไม่ให้ห้อง+หมวดเดียวกันซ้ำในหลายชุด จะถูกนับซ้ำ</div>
+          {sets.map((s, idx) => {
+            const towerOpts = towers.map((t: any) => ({ value: String(t.id), label: t.name }));
+            const inTowers = rooms.filter((r) => s.towerIds.length === 0 || s.towerIds.includes(String(r.towerId ?? "")));
+            const floorOpts = [...new Set(inTowers.map((r) => String(r.floor ?? "")).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((f) => ({ value: f, label: `ชั้น ${f}` }));
+            const roomOpts = inTowers.filter((r) => s.floors.length === 0 || s.floors.includes(String(r.floor ?? "")))
+              .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true })).map((r) => ({ value: String(r.id), label: `ห้อง ${r.number}` }));
+            return (
+              <div key={s.id} className="mb-3 p-3" style={{ border: "1px solid var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
+                <div className="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
+                  <input className="form-control" style={{ maxWidth: 260 }} value={s.name} onChange={(e) => updateSet(s.id, { name: e.target.value })} />
+                  <div className="d-flex align-items-center gap-2">
+                    <strong className="text-success">{money(setTotals[idx] ?? 0)} ฿</strong>
+                    {sets.length > 1 && <button className="btn btn-sm btn-outline-danger" title="ลบชุดนี้" onClick={() => setSets(sets.filter((x) => x.id !== s.id))}><i className="fas fa-trash-alt" /></button>}
+                  </div>
+                </div>
+                <div className="row g-2 mb-2">
+                  <div className="col-12 col-md-4">
+                    <Select isMulti options={towerOpts} value={towerOpts.filter((o) => s.towerIds.includes(o.value))} styles={multiStyles}
+                      onChange={(sel) => updateSet(s.id, { towerIds: (sel as any[]).map((o) => o.value), floors: [], roomIds: [] })}
+                      placeholder="ทุกตึก" noOptionsMessage={() => "ไม่พบข้อมูล"} closeMenuOnSelect={false} menuPortalTarget={document.body} menuPosition="fixed" />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <Select isMulti options={floorOpts} value={floorOpts.filter((o) => s.floors.includes(o.value))} styles={multiStyles}
+                      onChange={(sel) => updateSet(s.id, { floors: (sel as any[]).map((o) => o.value), roomIds: [] })}
+                      placeholder="ทุกชั้น" noOptionsMessage={() => "ไม่พบข้อมูล"} closeMenuOnSelect={false} menuPortalTarget={document.body} menuPosition="fixed" />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <Select isMulti options={roomOpts} value={roomOpts.filter((o) => s.roomIds.includes(o.value))} styles={multiStyles}
+                      onChange={(sel) => updateSet(s.id, { roomIds: (sel as any[]).map((o) => o.value) })}
+                      placeholder="ทุกห้อง" noOptionsMessage={() => "ไม่พบข้อมูล"} closeMenuOnSelect={false} menuPortalTarget={document.body} menuPosition="fixed" />
+                  </div>
+                </div>
+                <div className="d-flex flex-wrap gap-3 align-items-center">
+                  {COMP_OPTIONS.map((c) => (
+                    <label key={c.key} className="d-flex align-items-center gap-2" style={{ cursor: "pointer" }}>
+                      <input type="checkbox" className="form-check-input mt-0" checked={s.comps.includes(c.key)}
+                        onChange={(e) => updateSet(s.id, { comps: e.target.checked ? [...s.comps, c.key] : s.comps.filter((k) => k !== c.key) })} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+                <div className="d-flex gap-2 mt-2 flex-wrap">
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateSet(s.id, { comps: [...ALL_COMPS] })}>ทุกหมวด</button>
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateSet(s.id, { comps: ["rent"] })}>ค่าห้องอย่างเดียว</button>
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateSet(s.id, { comps: ["rent", "other", "fine", "old"] })}>ไม่รวมน้ำ-ไฟ</button>
+                </div>
+              </div>
+            );
+          })}
 
           <div className="row g-3 mb-4">
             <div className="col-12 col-md-6">
@@ -182,7 +267,7 @@ export default function TaxPage() {
           <div className="nicescrollbar mb-4" style={{ overflow: "auto" }}>
             <table className="table-mainstyle table-hover" style={{ width: "100%", minWidth: 520 }}>
               <thead>
-                <tr><th>เดือน</th><th className="text-end">ยอดรับแล้วสุทธิ</th><th className="text-end">สะสม</th><th className="text-end">ภาษีส่วนของเดือน (ประมาณ)</th></tr>
+                <tr><th>เดือน</th>{sets.length > 1 && sets.map((s) => <th key={s.id} className="text-end">{s.name}</th>)}<th className="text-end">ยอดรับรวม</th><th className="text-end">สะสม</th><th className="text-end">ภาษีส่วนของเดือน (ประมาณ)</th></tr>
               </thead>
               <tbody>
                 {(() => {
@@ -193,6 +278,7 @@ export default function TaxPage() {
                     return (
                       <tr key={m.my}>
                         <td className="fw-bold">{monthYearLabel(m.my)}{!m.hasBill && <span className="text-muted small fw-normal"> (ยังไม่มีบิล)</span>}</td>
+                        {sets.length > 1 && m.perSet.map((v, k) => <td key={sets[k].id} className="text-end">{m.hasBill ? money(v) : "-"}</td>)}
                         <td className="text-end">{m.hasBill ? money(m.net) : "-"}</td>
                         <td className="text-end">{m.hasBill ? money(cum) : "-"}</td>
                         <td className="text-end">{m.hasBill ? money(share) : "-"}</td>
@@ -202,7 +288,7 @@ export default function TaxPage() {
                 })()}
               </tbody>
               <tfoot>
-                <tr><td className="fw-bold">รวม</td><td className="text-end fw-bold">{money(ytd)}</td><td /><td className="text-end fw-bold">{money(income > 0 ? tax * (ytd / income) : 0)}</td></tr>
+                <tr><td className="fw-bold">รวม</td>{sets.length > 1 && setTotals.map((v, k) => <td key={sets[k].id} className="text-end fw-bold">{money(v)}</td>)}<td className="text-end fw-bold">{money(ytd)}</td><td /><td className="text-end fw-bold">{money(income > 0 ? tax * (ytd / income) : 0)}</td></tr>
               </tfoot>
             </table>
           </div>

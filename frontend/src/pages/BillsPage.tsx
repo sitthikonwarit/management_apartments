@@ -2123,6 +2123,23 @@ function receivedBreakdown(item: BillItem, allBills: BillGroup[]) {
   return { own: Math.max(0, paid - oldTotal), old, oldTotal, paid };
 }
 
+// เงินที่รับจริงของแถวบิลหนึ่ง แยกตามหมวด (ไว้ให้หน้าคำนวณภาษีเลือกหมวด/ตึก/ชั้นได้) — เงินที่รับของเดือนนี้เอง
+// (own) กระจายตามสัดส่วนยอดดิบของแต่ละหมวด (ส่วนลดถูกหักสัดส่วนเข้าไปให้อัตโนมัติ) ส่วน old = เงินที่ปิดยอดเดือนเก่าในเดือนนี้
+export interface ReceivedByComponent { rent: number; water: number; electric: number; other: number; fine: number; old: number }
+export function receivedByComponent(item: BillItem, allBills: BillGroup[]): ReceivedByComponent {
+  const b = receivedBreakdown(item, allBills);
+  const tags = item.billTagItems.reduce((s, t) => s + (Number(t.price) || 0), 0)
+    + item.billTenantTagItems.reduce((s, t) => s + (Number(t.price) || 0), 0);
+  const custom = item.customItems.reduce((s, c) => s + (Number(c.price) || 0), 0);
+  const gross = {
+    rent: Number(item.priceRoom) || 0, water: Number(item.priceWater) || 0, electric: Number(item.priceElectric) || 0,
+    other: (Number(item.priceVehicle) || 0) + tags + custom, fine: Number(item.fineAmount) || 0,
+  };
+  const sum = gross.rent + gross.water + gross.electric + gross.other + gross.fine;
+  const ratio = sum > 0 ? b.own / sum : 0;
+  return { rent: gross.rent * ratio, water: gross.water * ratio, electric: gross.electric * ratio, other: gross.other * ratio, fine: gross.fine * ratio, old: b.oldTotal };
+}
+
 export function computeBillStats(allItems: BillItem[], payments: any[], monthYear: string, allBills: BillGroup[] = [], tenants?: any[]): DashboardStats {
   // ผู้เช่าทดสอบไม่นับรวมในสรุปใดๆ (ห้อง/ยอด/เงินที่รับ)
   const billData = allItems.filter((i) => !isTestItem(i, tenants));
