@@ -108,7 +108,7 @@ export default function BillYearlyReport({ monthly }: { monthly: MonthlyBillSumm
         <div className="p-3 pt-0">
           <div className="row g-3 mb-3">
             {cards.map(({ icon, label, val, sub }) => (
-              <div key={label} className="col-6 col-lg-4">
+              <div key={label} className="col-12 col-sm-6 col-lg-4">
                 <div className="detail-item" style={{ height: "100%" }}>
                   <i className={`fas ${icon}`} />
                   <div>
