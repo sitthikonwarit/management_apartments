@@ -45,6 +45,10 @@ const RULES: LogRule[] = [
   { method: "PUT", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "update", label: "แก้ไขบิล" },
   { method: "DELETE", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "delete", label: "ลบบิล" },
 
+  // cctv (กล้องวงจรปิด)
+  { method: "POST", pattern: /^\/cctv\/cameras$/, entityType: "cctv", action: "create", label: "เพิ่มกล้องวงจรปิด" },
+  { method: "PUT", pattern: /^\/cctv\/cameras\/[^/]+$/, entityType: "cctv", action: "update", label: "แก้ไขกล้องวงจรปิด" },
+  { method: "DELETE", pattern: /^\/cctv\/cameras\/[^/]+$/, entityType: "cctv", action: "delete", label: "ลบกล้องวงจรปิด" },
   // repairs (ซ่อมแซม/คลังของ)
   { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/messages\/[^/]+\/repair$/, entityType: "repair-request", action: "update", label: "ยืนยันปิดงานแจ้งซ่อม" },
   { method: "POST", pattern: /^\/repairs\/items$/, entityType: "repair-item", action: "create", label: "เพิ่มของในคลังซ่อมแซม" },

@@ -195,6 +195,16 @@ export const repairMovements = pgTable("repair_movements", {
   createdAt: str("created_at"),
 });
 
+// ── กล้องวงจรปิด: URL สตรีม MJPEG ต้นทางของแต่ละกล้อง (เก็บเข้ารหัส เพราะอาจมีรหัสผ่านฝังอยู่) ──
+export const cctvCameras = pgTable("cctv_cameras", {
+  id: text("id").primaryKey(),
+  orgId: orgId(),
+  name: str("name"),
+  streamUrl: str("stream_url"),
+  sortOrder: str("sort_order"),
+  createdAt: str("created_at"),
+});
+
 export const vehicleTypes = pgTable("vehicle_types", {
   id: text("id").primaryKey(),
   orgId: orgId(),

@@ -537,3 +537,12 @@ export const repairsApi = {
   createMovement: (data: any): Promise<RepairMovement> => api.post("/repairs/movements", data).then((r) => r.data),
   deleteMovement: (id: string) => api.delete(`/repairs/movements/${id}`).then((r) => r.data),
 };
+
+export interface CctvCamera { id: string; name: string; streamUrl: string; sortOrder: number }
+export const cctvApi = {
+  getCameras: (): Promise<CctvCamera[]> => api.get("/cctv/cameras").then((r) => r.data),
+  getTicket: (): Promise<{ ticket: string; expiresIn: number }> => api.get("/cctv/ticket").then((r) => r.data),
+  createCamera: (data: { name: string; streamUrl: string }): Promise<CctvCamera> => api.post("/cctv/cameras", data).then((r) => r.data),
+  updateCamera: (id: string, data: { name?: string; streamUrl?: string }): Promise<CctvCamera> => api.put(`/cctv/cameras/${id}`, data).then((r) => r.data),
+  deleteCamera: (id: string) => api.delete(`/cctv/cameras/${id}`).then((r) => r.data),
+};
