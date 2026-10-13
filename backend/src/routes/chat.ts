@@ -1,3 +1,4 @@
+import { livePictureMap, livePicture } from "../lib/profilePicture";
 import { Elysia } from "elysia";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
@@ -134,6 +135,9 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
     // ตึก/อาคารของห้อง — ใช้ให้หน้าเว็บกรองรายชื่อสนทนาตามตึกได้ตอนส่งข้อความหลายห้องพร้อมกัน (ดู POST /broadcast)
     const towerMap = new Map(towerRows.map((t) => [t.id, t]));
 
+    // รูปโปรไฟล์ LINE ที่ถูกลบแล้ว (404) ไม่ส่งให้หน้าเว็บ — ดู lib/profilePicture.ts
+    const picAlive = await livePictureMap(profileRows.map((p) => p.pictureUrl));
+
     const groups = new Map<string, Array<typeof chatMessages.$inferSelect>>();
     for (const m of messages) {
       const arr = groups.get(m.lineUserId) ?? [];
@@ -174,7 +178,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
         roomNumber: room?.number || null,
         towerId: room?.towerId || null,
         towerName: tower?.name || null,
-        pictureUrl: profileMap.get(lineUserId)?.pictureUrl || null,
+        pictureUrl: (() => { const u = profileMap.get(lineUserId)?.pictureUrl || null; return u && picAlive.get(u) === false ? null : u; })(),
         lastMessage: previewText(last),
         lastMessageAt: last.createdAt,
         lastDirection: last.direction as "in" | "out",
@@ -469,7 +473,7 @@ export const chatRoute = new Elysia({ prefix: "/chat" })
 
     return {
       lineUserId,
-      pictureUrl: profileRow?.pictureUrl || null,
+      pictureUrl: await livePicture(profileRow?.pictureUrl),
       profileDisplayName: profileRow?.displayName || null,
       contactName: contactName || null,
       tenant: tenant ? {
