@@ -109,12 +109,12 @@ export default function BillYearlyReport({ monthly }: { monthly: MonthlyBillSumm
           <div className="row g-3 mb-3">
             {cards.map(({ icon, label, val, sub }) => (
               <div key={label} className="col-6 col-lg-4">
-                <div className="detail-item">
+                <div className="detail-item" style={{ height: "100%" }}>
                   <i className={`fas ${icon}`} />
                   <div>
                     <div className="label">{label}</div>
                     <div className="value">{val}</div>
-                    {sub && <div className="text-muted" style={{ fontSize: "0.72rem" }}>{sub}</div>}
+                    <div className="text-muted" style={{ fontSize: "0.72rem", minHeight: "1.1em" }}>{sub || " "}</div>
                   </div>
                 </div>
               </div>
