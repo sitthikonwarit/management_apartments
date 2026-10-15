@@ -965,14 +965,35 @@ export interface PaymentReceiptInput {
   paidTotal: number; // ยอดที่จ่ายสะสมรวมทั้งหมดของบิลนี้ หลังรวมยอดที่เพิ่งบันทึก
   slipUrl?: string; // path/URL รูปสลิปการโอน — ว่าง = ไม่แสดงปุ่มดูสลิป (ดู resolveSlipUrl ด้านบน)
   actor?: string; // ชื่อพนักงานที่บันทึกการชำระเงิน — ไว้แสดงเป็นผู้ส่งในประวัติแชท LINE ของเว็บ
+  // รายละเอียดสำหรับแสดงในใบเสร็จ: ยอดของเดือน/ยอดค้างยกมา/ยอดเต็ม, เงินที่รับครั้งนี้ (แยกเดือนนี้/ปิดเดือนเก่า) และยอดคงเหลือจริง
+  // ไม่ส่งมา (เช่น เส้นทางเก่า) = ใช้แบบเดิม (amount และ billTotal − paidTotal)
+  detail?: ReceiptDetail;
+}
+
+export interface ReceiptDetail {
+  monthTotal: number; // ยอดของเดือนนี้เองล้วนๆ (ไม่รวมยอดค้างยกมา)
+  carriedTotal: number; // ยอดค้างยกมาจากเดือนก่อนๆ
+  fullTotal: number; // ยอดเต็ม = เดือนนี้ + ค้างยกมา (หลังส่วนลด/ค่าปรับ)
+  receivedCurrent: number; // เงินที่รับครั้งนี้ลงเดือนนี้
+  oldClosed: { monthYear: string; amount: number }[]; // เงินที่รับครั้งนี้ลงเดือนเก่า
+  receivedTotal: number; // รวมเงินที่รับครั้งนี้ (ไม่รวมเงินทอน)
+  remaining: number; // ยอดคงเหลือที่ยังต้องจ่ายหลังรายการนี้ (เดือนเก่าที่ยังไม่ปิด + ส่วนเดือนนี้ที่ยังขาด)
+}
+
+function receiptRemaining(input: PaymentReceiptInput): number {
+  return input.detail ? Math.max(0, Number(input.detail.remaining) || 0) : Math.max(0, input.billTotal - input.paidTotal);
+}
+function receiptReceivedTotal(input: PaymentReceiptInput): number {
+  return input.detail ? Number(input.detail.receivedTotal) || 0 : Number(input.amount) || 0;
 }
 
 // ใบเสร็จรับเงิน (Flex Message) — ส่งให้ผู้เช่าทันทีที่กดยืนยันการชำระในป็อปอัพบันทึกการชำระเงิน
 function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: LineAppearanceSettings) {
   const monthLabel = monthYearLabel(input.monthYear, settings.yearFormat);
-  const remaining = Math.max(0, input.billTotal - input.paidTotal);
+  const remaining = receiptRemaining(input);
   const fullySettled = remaining <= 0.005;
   const slipUrl = resolveSlipUrl(input.slipUrl);
+  const d = input.detail;
 
   // ตราประทับจางๆ ต้องอยู่ตัวแรกสุด (position: absolute ไม่กินพื้นที่ในเลย์เอาต์ปกติ) เพื่อให้ลอยอยู่ใต้
   // แถวข้อมูลที่ตามมาซึ่งจัดเรียงแบบปกติทับด้านบน (เหมือนตรายางประทับไว้ก่อนแล้วค่อยเขียนตัวหนังสือทับ)
@@ -984,6 +1005,18 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
     createFlexRow("วันที่ชำระ", thaiDateLabel(input.paymentDate, settings.yearFormat), COLOR_TEXT, ICONS.CALENDAR, false),
     createFlexRow("สำหรับเดือน", monthLabel, COLOR_TEXT, ICONS.RECEIPT, false)
   );
+  if (d) {
+    bodyContents.push({ type: "separator", margin: "lg", color: "#E0E0E0" });
+    bodyContents.push(createFlexRow(`ยอดของเดือน ${monthLabel}`, fmtMoney(d.monthTotal), COLOR_TEXT, ICONS.RECEIPT));
+    if (d.carriedTotal > 0.005) bodyContents.push(createFlexRow("ยอดค้างยกมา", fmtMoney(d.carriedTotal), COLOR_RED, ICONS.FINE));
+    bodyContents.push(createFlexRow("ยอดเต็มทั้งหมด", fmtMoney(d.fullTotal), COLOR_TEXT, ICONS.RECEIPT));
+    bodyContents.push({ type: "separator", margin: "lg", color: "#E0E0E0" });
+    if (d.receivedCurrent > 0.005) bodyContents.push(createFlexRow(`รับชำระเดือน ${monthLabel}`, fmtMoney(d.receivedCurrent), COLOR_SUCCESS, ICONS.CASH));
+    for (const o of d.oldClosed) {
+      bodyContents.push(createFlexRow(`รับชำระเดือน ${monthYearLabel(o.monthYear, settings.yearFormat)}`, fmtMoney(o.amount), COLOR_SUCCESS, ICONS.CASH));
+    }
+    bodyContents.push(createFlexRow("รวมรับครั้งนี้", fmtMoney(d.receivedTotal), COLOR_SUCCESS, ICONS.CASH));
+  }
   if (input.change > 0) bodyContents.push(createFlexRow("เงินทอน", fmtMoney(input.change), COLOR_TEXT, ICONS.CASH));
   if (input.note) bodyContents.push(createFlexRow("หมายเหตุ", input.note, COLOR_MUTED, ICONS.NOTE, false));
 
@@ -996,7 +1029,7 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
 
   return {
     type: "flex",
-    altText: `ได้รับชำระเงินห้อง ${input.roomNumber} จำนวน ${fmtMoney(input.amount)} บาท`,
+    altText: `ได้รับชำระเงินห้อง ${input.roomNumber} จำนวน ${fmtMoney(receiptReceivedTotal(input))} บาท`,
     contents: {
       type: "bubble",
       size: "giga",
@@ -1011,7 +1044,7 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
             ],
           },
           { type: "text", text: `ห้อง ${input.roomNumber}`, weight: "bold", color: "#ffffff", size: "lg", margin: "md" },
-          { type: "text", text: `รับชำระ ${fmtMoney(input.amount)} ฿`, color: "#ffffffcc", size: "sm", margin: "sm" },
+          { type: "text", text: `รับชำระ ${fmtMoney(receiptReceivedTotal(input))} ฿`, color: "#ffffffcc", size: "sm", margin: "sm" },
         ],
       },
       body: {
@@ -1038,7 +1071,8 @@ function buildPaymentReceiptFlexMessage(input: PaymentReceiptInput, settings: Li
 // slipUrl เก็บเป็น path สัมพัทธ์เดิม (ไม่ผ่าน resolveSlipUrl) เพราะเว็บเราเปิดผ่าน /uploads พร็อกซีเองได้เลย
 // ไม่ต้องพึ่ง PUBLIC_BASE_URL แบบตอนส่งลิงก์ไปให้ LINE ของผู้เช่า
 function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppearanceSettings) {
-  const remaining = Math.max(0, input.billTotal - input.paidTotal);
+  const remaining = receiptRemaining(input);
+  const d = input.detail;
   const fullySettled = remaining <= 0.005;
   return {
     kind: "receipt",
@@ -1051,7 +1085,11 @@ function buildChatReceiptSnapshot(input: PaymentReceiptInput, settings: LineAppe
     roomNumber: String(input.roomNumber ?? ""),
     monthLabel: monthYearLabel(input.monthYear, settings.yearFormat),
     method: input.method,
-    amount: Number(input.amount) || 0,
+    amount: receiptReceivedTotal(input),
+    detail: d ? {
+      monthTotal: d.monthTotal, carriedTotal: d.carriedTotal, fullTotal: d.fullTotal, receivedCurrent: d.receivedCurrent,
+      receivedTotal: d.receivedTotal, oldClosed: d.oldClosed.map((o) => ({ label: monthYearLabel(o.monthYear, settings.yearFormat), amount: o.amount })),
+    } : null,
     change: Number(input.change) || 0,
     note: input.note || "",
     paymentDateLabel: thaiDateLabel(input.paymentDate, settings.yearFormat),

@@ -135,6 +135,17 @@ export const billsRoute = new Elysia({ prefix: "/bills" })
         paidTotal: Number(b.paidTotal) || 0,
         slipUrl,
         actor,
+        detail: b.receiptDetail && typeof b.receiptDetail === "object" ? {
+          monthTotal: Number(b.receiptDetail.monthTotal) || 0,
+          carriedTotal: Number(b.receiptDetail.carriedTotal) || 0,
+          fullTotal: Number(b.receiptDetail.fullTotal) || 0,
+          receivedCurrent: Number(b.receiptDetail.receivedCurrent) || 0,
+          receivedTotal: Number(b.receiptDetail.receivedTotal) || 0,
+          remaining: Number(b.receiptDetail.remaining) || 0,
+          oldClosed: Array.isArray(b.receiptDetail.oldClosed)
+            ? b.receiptDetail.oldClosed.map((o: any) => ({ monthYear: String(o?.monthYear ?? ""), amount: Number(o?.amount) || 0 }))
+            : [],
+        } : undefined,
       }, b.sendReceipt !== false);
     } catch (e) {
       console.error("[send-payment-receipt]", e);

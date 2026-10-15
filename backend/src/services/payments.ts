@@ -107,6 +107,13 @@ export async function recordConfirmedPayment(
       tenantId: intent.tenantId, roomNumber: intent.roomNumber || "", monthYear: intent.monthYear || "",
       method: "scan", amount: amountApplied, change: 0, note: "", paymentDate: ts,
       billTotal: Number(item.total) || 0, paidTotal: newPaidAmount, slipUrl: opts.slipUrl, actor: opts.actor,
+      detail: {
+        monthTotal: Math.max(0, (Number(item.total) || 0) - (Number(item.outstandingAmount) || 0)),
+        carriedTotal: Number(item.outstandingAmount) || 0,
+        fullTotal: Number(item.total) || 0,
+        receivedCurrent: amountApplied, receivedTotal: amountApplied, oldClosed: [],
+        remaining: Math.max(0, (Number(item.total) || 0) - newPaidAmount),
+      },
     }, opts.sendReceipt !== false);
   } catch (e) {
     console.error("[record-confirmed-payment][receipt]", e);

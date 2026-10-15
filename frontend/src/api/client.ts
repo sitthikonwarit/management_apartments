@@ -134,6 +134,10 @@ export const billsApi = {
     linkedOldMonthPayments?: { id: string; monthYear: string; amount: number }[];
     linkedOldMonthsCreditedAmount?: number;
     settledViaMonthYear?: string;
+    receiptDetail?: {
+      monthTotal: number; carriedTotal: number; fullTotal: number; receivedCurrent: number; receivedTotal: number; remaining: number;
+      oldClosed: { monthYear: string; amount: number }[];
+    };
   }) => api.post("/bills/payments", payload).then((r) => r.data),
   cancelPayment: (id: string, reason: string) =>
     api.patch(`/bills/payments/${id}/cancel`, { reason }).then((r) => r.data),

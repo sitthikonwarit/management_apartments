@@ -21,6 +21,10 @@ interface ReceiptSnapshot {
   roomNumber: string; monthLabel: string; method: "cash" | "scan";
   amount: number; change: number; note: string; paymentDateLabel: string;
   remaining: number; fullySettled: boolean; slipUrl: string;
+  detail?: {
+    monthTotal: number; carriedTotal: number; fullTotal: number; receivedCurrent: number; receivedTotal: number;
+    oldClosed: { label: string; amount: number }[];
+  } | null;
 }
 
 function money(n: number) {
@@ -156,6 +160,18 @@ function ChatReceiptCard({ data }: { data: ReceiptSnapshot }) {
           <Row icon={data.methodIcon} name={data.method === "scan" ? "ช่องทาง: สแกน/โอน" : "ช่องทาง: เงินสด"} price="" />
           <Row icon={data.calendarIcon} name="วันที่ชำระ" price={data.paymentDateLabel} />
           <Row icon={data.receiptIcon} name="สำหรับเดือน" price={data.monthLabel} />
+          {data.detail && (
+            <>
+              <div style={{ borderTop: "1px solid #E0E0E0", margin: "12px 0" }} />
+              <Row icon={data.receiptIcon} name={`ยอดของเดือน ${data.monthLabel}`} price={`${money(data.detail.monthTotal)} ฿`} />
+              {data.detail.carriedTotal > 0.005 && <Row icon={data.receiptIcon} name="ยอดค้างยกมา" price={`${money(data.detail.carriedTotal)} ฿`} highlight />}
+              <Row icon={data.receiptIcon} name="ยอดเต็มทั้งหมด" price={`${money(data.detail.fullTotal)} ฿`} />
+              <div style={{ borderTop: "1px solid #E0E0E0", margin: "12px 0" }} />
+              {data.detail.receivedCurrent > 0.005 && <Row icon={data.cashIcon} name={`รับชำระเดือน ${data.monthLabel}`} price={`${money(data.detail.receivedCurrent)} ฿`} />}
+              {data.detail.oldClosed.map((o, i) => <Row key={i} icon={data.cashIcon} name={`รับชำระเดือน ${o.label}`} price={`${money(o.amount)} ฿`} />)}
+              <Row icon={data.cashIcon} name="รวมรับครั้งนี้" price={`${money(data.detail.receivedTotal)} ฿`} />
+            </>
+          )}
           {data.change > 0 && <Row icon={data.cashIcon} name="เงินทอน" price={`${money(data.change)} ฿`} />}
           {data.note && <Row icon={data.noteIcon} name="หมายเหตุ" price={data.note} />}
 

@@ -3947,6 +3947,28 @@ export default function BillsPage() {
       }
     }
 
+    // รายละเอียดสำหรับใบเสร็จ: ยอดของเดือน/ยอดเต็ม, เงินที่รับครั้งนี้ และ "คงเหลือจริง" หลังรายการนี้
+    // (เดือนเก่าที่ยังไม่ปิด + ส่วนเดือนนี้ที่ยังขาด — ไม่ใช่ รวมสุทธิ − paidAmount ที่อาจนับเดือนเก่าที่ชำระที่ต้นทางซ้ำ)
+    const rbBefore = remainingBreakdown(target, bills);
+    const oldRemainingAfter = rbBefore.oldChips.reduce((a, c) => {
+      if (fullyCoveredOldMonths.includes(c.monthYear)) return a;
+      const part = partialOldMonth && partialOldMonth.monthYear === c.monthYear ? partialOldMonth.amount : 0;
+      return a + Math.max(0, c.amount - part);
+    }, 0);
+    const ownTotalNow = Math.max(0, draft.total - (draft.outstandingAmount || 0));
+    const remNowAfter = payload.includeCurrentMonth
+      ? Math.max(0, ownTotalNow - (receivedBreakdown(target, bills).own + amountForCurrent))
+      : rbBefore.remNow;
+    const receiptDetail = {
+      monthTotal: ownTotalNow,
+      carriedTotal: draft.outstandingAmount || 0,
+      fullTotal: draft.total,
+      receivedCurrent: amountForCurrent,
+      receivedTotal: amountApplied,
+      oldClosed: linkedOldMonthPayments.map((l) => ({ monthYear: l.monthYear, amount: l.amount })),
+      remaining: oldRemainingAfter + remNowAfter,
+    };
+
     const paymentRow = await billsApi.createPayment({
       billId: editingId ?? "",
       roomId: target.roomId,
@@ -3968,6 +3990,7 @@ export default function BillsPage() {
       // (alreadySettledCredit) — ตอนยกเลิกรายการนี้ต้องย้อน paidAmount ของเดือนนี้ออกให้ครบทั้งก้อน
       linkedOldMonthsCreditedAmount: payload.includeCurrentMonth ? oldMonthsCollected + settledCreditApplied : 0,
       sendReceipt: payload.sendReceipt,
+      receiptDetail,
     });
     setPayments((prev) => [...prev, paymentRow]);
 
