@@ -186,7 +186,8 @@ const DASHBOARD_SECTIONS_DEFAULT = DASHBOARD_SECTIONS.map((s) => s.key);
 function renderBillRecordCell(
   col: BillRecordColDef, entry: PrintEntry, config: AppConfig, tenants: any[],
   otherDetailMode: "price" | "detail" = "price",
-  totalDisplayMode: "net" | "excludeSpecialDiscount" = "net"
+  totalDisplayMode: "net" | "excludeSpecialDiscount" = "net",
+  allBills: BillGroup[] = []
 ) {
   const { item } = entry;
   const isSplitRow = entry.payerTotal !== undefined;
@@ -306,7 +307,7 @@ function renderBillRecordCell(
     }
     // ยอดคงเหลือที่ยังต้องจ่ายจริง = รวมสุทธิ (ซึ่งรวมยอดค้างยกมาแล้ว) - ที่รับชำระแล้ว
     case "remaining": {
-      const rem = remainingDue(item);
+      const rem = allBills.length > 0 ? remainingBreakdown(item, allBills).total : remainingDue(item);
       return rem > 0.005 ? money(rem) : "-";
     }
     case "status": return item.status === "paid" ? "จ่ายแล้ว" : "รอชำระ";
@@ -1991,8 +1992,8 @@ function BillPrintConfigModal({ pool, rooms, towers, initialSelected, onCancel, 
 
 // ── ตารางสรุปบิลสำหรับบริหาร/บันทึก — รวมทุกห้องไว้ในตารางเดียวต่อเดือน เก็บเป็นหลักฐาน ─
 // เลือกคอลัมน์ที่จะพิมพ์ได้ (colKeys) รวมถึงคอลัมน์ blank ที่เว้นว่างไว้ให้เขียนด้วยมือ (เช่น เก็บเงินหน้างาน)
-function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = "price", totalDisplayMode = "net" }: {
-  entries: PrintEntry[]; config: AppConfig; colKeys: Set<string>; tenants: any[];
+function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = "price", totalDisplayMode = "net", allBills = [] }: {
+  entries: PrintEntry[]; config: AppConfig; colKeys: Set<string>; tenants: any[]; allBills?: BillGroup[];
   otherDetailMode?: "price" | "detail"; totalDisplayMode?: "net" | "excludeSpecialDiscount";
 }) {
   const cols = BILL_RECORD_COLS.filter((c) => colKeys.has(c.key));
@@ -2021,7 +2022,7 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
         // ยอดรวม/จำนวนห้องคิดจากห้องจริงเท่านั้น (dedupe ตาม roomId) ไม่นับซ้ำตามจำนวนแถวที่แยกคน
         const uniqueItems = [...new Map(rows.map((e) => [e.item.roomId, e.item])).values()];
         const grandTotal = uniqueItems.reduce((s, i) => s + i.total, 0);
-        const grandRemaining = uniqueItems.reduce((s, i) => s + remainingDue(i), 0);
+        const grandRemaining = uniqueItems.reduce((s, i) => s + (allBills.length > 0 ? remainingBreakdown(i, allBills).total : remainingDue(i)), 0);
         const paidCount = uniqueItems.filter((i) => i.status === "paid").length;
         return (
           <div key={monthYear} style={gi > 0 ? { pageBreakBefore: "always" } : undefined}>
@@ -2042,7 +2043,7 @@ function BillRecordTable({ entries, config, colKeys, tenants, otherDetailMode = 
                   <tr key={`${entry.item.roomId}-${entry.payerIndex ?? "main"}`}>
                     {cols.map((col) => (
                       <td key={col.key} className={`${col.align === "end" ? "amt " : ""}${col.blank ? "blank-write" : ""}`}>
-                        {renderBillRecordCell(col, entry, config, tenants, otherDetailMode, totalDisplayMode)}
+                        {renderBillRecordCell(col, entry, config, tenants, otherDetailMode, totalDisplayMode, allBills)}
                       </td>
                     ))}
                   </tr>
@@ -2123,6 +2124,26 @@ function receivedBreakdown(item: BillItem, allBills: BillGroup[]) {
   return { own: Math.max(0, paid - oldTotal), old, oldTotal, paid };
 }
 
+// ยอดคงเหลือที่ยังต้องจ่ายของแถวบิล แยกเป็น "เดือนเก่าที่ยังไม่ปิด" (คิดสดจากบิลต้นทาง) + "ส่วนของเดือนนี้เอง" —
+// ส่วนเดือนนี้ = ยอดของเดือนนี้ (ไม่รวมยอดค้างยกมา) หักเฉพาะเงินที่รับเข้าเดือนนี้จริง (own ของ receivedBreakdown)
+// ไม่ใช่ (รวมสุทธิ − paidAmount) เพราะเดือนเก่าบางเดือนถูกชำระที่บิลต้นทางตรงๆ ไม่ได้ผ่านบิลนี้ ยอดค้างยกมาที่แช่แข็งไว้
+// ในบิลนี้จึงยังสูงกว่าความจริง ถ้าหักแบบเดิมส่วนที่ชำระที่ต้นทางไปแล้วจะถูกนับเป็นคงเหลือของเดือนนี้ซ้ำ
+function remainingBreakdown(item: BillItem, allBills: BillGroup[]) {
+  const oldChips: { monthYear: string; amount: number }[] = [];
+  for (const o of item.outstandingItems) {
+    const group = allBills.find((b) => b.monthYear === o.monthYear);
+    const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
+    if (!roomBill) continue;
+    const ownOld = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
+    const remOld = Math.max(0, ownOld - (Number(roomBill.paidAmount) || 0));
+    if (roomBill.status !== "paid" && remOld > 0.005) oldChips.push({ monthYear: o.monthYear, amount: remOld });
+  }
+  const ownTotal = Math.max(0, (Number(item.total) || 0) - (Number(item.outstandingAmount) || 0));
+  const remNow = Math.max(0, ownTotal - receivedBreakdown(item, allBills).own);
+  const oldRemaining = oldChips.reduce((a, c) => a + c.amount, 0);
+  return { oldChips, remNow, oldRemaining, total: oldRemaining + remNow };
+}
+
 // เงินที่รับจริงของแถวบิลหนึ่ง แยกตามหมวด (ไว้ให้หน้าคำนวณภาษีเลือกหมวด/ตึก/ชั้นได้) — เงินที่รับของเดือนนี้เอง
 // (own) กระจายตามสัดส่วนยอดดิบของแต่ละหมวด (ส่วนลดถูกหักสัดส่วนเข้าไปให้อัตโนมัติ) ส่วน old = เงินที่ปิดยอดเดือนเก่าในเดือนนี้
 export interface ReceivedByComponent { rent: number; water: number; electric: number; other: number; fine: number; old: number }
@@ -2154,7 +2175,7 @@ export function computeBillStats(allItems: BillItem[], payments: any[], monthYea
   const receivedThisMonth = breakdowns.reduce((s, b) => s + b.own, 0);
   const receivedOldMonthsClosedThisMonth = breakdowns.reduce((s, b) => s + b.oldTotal, 0);
   const netReceived = receivedThisMonth + receivedOldMonthsClosedThisMonth;
-  const totalMissing = billData.reduce((s, i) => s + remainingDue(i), 0);
+  const totalMissing = billData.reduce((s, i) => s + (allBills.length > 0 ? remainingBreakdown(i, allBills).total : remainingDue(i)), 0);
   const totalRent = billData.reduce((s, i) => s + (Number(i.priceRoom) || 0), 0);
   const totalWater = billData.reduce((s, i) => s + (Number(i.priceWater) || 0), 0);
   const totalElectric = billData.reduce((s, i) => s + (Number(i.priceElectric) || 0), 0);
@@ -2334,8 +2355,8 @@ function DashboardSummaryPrint({ groups, config, sections }: {
   );
 }
 
-function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenants, otherDetailMode = "price", totalDisplayMode = "net" }: {
-  entries: PrintEntry[]; config: AppConfig; mode: "slip" | "record"; colKeys: Set<string>;
+function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenants, otherDetailMode = "price", totalDisplayMode = "net", allBills = [] }: {
+  entries: PrintEntry[]; config: AppConfig; mode: "slip" | "record"; colKeys: Set<string>; allBills?: BillGroup[];
   lineKeys: Set<string>; layout: BillSlipLayout; tenants: any[];
   otherDetailMode?: "price" | "detail"; totalDisplayMode?: "net" | "excludeSpecialDiscount";
 }) {
@@ -2367,7 +2388,7 @@ function BillPrintOnly({ entries, config, mode, colKeys, lineKeys, layout, tenan
           </div>
         ))
       ) : (
-        <BillRecordTable entries={entries} config={config} colKeys={colKeys} tenants={tenants} otherDetailMode={otherDetailMode} totalDisplayMode={totalDisplayMode} />
+        <BillRecordTable entries={entries} config={config} colKeys={colKeys} tenants={tenants} otherDetailMode={otherDetailMode} totalDisplayMode={totalDisplayMode} allBills={allBills} />
       )}
     </div>
   );
@@ -2701,20 +2722,9 @@ function BillTableView({ data, isFiltered = false, payments, monthYear, allBills
         // ยอดคงเหลือที่ยังต้องจ่ายแยกตามเดือน (chip เหมือนคอลัมน์ค้างชำระ/รับชำระแล้ว) — เดือนเก่าที่ยกมาโชว์เฉพาะ
         // เดือนที่ยังไม่ปิดครบ (คำนวณสดจากบิลต้นทาง) + ส่วนของเดือนนี้เอง (ไม่รวมยอดค้างยกมา) หักที่รับแล้ว
         // จ่ายหมดแล้วทุกเดือนไม่โชว์อะไร ("-")
-        const chips: { label: string; amount: number }[] = [];
-        for (const o of item.outstandingItems) {
-          const group = allBills.find((b) => b.monthYear === o.monthYear);
-          const roomBill = group?.data?.find((r) => String(r.roomId) === String(item.roomId));
-          if (!roomBill) continue;
-          const ownOld = (Number(roomBill.total) || 0) - (Number(roomBill.outstandingAmount) || 0);
-          const remOld = Math.max(0, ownOld - (Number(roomBill.paidAmount) || 0));
-          if (roomBill.status !== "paid" && remOld > 0.005) chips.push({ label: monthYearLabel(o.monthYear), amount: remOld });
-        }
-        // เดือนนี้ = ยอดคงเหลือรวมของห้อง (รวมสุทธิ - รับแล้ว) หักส่วนที่แสดงเป็นเดือนเก่าไปแล้ว — ใช้ฐานเดียวกับ
-        // "ขาดอีก" เพื่อให้ผลรวมตรงกัน (paidAmount ของเดือนนี้อาจรวมเครดิตที่ปิดเดือนเก่าไปด้วย คิดแยก own-paid ตรงๆ จะพลาด)
-        const oldShown = chips.reduce((s, c) => s + c.amount, 0);
-        const remNow = remainingDue(item) - oldShown;
-        if (remNow > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: remNow });
+        const rb = remainingBreakdown(item, allBills);
+        const chips: { label: string; amount: number }[] = rb.oldChips.map((c) => ({ label: monthYearLabel(c.monthYear), amount: c.amount }));
+        if (rb.remNow > 0.005) chips.push({ label: monthYearLabel(monthYear), amount: rb.remNow });
         if (chips.length === 0) return "-";
         return (
           <div className="d-flex flex-wrap justify-content-end gap-1">
@@ -4798,7 +4808,7 @@ export default function BillsPage() {
       {printPayload && (
         <BillPrintOnly entries={printPayload} config={config} mode={printMode} colKeys={printColKeys}
           lineKeys={printSlipLineKeys} layout={printSlipLayout} tenants={tenants} otherDetailMode={printOtherDetailMode}
-          totalDisplayMode={printTotalDisplayMode} />
+          totalDisplayMode={printTotalDisplayMode} allBills={bills} />
       )}
 
       {printDashboard && printDashboardGroups.length > 0 && (
