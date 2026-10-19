@@ -45,6 +45,9 @@ const RULES: LogRule[] = [
   { method: "PUT", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "update", label: "แก้ไขบิล" },
   { method: "DELETE", pattern: /^\/bills\/[^/]+$/, entityType: "bill", action: "delete", label: "ลบบิล" },
 
+  // live meter
+  { method: "PUT", pattern: /^\/live-meter\/devices\/[^/]+$/, entityType: "live-meter", action: "update", label: "แก้ไข/ผูกมิเตอร์สดกับห้อง" },
+  { method: "DELETE", pattern: /^\/live-meter\/devices\/[^/]+$/, entityType: "live-meter", action: "delete", label: "ลบอุปกรณ์มิเตอร์สด" },
   // repairs (ซ่อมแซม/คลังของ)
   { method: "PATCH", pattern: /^\/chat\/conversations\/[^/]+\/messages\/[^/]+\/repair$/, entityType: "repair-request", action: "update", label: "ยืนยันปิดงานแจ้งซ่อม" },
   { method: "POST", pattern: /^\/repairs\/items$/, entityType: "repair-item", action: "create", label: "เพิ่มของในคลังซ่อมแซม" },

@@ -33,6 +33,7 @@ const ENTITY_META: Record<string, { label: string; icon: string; color: string }
   payment: { label: "การชำระเงิน", icon: "fa-hand-holding-usd", color: "var(--color-success)" },
   vehicle: { label: "ยานพาหนะ", icon: "fa-car", color: "#fd7e14" },
   "vehicle-type": { label: "ประเภทยานพาหนะ", icon: "fa-car", color: "#fd7e14" },
+  "live-meter": { label: "มิเตอร์สด", icon: "fa-satellite-dish", color: "#28a745" },
   "repair-request": { label: "แจ้งซ่อมจากผู้เช่า", icon: "fa-screwdriver-wrench", color: "#20c997" },
   "repair-item": { label: "คลังซ่อมแซม", icon: "fa-screwdriver-wrench", color: "#20c997" },
   "repair-movement": { label: "เบิก/เติมของซ่อมแซม", icon: "fa-screwdriver-wrench", color: "#20c997" },

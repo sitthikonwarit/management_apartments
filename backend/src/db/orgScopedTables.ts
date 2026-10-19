@@ -4,7 +4,7 @@
 import {
   rooms, tenants, bookings, towers, roomTags, meterReadings, vehicles, vehicleTypes,
   bills, tenantTags, appSettings, payments, paymentIntents, users, activityLogs, chatMessages,
-  liveMeterConfigs, lineProfiles,
+  liveMeterConfigs, lineProfiles, liveMeters, liveMeterKeys, repairItems, repairMovements, specialDiscounts,
 } from "./schema";
 
 export const ORG_SCOPED_TABLES: { name: string; table: any }[] = [
@@ -26,4 +26,9 @@ export const ORG_SCOPED_TABLES: { name: string; table: any }[] = [
   { name: "chatMessages", table: chatMessages },
   { name: "liveMeterConfigs", table: liveMeterConfigs },
   { name: "lineProfiles", table: lineProfiles },
+  { name: "liveMeters", table: liveMeters },
+  { name: "liveMeterKeys", table: liveMeterKeys },
+  { name: "repairItems", table: repairItems },
+  { name: "repairMovements", table: repairMovements },
+  { name: "specialDiscounts", table: specialDiscounts },
 ];

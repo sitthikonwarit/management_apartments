@@ -541,3 +541,14 @@ export const repairsApi = {
   createMovement: (data: any): Promise<RepairMovement> => api.post("/repairs/movements", data).then((r) => r.data),
   deleteMovement: (id: string) => api.delete(`/repairs/movements/${id}`).then((r) => r.data),
 };
+
+export interface LiveMeterDevice {
+  id: string; slaveId: string; name: string; roomId: string; type: "electric" | "water";
+  lastSeenAt: string; value: string; voltage: string; current: string; power: string; online: boolean;
+}
+export const liveMeterApi = {
+  getDevices: (): Promise<LiveMeterDevice[]> => api.get("/live-meter/devices").then((r) => r.data),
+  updateDevice: (id: string, data: { roomId?: string; name?: string; type?: string }): Promise<LiveMeterDevice> => api.put(`/live-meter/devices/${id}`, data).then((r) => r.data),
+  deleteDevice: (id: string) => api.delete(`/live-meter/devices/${id}`).then((r) => r.data),
+  getKey: (regenerate = false): Promise<{ apiKey: string }> => api.post("/live-meter/key", { regenerate }).then((r) => r.data),
+};

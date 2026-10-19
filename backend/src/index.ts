@@ -10,6 +10,7 @@ import { metersRoute } from "./routes/meters";
 import { billsRoute } from "./routes/bills";
 import { vehiclesRoute } from "./routes/vehicles";
 import { repairsRoute } from "./routes/repairs";
+import { liveMeterRoute, liveMeterIngestRoute } from "./routes/liveMeter";
 import { specialDiscountsRoute } from "./routes/specialDiscounts";
 import { settingsRoute } from "./routes/settings";
 import { addressRoute } from "./routes/address";
@@ -130,6 +131,8 @@ const app = new Elysia()
   // /liff/* — หน้า LIFF ฝั่งผู้เช่า (Login/Payment) ผู้เช่าไม่มีบัญชีพนักงาน เปิดสาธารณะเช่นกัน (ยืนยัน
   // ตัวตนด้วย LIFF access token ของ LINE เองแทน ดู verifyLiffAccessToken ใน services/line.ts)
   .use(liffRoute)
+  // /live-meter/ingest — อุปกรณ์มิเตอร์ส่งค่าเข้ามา ยืนยันตัวด้วยคีย์ x-meter-key (ไม่มี Bearer token)
+  .use(liveMeterIngestRoute)
   // /auth/superadmin/authorize, /callback — เปิดสาธารณะ (ยังไม่มี token ตอนนี้เหมือน lineLoginRoute)
   // /superadmin/* — มีการ์ดของตัวเอง (superAdminDerive + onBeforeHandle ในไฟล์เดียวกัน) ไม่ได้พึ่งการ์ด
   // authDerive ของพนักงานด้านล่าง (คนละระบบสิทธิ์กันโดยสิ้นเชิง ดู routes/superadmin.ts) ต้องเมานต์ "ก่อน"
@@ -218,6 +221,7 @@ const app = new Elysia()
   .use(billsRoute)
   .use(vehiclesRoute)
   .use(repairsRoute)
+  .use(liveMeterRoute)
   .use(specialDiscountsRoute)
   .use(settingsRoute)
   .use(logsRoute)

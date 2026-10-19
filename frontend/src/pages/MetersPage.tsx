@@ -1,3 +1,4 @@
+import LiveMeterDashboard from "../components/LiveMeterDashboard";
 import { useEffect, useState, useMemo, useRef, useLayoutEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Select from "react-select";
@@ -1821,6 +1822,7 @@ function MeterTableView({ meters, isFiltered = false, sortKey, filledCount, room
 export default function MetersPage() {
   const [meters,  setMeters]  = useState<any[]>([]);
   const [rooms,   setRooms]   = useState<any[]>([]);
+  const [showLive, setShowLive] = useState(false);
   const [tenants, setTenants] = useState<any[]>([]);
   const [towers,  setTowers]  = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2187,6 +2189,7 @@ function openExportDialog() {
   // ── Render: List View ──
   return (
     <div className="custom-card" id="meterGroupCard">
+      {showLive && <LiveMeterDashboard rooms={rooms} onClose={() => setShowLive(false)} />}
       {/* Sync result banner */}
       {syncMsg && (
         <div className={`alert ${syncMsg.type === "success" ? "alert-success" : "alert-danger"} d-flex align-items-center justify-content-between mb-3 py-2 px-3`} style={{ fontSize: "0.88rem", borderRadius: "var(--border-radius-1)" }}>
@@ -2223,7 +2226,7 @@ function openExportDialog() {
               : <><i className="fas fa-file-import me-2" /><span className="btn-text">Import</span></>}
           </button>
           {config.features.liveMeterEnabled && (
-            <button type="button" id="showLiveMeterBtn"
+            <button type="button" id="showLiveMeterBtn" onClick={() => setShowLive(true)}
               className="btn btn-outline-success d-inline-flex align-items-center">
               <i className="fas fa-satellite-dish me-2" /><span className="btn-text">Live Meter</span>
             </button>

@@ -280,6 +280,32 @@ export const liveMeterConfigs = pgTable("live_meter_configs", {
   updatedAt: str("updated_at"),
 });
 
+// ── Live Meter (ระบบใหม่): อุปกรณ์มิเตอร์อัจฉริยะแต่ละตัว + ค่าล่าสุดที่ส่งเข้ามา (ไม่เก็บประวัติ) ผูกกับห้องได้ ──
+// slaveId = รหัสอุปกรณ์ที่อุปกรณ์ส่งมา (ซ้ำข้ามองค์กรได้ จึง unique เฉพาะภายในองค์กร)
+export const liveMeters = pgTable("live_meters", {
+  id: text("id").primaryKey(),
+  orgId: orgId(),
+  slaveId: str("slave_id"),
+  name: str("name"),
+  roomId: str("room_id"),
+  type: str("type"), // "electric" | "water"
+  lastSeenAt: str("last_seen_at"),
+  value: str("value"), // เลขมิเตอร์สะสม (หน่วย)
+  voltage: str("voltage"),
+  current: str("current"),
+  power: str("power"),
+  createdAt: str("created_at"),
+}, (table) => ({
+  orgSlaveUnique: uniqueIndex("live_meters_org_slave_unique").on(table.orgId, table.slaveId),
+}));
+
+// คีย์สำหรับให้อุปกรณ์ยืนยันตัวตอนส่งค่า (หอพักละ 1 คีย์ ออกใหม่ได้)
+export const liveMeterKeys = pgTable("live_meter_keys", {
+  orgId: text("org_id").primaryKey(),
+  apiKey: str("api_key"),
+  createdAt: str("created_at"),
+});
+
 export const liveMeterLogs = pgTable("live_meter_logs", {
   id: serial("id").primaryKey(),
   timestamp: str("timestamp"),
