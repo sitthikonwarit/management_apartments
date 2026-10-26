@@ -71,6 +71,7 @@ const RULES: LogRule[] = [
   { method: "PUT", pattern: /^\/settings\/[^/]+$/, entityType: "formula", action: "update", label: "แก้ไขสูตรคำนวณ" },
   { method: "DELETE", pattern: /^\/settings\/[^/]+$/, entityType: "formula", action: "delete", label: "ลบสูตรคำนวณ" },
 
+  { method: "POST", pattern: /^\/auth\/change-password$/, entityType: "auth", action: "update", label: "ตั้งรหัสผ่านใหม่" },
   // chat (แชท LINE) — เฉพาะการตอบกลับ, ข้อความเข้าจาก webhook ไม่ผ่านตารางนี้ (ไม่มี authUser ตอนนั้น)
   { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/reply$/, entityType: "chat", action: "create", label: "ส่งข้อความแชทตอบผู้เช่า" },
   { method: "POST", pattern: /^\/chat\/conversations\/[^/]+\/send-attachment$/, entityType: "chat", action: "create", label: "ส่งไฟล์แนบทางแชท" },

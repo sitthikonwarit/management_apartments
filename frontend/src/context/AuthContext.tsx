@@ -6,6 +6,7 @@ export interface AuthUser {
   orgId: string;
   username: string;
   displayName: string;
+  mustChangePassword?: boolean;
 }
 
 interface AuthContextValue {
@@ -25,6 +26,7 @@ interface AuthContextValue {
   // pages/LineLoginCallbackPage.tsx) ต่างจาก login() ตรงที่ไม่มี username/password ให้ยิง /auth/login เอง
   loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   lock: () => void;
   unlock: (password: string) => Promise<void>;
 }
@@ -37,6 +39,7 @@ const AuthContext = createContext<AuthContextValue>({
   login: async () => {},
   loginWithToken: async () => {},
   logout: () => {},
+  refreshUser: async () => {},
   lock: () => {},
   unlock: async () => {},
 });
@@ -100,6 +103,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("auth:session-revoked", handler);
   }, []);
 
+  async function refreshUser() {
+    const u = await authApi.me();
+    setUser(u);
+  }
+
   async function login(username: string, password: string) {
     const res = await authApi.login(username, password);
     setAuthToken(res.token);
@@ -131,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, locked, sessionRevoked, login, loginWithToken, logout, lock, unlock }}>
+    <AuthContext.Provider value={{ user, loading, locked, sessionRevoked, login, loginWithToken, logout, refreshUser, lock, unlock }}>
       {children}
     </AuthContext.Provider>
   );

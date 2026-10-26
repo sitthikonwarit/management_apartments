@@ -38,6 +38,7 @@ export const authApi = {
     api.post("/auth/login", { username, password }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
   logout: () => api.post("/auth/logout").then((r) => r.data),
+  changePassword: (newPassword: string, confirmPassword: string) => api.post("/auth/change-password", { newPassword, confirmPassword }).then((r) => r.data),
   getUsers: () => api.get("/auth/users").then((r) => r.data),
   createUser: (username: string, password: string, displayName?: string, phone?: string) =>
     api.post("/auth/users", { username, password, displayName, phone }).then((r) => r.data),
@@ -462,6 +463,12 @@ export interface SuperAdminOrg {
   // backend/src/lib/wsHub.ts) — ใช้โชว์ "สถานะการใช้งานเว็บสด" แยกจาก createdAt/สมัครเมื่อ ที่เป็นข้อมูลเก่า
   online: boolean;
   owner: { username: string | null; phone: string | null; displayName: string | null; lineLinked: boolean };
+  lastLogin?: { username: string; at: string } | null;
+}
+
+export interface SuperAdminUser {
+  id: string; orgId: string; orgName: string; orgStatus: string; username: string | null; displayName: string; role: string;
+  phone: string | null; lineLinked: boolean; lastLoginAt: string; mustChangePassword: boolean;
 }
 
 export const superAdminApi = {
@@ -469,6 +476,8 @@ export const superAdminApi = {
   // SuperAdminLoginPage.tsx) คืน token ตรงๆ ให้หน้าเว็บเก็บเองผ่าน setSuperAdminToken ไม่ต้อง redirect
   // ผ่าน backend เหมือนขั้นตอน LINE Login
   login: (password: string) => superAdminHttp.post("/auth/superadmin/login", { password }).then((r) => r.data as { token: string }),
+  getUsers: () => superAdminHttp.get("/superadmin/users").then((r) => r.data as SuperAdminUser[]),
+  resetUserPassword: (id: string) => superAdminHttp.post(`/superadmin/users/${id}/reset-password`).then((r) => r.data as { username: string; password: string }),
   getOrganizations: () => superAdminHttp.get("/superadmin/organizations").then((r) => r.data as SuperAdminOrg[]),
   // อัตราเรียก API สดๆ (ไม่แตะ DB ฝั่ง backend เลย — ดู lib/apiUsageTracker.ts) หน้าเว็บ poll endpoint นี้
   // ทุกๆ ~5 วินาทีแทนการโหลด getOrganizations() ทั้งก้อนซ้ำๆ (หนักกว่ามากเพราะต้องคำนวณพื้นที่ใช้งานด้วย)

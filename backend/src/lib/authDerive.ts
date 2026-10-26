@@ -4,7 +4,7 @@ import { verifyToken } from "./jwt";
 import { db } from "../db";
 import { users, organizations } from "../db/schema";
 
-export interface AuthUser { id: string; username: string; orgId: string }
+export interface AuthUser { id: string; username: string; orgId: string; mustChangePassword: boolean }
 
 // อ่าน+ตรวจ Bearer token จาก header แล้วแปะผลเป็น authUser (หรือ null ถ้าไม่มี/ไม่ถูกต้อง/ถูกแทนที่แล้ว)
 // ไว้ใน context — เป็น plugin ชื่อ "auth-derive" — .use() ซ้ำได้จากหลายที่โดยไม่ derive ซ้ำ (Elysia dedupe
@@ -20,7 +20,7 @@ export const authDerive = new Elysia({ name: "auth-derive" })
     const payload = token ? verifyToken(token) : null;
     if (!payload || typeof payload.sub !== "string") return { authUser: null };
 
-    const [row] = await db.select({ currentSessionId: users.currentSessionId, orgId: users.orgId })
+    const [row] = await db.select({ currentSessionId: users.currentSessionId, orgId: users.orgId, mustChangePassword: users.mustChangePassword })
       .from(users).where(eq(users.id, payload.sub));
     if (!row || !row.orgId) return { authUser: null };
     // ผู้ใช้เก่าที่ backfill ก่อนมีฟีเจอร์นี้จะมี currentSessionId ว่างเปล่า — ยอมให้ผ่านได้ (เทียบเฉพาะตอน
@@ -32,5 +32,5 @@ export const authDerive = new Elysia({ name: "auth-derive" })
     const [org] = await db.select({ status: organizations.status }).from(organizations).where(eq(organizations.id, row.orgId));
     if (org?.status === "suspended") return { authUser: null };
 
-    return { authUser: { id: payload.sub, username: String(payload.username ?? ""), orgId: row.orgId } };
+    return { authUser: { id: payload.sub, username: String(payload.username ?? ""), orgId: row.orgId, mustChangePassword: row.mustChangePassword === "true" } };
   });

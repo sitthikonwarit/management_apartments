@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { activityLogs } from "../db/schema";
 
-const SENSITIVE_KEYS = new Set(["password", "passwordHash", "token", "currentSessionId", "sid"]);
+const SENSITIVE_KEYS = new Set(["password", "passwordHash", "token", "currentSessionId", "sid", "newPassword", "confirmPassword"]);
 const MAX_STRING_LEN = 500; // ตัดสตริงยาวผิดปกติ (เช่น base64 รูปภาพ) ทิ้ง ไม่ให้ log บวมเกินจำเป็น
 const MAX_JSON_LEN = 20000; // จำกัดขนาดรวมของ JSON ที่ serialize แล้วต่อ 1 ฟิลด์ กันข้อมูลก้อนใหญ่ผิดปกติ
 

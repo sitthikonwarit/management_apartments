@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { superAdminApi, type SuperAdminOrg, type SuperAdminRequestRate, type SuperAdminSystemHealth } from "../api/client";
 import { toastSuccess, toastError } from "../utils/toast";
 import { thaiDateOnlyString } from "../utils/yearFormat";
+import SuperAdminUsersModal from "../components/SuperAdminUsersModal";
 
 const API_USAGE_POLL_MS = 5000;
 
@@ -116,6 +117,7 @@ export default function SuperAdminDashboardPage() {
   const [resetResult, setResetResult] = useState<{ username: string; password: string } | null>(null);
   const [resetCopied, setResetCopied] = useState(false);
 
+  const [showUsers, setShowUsers] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -398,9 +400,14 @@ export default function SuperAdminDashboardPage() {
       <div className="detail-section custom-card">
         <div className="detail-section-header">
           <h6 className="mb-0"><i className="fas fa-list me-2" />รายชื่อองค์กร</h6>
-          <button className="btn btn-primary btn-sm" onClick={openAddModal}>
-            <i className="fas fa-plus me-1" />เพิ่มองค์กร
-          </button>
+          <div className="d-flex gap-2">
+            <button className="btn btn-outline-primary btn-sm" onClick={() => setShowUsers(true)}>
+              <i className="fas fa-users me-1" />ผู้ใช้ทั้งหมด
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={openAddModal}>
+              <i className="fas fa-plus me-1" />เพิ่มองค์กร
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -418,6 +425,7 @@ export default function SuperAdminDashboardPage() {
                   <th>เบอร์</th>
                   <th>บัญชี</th>
                   <th>สมัครเมื่อ</th>
+                  <th>เข้าล่าสุด</th>
                   <th className="text-center">ห้อง</th>
                   <th className="text-center">ผู้เช่า</th>
                   <th className="text-center">พนักงาน</th>
@@ -450,6 +458,9 @@ export default function SuperAdminDashboardPage() {
                       {org.owner.username && <div className="text-muted" style={{ fontSize: 11 }}>user: {org.owner.username}</div>}
                     </td>
                     <td className="small text-muted">{org.createdAt ? thaiDateOnlyString(new Date(org.createdAt)) : "-"}</td>
+                    <td className="small">
+                      {org.lastLogin ? <><span className="fw-bold">{org.lastLogin.username}</span><div className="text-muted">{new Date(org.lastLogin.at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</div></> : <span className="text-muted">-</span>}
+                    </td>
                     <td className="text-center">{org.counts.rooms}</td>
                     <td className="text-center">{org.counts.tenants}</td>
                     <td className="text-center">{org.counts.users}</td>
@@ -559,6 +570,8 @@ export default function SuperAdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {showUsers && <SuperAdminUsersModal onClose={() => setShowUsers(false)} onUnauthorized={() => navigate("/superadmin/login", { replace: true })} />}
 
       {resetTarget && (
         <div className="confirm-overlay" onClick={() => !resetting && setResetTarget(null)}>

@@ -343,6 +343,8 @@ export const users = pgTable("users", {
   createdAt: str("created_at"),
   updatedAt: str("updated_at"),
   lastLoginAt: str("last_login_at"),
+  // "true" = เพิ่งถูกผู้ดูแลแพลตฟอร์มรีเซ็ตเป็นรหัสผ่านชั่วคราว — ต้องตั้งรหัสผ่านใหม่ (กรอก 2 รอบ) ก่อนใช้งานส่วนอื่น
+  mustChangePassword: text("must_change_password").notNull().default("false"),
   // รหัสเซสชันที่ "ใช้งานอยู่ปัจจุบัน" — สุ่มใหม่ทุกครั้งที่ login/register/unlock สำเร็จ แล้วฝังไปกับ JWT
   // (claim "sid") ด้วย ทุก request ที่ล็อกอินแล้วจะเทียบ sid ในโทเค็นกับค่านี้ในนี้เสมอ (ดู authDerive.ts)
   // ถ้าไม่ตรงกันแปลว่ามีการ login ซ้อนจากที่อื่นทีหลัง โทเค็นเก่าจะถือเป็นใช้ไม่ได้ทันที (บังคับ session เดียว)

@@ -38,6 +38,7 @@ import BillsPage from "./pages/BillsPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import RepairsPage from "./pages/RepairsPage";
 import TaxPage from "./pages/TaxPage";
+import ForceChangePassword from "./components/ForceChangePassword";
 import SettingsPage from "./pages/SettingsPage";
 import OnboardingWizard from "./pages/OnboardingWizard";
 import LogPage from "./pages/LogPage";
@@ -90,6 +91,9 @@ function AuthenticatedShell() {
   // อยู่ใน DOM คนที่มี DevTools จะลบ overlay ออกแล้วเห็นข้อมูลจริงได้ทันที — ต้องไม่มีข้อมูลอะไรให้เปิดดูเลย
   // จนกว่าจะกรอกรหัสผ่านถูก (unlock() ใน AuthContext เอง ก็ล้าง token จริงตอน lock() ไปแล้วด้วย)
   if (locked) return <LockScreen />;
+
+  // ถูกรีเซ็ตเป็นรหัสผ่านชั่วคราว — ต้องตั้งรหัสใหม่ (กรอก 2 รอบ) ก่อนเข้าใช้งาน
+  if (user.mustChangePassword) return <ForceChangePassword />;
 
   return (
     <div className="dashboard-container">

@@ -17,6 +17,7 @@ function parseUser(r: typeof users.$inferSelect) {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     lastLoginAt: r.lastLoginAt,
+    mustChangePassword: r.mustChangePassword === "true",
     // เบอร์โทรไว้กรอกเพื่อกดเชื่อม LINE ทีหลัง (ดู GET /auth/line/authorize?phone= ใน routes/lineLogin.ts) —
     // ส่งเบอร์ดิบออกไปด้วยเลย (ไม่ใช่แค่ boolean) เพราะหน้า Settings ต้องเอาไปประกอบลิงก์ปุ่ม "เชื่อม LINE"
     phone: r.phone,
@@ -95,6 +96,16 @@ export const authProtectedRoute = new Elysia({ prefix: "/auth" })
       action: "logout", entityType: "auth", description: "ออกจากระบบ", status: 200,
       userAgent: headers["user-agent"] ?? "", ip: getClientIp(headers, server, request),
     });
+    return { ok: true };
+  })
+  // ตั้งรหัสผ่านใหม่ของตัวเอง (กรอก 2 รอบ) — ใช้ตอนถูกรีเซ็ตเป็นรหัสชั่วคราว (ล้างสถานะ "ต้องเปลี่ยนรหัส") ไม่เตะเซสชันปัจจุบัน
+  .post("/change-password", async ({ authUser, body, set }) => {
+    if (!authUser) { set.status = 401; return { error: "กรุณาเข้าสู่ระบบ" }; }
+    const b = body as any;
+    const pw = String(b?.newPassword ?? "");
+    if (pw.length < 6) { set.status = 400; return { error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" }; }
+    if (pw !== String(b?.confirmPassword ?? "")) { set.status = 400; return { error: "รหัสผ่านทั้งสองช่องไม่ตรงกัน" }; }
+    await db.update(users).set({ passwordHash: await Bun.password.hash(pw), mustChangePassword: "false", updatedAt: new Date().toISOString() }).where(eq(users.id, authUser.id));
     return { ok: true };
   })
   .get("/me", async ({ authUser, set }) => {

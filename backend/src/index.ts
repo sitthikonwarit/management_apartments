@@ -177,6 +177,14 @@ const app = new Elysia()
   .onBeforeHandle(({ authUser, set }) => {
     if (!authUser) { set.status = 401; return { error: "กรุณาเข้าสู่ระบบ" }; }
   })
+  // บัญชีที่ถูกรีเซ็ตเป็นรหัสชั่วคราว ใช้ได้แค่ดูข้อมูลตัวเอง/เปลี่ยนรหัสผ่าน/ออกจากระบบ จนกว่าจะตั้งรหัสใหม่เสร็จ
+  .onBeforeHandle(({ authUser, request, set }) => {
+    if (!authUser?.mustChangePassword) return;
+    const p = new URL(request.url).pathname;
+    if (p === "/auth/me" || p === "/auth/change-password" || p === "/auth/logout") return;
+    set.status = 403;
+    return { error: "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน", code: "MUST_CHANGE_PASSWORD" };
+  })
   // ── บันทึก activity log อัตโนมัติสำหรับทุก request ที่แก้ไขข้อมูล (POST/PUT/PATCH/DELETE) ที่สำเร็จ
   // ไม่ต้องเขียนโค้ด log แยกในแต่ละ route handler — ครอบคลุมทุก route ที่เมานต์ "หลัง" จุดนี้อัตโนมัติ
   // (login/register/logout log แยกเป็นพิเศษที่จุดเกิดเหตุจริงใน auth.ts เพราะตอนนั้นยังไม่มี authUser)

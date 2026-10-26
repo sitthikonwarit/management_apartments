@@ -284,6 +284,10 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     // (ดูคอมเมนต์ที่ lib/storageUsage.ts) ส่วนอัตราเรียก API ด้านล่างอ่านจาก in-memory ล้วนๆ เร็วมาก ไม่ได้แตะ DB
     const withDetails = await Promise.all(orgs.map(async (org) => {
       const owner = await getOwnerUser(org.id);
+      // ผู้ใช้ที่เข้าสู่ระบบล่าสุดขององค์กรนี้ (ใครและเมื่อไหร่)
+      const orgUsers = await db.select({ username: users.username, displayName: users.displayName, at: users.lastLoginAt }).from(users).where(eq(users.orgId, org.id));
+      const latest = orgUsers.filter((x) => x.at).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
+      const lastLogin = latest ? { username: latest.username || latest.displayName || "-", at: latest.at } : null;
       return {
         id: org.id,
         name: org.name,
@@ -302,6 +306,7 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
           username: owner?.username ?? null, phone: owner?.phone ?? null,
           displayName: owner?.displayName ?? null, lineLinked: !!owner?.lineUserId,
         },
+        lastLogin,
       };
     }));
     return withDetails;
@@ -334,6 +339,27 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
   // users.username ใน db/schema.ts) — กรณีนั้นตั้ง username ให้อัตโนมัติจาก slug องค์กรไปด้วยเลย ไม่งั้นรีเซ็ต
   // รหัสผ่านไปก็ล็อกอินด้วย username/password ไม่ได้อยู่ดี (ไม่มีชื่อผู้ใช้ให้กรอก) เตะเซสชันที่ล็อกอินค้างอยู่
   // ของเจ้าของคนนี้คนเดียว (revokeSessionsForUser ไม่ใช่ revokeSessionsForOrg — ไม่ควรกระทบพนักงานคนอื่นในองค์กร)
+  // รายชื่อผู้ใช้ทุกคนทุกองค์กร + เข้าสู่ระบบล่าสุด (ไม่ส่ง passwordHash/lineUserId ตัวจริงออกไป)
+  .get("/users", async () => {
+    const [rows, orgs] = await Promise.all([db.select().from(users), db.select().from(organizations)]);
+    const orgMap = new Map(orgs.map((o) => [o.id, o]));
+    return rows.map((u) => ({
+      id: u.id, orgId: u.orgId, orgName: orgMap.get(u.orgId)?.name ?? "(ไม่พบองค์กร)", orgStatus: orgMap.get(u.orgId)?.status ?? "",
+      username: u.username, displayName: u.displayName, role: u.role, phone: u.phone, lineLinked: !!u.lineUserId,
+      lastLoginAt: u.lastLoginAt ?? "", mustChangePassword: u.mustChangePassword === "true",
+    }));
+  })
+  // รีเซ็ตรหัสผ่านรายบุคคลเป็นรหัสชั่วคราว — เจ้าตัวล็อกอินแล้วถูกบังคับตั้งรหัสใหม่ (ดู POST /auth/change-password)
+  .post("/users/:id/reset-password", async ({ params, set }) => {
+    const [u] = await db.select().from(users).where(eq(users.id, params.id));
+    if (!u) { set.status = 404; return { error: "ไม่พบผู้ใช้" }; }
+    if (!u.username) { set.status = 400; return { error: "บัญชีนี้ยังไม่มีชื่อผู้ใช้ จึงรีเซ็ตรหัสผ่านไม่ได้" }; }
+    const password = generateRandomPassword();
+    await db.update(users).set({ passwordHash: await Bun.password.hash(password), mustChangePassword: "true", updatedAt: new Date().toISOString() }).where(eq(users.id, u.id));
+    revokeSessionsForUser(u.id);
+    console.log(`[superadmin] temp password for user=${u.id} (${u.username})`);
+    return { username: u.username, password };
+  })
   .post("/organizations/:id/reset-password", async ({ params, set }) => {
     const [org] = await db.select({ id: organizations.id, name: organizations.name, slug: organizations.slug }).from(organizations).where(eq(organizations.id, params.id));
     if (!org) { set.status = 404; return { error: "ไม่พบองค์กร" }; }
@@ -344,7 +370,7 @@ export const superAdminOrgRoute = new Elysia({ prefix: "/superadmin" })
     const newPassword = generateRandomPassword();
     const passwordHash = await Bun.password.hash(newPassword);
     const username = owner.username || org.slug || `owner-${org.id}`;
-    await db.update(users).set({ username, passwordHash, updatedAt: new Date().toISOString() }).where(eq(users.id, owner.id));
+    await db.update(users).set({ username, passwordHash, mustChangePassword: "true", updatedAt: new Date().toISOString() }).where(eq(users.id, owner.id));
     revokeSessionsForUser(owner.id);
 
     console.log(`[superadmin] reset password for org=${params.id} (${org.name}) owner=${owner.id}`);
