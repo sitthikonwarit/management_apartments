@@ -1170,7 +1170,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                   <div className="form-check form-switch mb-0">
                     <input className="form-check-input" type="checkbox" checked={!!item.serviceFeeConfig?.enabled}
                       onChange={(e) => onUpdate((d) => {
-                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
+                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, waterFlat: Number(config.serviceFee?.waterFlat) || 0, electricFlat: Number(config.serviceFee?.electricFlat) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
                         d.serviceFeeConfig = { ...cur, enabled: e.target.checked } as any;
                       })} />
                   </div>
@@ -1187,6 +1187,16 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                         <small className="text-muted">ค่าบริการน้ำ (฿/หน่วย)</small>
                         <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.waterRate}
                           onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.waterRate = Number(e.target.value) || 0; })} />
+                      </div>
+                      <div className="col-6">
+                        <small className="text-muted">ไฟเหมาจ่าย (฿/บิล)</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.electricFlat ?? 0}
+                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.electricFlat = Number(e.target.value) || 0; })} />
+                      </div>
+                      <div className="col-6">
+                        <small className="text-muted">น้ำเหมาจ่าย (฿/บิล)</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.waterFlat ?? 0}
+                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.waterFlat = Number(e.target.value) || 0; })} />
                       </div>
                     </div>
                     <div className="btn-group btn-group-sm w-100 mb-2" role="group">

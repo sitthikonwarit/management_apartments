@@ -41,7 +41,7 @@ export interface AppConfig {
   waterRate: number;
   // ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เช่น ค่าไฟหน่วยละ 4 บาท + ค่าบริการหน่วยละ 3 บาท
   // displayMode เลือกได้ว่าจะรวมยอดค่าบริการเข้าบรรทัดค่าน้ำ/ค่าไฟเดียวกัน หรือแยกเป็นบรรทัดต่างหากในรายละเอียดบิล
-  serviceFee: { enabled: boolean; waterRate: number; electricRate: number; displayMode: "combined" | "separate" };
+  serviceFee: { enabled: boolean; waterRate: number; electricRate: number; waterFlat?: number; electricFlat?: number; displayMode: "combined" | "separate" };
   overdue: { enabled: boolean; day: number; type: "fixed" | "daily"; amount: number };
   // ปัดเศษยอดบิลลงเป็นหลัก unit บาท (เช่น unit=5: 4127 -> 4125) เฉพาะบิลที่ยังไม่เลยวันครบกำหนดชำระ
   // (ใช้วันครบกำหนดเดียวกับ overdue.day ด้านบน) — เปิด/ปิดได้ที่นี่ ไม่กระทบบิลเดือนเก่าที่ล็อกค่าไว้แล้ว
@@ -118,7 +118,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   orgSlug: "",
   electricRate: 0,
   waterRate: 0,
-  serviceFee: { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },
+  serviceFee: { enabled: false, waterRate: 0, electricRate: 0, waterFlat: 0, electricFlat: 0, displayMode: "combined" },
   overdue: { enabled: false, day: 5, type: "fixed", amount: 0 },
   rounding: { enabled: false, unit: 5 },
   appIdentity: {

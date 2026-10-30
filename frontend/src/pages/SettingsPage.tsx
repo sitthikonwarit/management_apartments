@@ -263,6 +263,8 @@ export default function SettingsPage() {
   const [serviceFeeEnabled, setServiceFeeEnabled] = useState(false);
   const [serviceFeeWaterRate, setServiceFeeWaterRate] = useState(0);
   const [serviceFeeElectricRate, setServiceFeeElectricRate] = useState(0);
+  const [serviceFeeWaterFlat, setServiceFeeWaterFlat] = useState(0);
+  const [serviceFeeElectricFlat, setServiceFeeElectricFlat] = useState(0);
   const [serviceFeeDisplayMode, setServiceFeeDisplayMode] = useState<"combined" | "separate">("combined");
   const [overdueEnabled, setOverdueEnabled] = useState(false);
   const [dueEom, setDueEom] = useState(false);
@@ -402,6 +404,8 @@ export default function SettingsPage() {
     setServiceFeeEnabled(config.serviceFee.enabled);
     setServiceFeeWaterRate(config.serviceFee.waterRate);
     setServiceFeeElectricRate(config.serviceFee.electricRate);
+    setServiceFeeWaterFlat(config.serviceFee.waterFlat ?? 0);
+    setServiceFeeElectricFlat(config.serviceFee.electricFlat ?? 0);
     setServiceFeeDisplayMode(config.serviceFee.displayMode);
     setOverdueEnabled(config.overdue.enabled);
     setDueEom(config.overdue.day === 0);
@@ -624,6 +628,8 @@ export default function SettingsPage() {
           enabled: serviceFeeEnabled,
           waterRate: Number(serviceFeeWaterRate) || 0,
           electricRate: Number(serviceFeeElectricRate) || 0,
+          waterFlat: Number(serviceFeeWaterFlat) || 0,
+          electricFlat: Number(serviceFeeElectricFlat) || 0,
           displayMode: serviceFeeDisplayMode,
         },
         overdue: {
@@ -985,7 +991,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <Searchable query={q} keywords="ค่าบริการต่อหน่วย service fee ค่าบริการน้ำ ค่าบริการไฟ">
+                <Searchable query={q} keywords="ค่าบริการต่อหน่วย ค่าบริการเหมาจ่าย service fee ค่าบริการน้ำ ค่าบริการไฟ">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                     <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid #b8860b", paddingBottom: 8 }}>
                       <h6 className="mb-0" style={{ fontWeight: 700, color: "#b8860b", border: "none", padding: 0, margin: 0 }}><i className="fas fa-file-invoice-dollar me-2" />ค่าบริการต่อหน่วย</h6>
@@ -1013,6 +1019,22 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="col-md-4">
+                        <label className="form-label fw-bold"><i className="fas fa-bolt text-warning me-1" />ค่าบริการไฟเหมาจ่าย (บาท/เดือน)</label>
+                        <div className="input-group">
+                          <input type="number" className="form-control text-end fs-5 fw-bold" placeholder="0.00"
+                            value={serviceFeeElectricFlat} onChange={(e) => setServiceFeeElectricFlat(Number(e.target.value))} />
+                          <span className="input-group-text">บาท</span>
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label fw-bold"><i className="fas fa-tint text-info me-1" />ค่าบริการน้ำเหมาจ่าย (บาท/เดือน)</label>
+                        <div className="input-group">
+                          <input type="number" className="form-control text-end fs-5 fw-bold" placeholder="0.00"
+                            value={serviceFeeWaterFlat} onChange={(e) => setServiceFeeWaterFlat(Number(e.target.value))} />
+                          <span className="input-group-text">บาท</span>
+                        </div>
+                      </div>
+                      <div className="col-md-4">
                         <label className="form-label fw-bold">การแสดงผลในรายละเอียดบิล</label>
                         <CustomSelect2
                           value={{ value: serviceFeeDisplayMode, label: serviceFeeDisplayMode === "separate" ? "แยกบรรทัดค่าบริการ" : "รวมกับค่าน้ำ/ค่าไฟ" }}
@@ -1030,7 +1052,7 @@ export default function SettingsPage() {
                           {serviceFeeDisplayMode === "separate"
                             ? "ในรายละเอียดบิลจะแยกเป็น 2 บรรทัด (ค่าไฟ และ ค่าบริการไฟ)"
                             : "ในรายละเอียดบิลจะรวมแสดงเป็นบรรทัดเดียว (ค่าไฟ)"}
-                          {" "}ยอดรวมที่เรียกเก็บเท่ากันทั้งสองแบบ ต่างกันแค่การแสดงผล
+                          {" "}ยอดรวมที่เรียกเก็บเท่ากันทั้งสองแบบ ต่างกันแค่การแสดงผล · ค่าบริการเหมาจ่ายคิดเป็นยอดคงที่ต่อบิล (ไม่คูณหน่วย) เฉพาะบิลที่เปิดคิดค่าน้ำ/ไฟ
                         </small>
                       </div>
                     </div>

@@ -579,6 +579,8 @@ export function recalcItem(
     enabled: !!config.serviceFee?.enabled,
     waterRate: Number(config.serviceFee?.waterRate) || 0,
     electricRate: Number(config.serviceFee?.electricRate) || 0,
+    waterFlat: Number(config.serviceFee?.waterFlat) || 0,
+    electricFlat: Number(config.serviceFee?.electricFlat) || 0,
     displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined",
   };
   item.serviceFeeConfig = svcCfg;
@@ -592,8 +594,8 @@ export function recalcItem(
 
   const wf = item.waterFormula || waterDefault;
   const ef = item.electricFormula || electricDefault;
-  item.waterServiceFee = item.waterActive && svcCfg.enabled ? item.meterWater.unit * svcCfg.waterRate : 0;
-  item.electricServiceFee = item.electricActive && svcCfg.enabled ? item.meterElectric.unit * svcCfg.electricRate : 0;
+  item.waterServiceFee = item.waterActive && svcCfg.enabled ? item.meterWater.unit * svcCfg.waterRate + (Number(svcCfg.waterFlat) || 0) : 0;
+  item.electricServiceFee = item.electricActive && svcCfg.enabled ? item.meterElectric.unit * svcCfg.electricRate + (Number(svcCfg.electricFlat) || 0) : 0;
   item.priceWater = (item.waterActive ? calculateComplexPrice(item.meterWater.unit, item.waterRate, wf) : 0) + item.waterServiceFee;
   item.priceElectric = (item.electricActive ? calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef) : 0) + item.electricServiceFee;
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);
