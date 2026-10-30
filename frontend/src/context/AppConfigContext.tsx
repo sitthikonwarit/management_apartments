@@ -1,3 +1,4 @@
+import { DEFAULT_CONTRACT, type ContractConfig } from "../utils/contractTemplate";
 import { createContext, useContext, useEffect, useState } from "react";
 import { settingsApi } from "../api/client";
 import { setGlobalYearFormat, type YearFormat } from "../utils/yearFormat";
@@ -47,6 +48,7 @@ export interface AppConfig {
   rounding: { enabled: boolean; unit: number };
   appIdentity: AppIdentity;
   features: { liveMeterEnabled: boolean; splitRentByResidents: boolean };
+  contract: ContractConfig; // แม่แบบ/ข้อมูลสัญญาเช่า (Settings > สัญญาเช่า)
   meterDigits: number; // จำนวนหลักสูงสุดที่กรอกเลขมิเตอร์ได้ (ค่าเริ่มต้น 5 หลัก = 0-99999)
   yearFormat: YearFormat;
   // นาทีที่ไม่มีการใช้งานแล้วให้เด้งออกจากระบบ (auto-logout) อัตโนมัติ — 0 = ปิดใช้งาน
@@ -126,6 +128,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     nameColors: [],
   },
   features: { liveMeterEnabled: true, splitRentByResidents: false },
+  contract: DEFAULT_CONTRACT,
   meterDigits: 5,
   yearFormat: "BE",
   sessionTimeoutMinutes: 30,
@@ -177,6 +180,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...data.overdue },
         rounding: { ...DEFAULT_APP_CONFIG.rounding, ...data.rounding },
         features: { ...DEFAULT_APP_CONFIG.features, ...data.features },
+        contract: { ...DEFAULT_CONTRACT, ...(data.contract ?? {}) },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...data.lineMessaging },
         richMenu: {
           ...DEFAULT_APP_CONFIG.richMenu, ...data.richMenu,

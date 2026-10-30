@@ -1,3 +1,5 @@
+import { DEFAULT_CONTRACT, CONTRACT_VARIABLES, buildContractVars, renderContract, type ContractConfig } from "../utils/contractTemplate";
+import { LeaseContractSheet } from "../components/LeaseContract";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SelectRaw from "react-select";
@@ -17,9 +19,10 @@ import { toastSuccess, toastError } from "../utils/toast";
 import { useHiddenMenus } from "../utils/useHiddenMenus";
 import { navItems } from "../components/layout/Sidebar";
 
-type Tab = "appearance" | "menu" | "bill" | "features" | "richmenu" | "users";
+type Tab = "appearance" | "contract" | "menu" | "bill" | "features" | "richmenu" | "users";
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "appearance", label: "รูปลักษณ์ (Appearance)", icon: "fas fa-paint-brush" },
+  { key: "contract", label: "สัญญาเช่า (Contract)", icon: "fas fa-file-contract" },
   { key: "menu", label: "เมนู (Menu)", icon: "fas fa-bars" },
   { key: "bill", label: "ระบบบิล (Bill System)", icon: "fas fa-coins" },
   { key: "features", label: "ฟีเจอร์เสริม (Features)", icon: "fas fa-plug" },
@@ -271,6 +274,8 @@ export default function SettingsPage() {
   const [meterDigits, setMeterDigits] = useState(5);
   const [yearFormat, setYearFormat] = useState<"BE" | "CE">("BE");
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(30);
+  const [contractCfg, setContractCfg] = useState<ContractConfig>(config.contract ?? DEFAULT_CONTRACT);
+  const [contractPreview, setContractPreview] = useState(false);
   const [lineEnabled, setLineEnabled] = useState(false);
   const [lineToken, setLineToken] = useState("");
   const [lineTokenVisible, setLineTokenVisible] = useState(false);
@@ -405,6 +410,7 @@ export default function SettingsPage() {
     setMeterDigits(config.meterDigits);
     setYearFormat(config.yearFormat);
     setSessionTimeoutMinutes(config.sessionTimeoutMinutes);
+    setContractCfg(config.contract ?? DEFAULT_CONTRACT);
     setLineEnabled(config.lineMessaging.enabled);
     setLineToken(config.lineMessaging.channelAccessToken);
     setLineSecret(config.lineMessaging.channelSecret);
@@ -630,6 +636,7 @@ export default function SettingsPage() {
           nameText, nameColors,
         },
         features: { liveMeterEnabled, splitRentByResidents },
+        contract: contractCfg,
         meterDigits: Math.max(3, Math.min(9, Number(meterDigits) || 5)),
         yearFormat,
         sessionTimeoutMinutes: Math.max(0, Number(sessionTimeoutMinutes) || 0),
@@ -664,6 +671,7 @@ export default function SettingsPage() {
         serviceFee: { ...DEFAULT_APP_CONFIG.serviceFee, ...updated.serviceFee },
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...updated.overdue },
         features: { ...DEFAULT_APP_CONFIG.features, ...updated.features },
+        contract: { ...DEFAULT_CONTRACT, ...(updated.contract ?? {}) },
         lineMessaging: { ...DEFAULT_APP_CONFIG.lineMessaging, ...updated.lineMessaging },
         richMenu: {
           ...DEFAULT_APP_CONFIG.richMenu, ...updated.richMenu,
@@ -860,6 +868,76 @@ export default function SettingsPage() {
             )}
 
             {/* ── ระบบบิล (Bill System) ── */}
+            {sectionVisible("contract") && (
+              <div style={CATEGORY_CARD_STYLE} className="mb-4">
+                <h6 className="form-section-title"><i className="fas fa-file-contract me-2" />สัญญาเช่า (พิมพ์อัตโนมัติจากหน้าผู้เช่า)</h6>
+                <p className="text-muted small">กรอกข้อมูลผู้ให้เช่า/อาคาร/ค่าต่างๆ และแก้ข้อความสัญญาได้ทั้งฉบับ แล้วกด "บันทึกทั้งหมด" ด้านบน — ที่หน้าผู้เช่า กด "พิมพ์สัญญาเช่า" ระบบจะดึงชื่อ ที่อยู่ เลขบัตร ห้อง ค่าเช่า วันที่สัญญา มากรอกให้ ช่องที่ไม่มีข้อมูลจะเป็นเส้นประให้เขียนเอง</p>
+                <div className="row g-3">
+                  {([
+                    ["lessorName", "ชื่อผู้ให้เช่า", "เช่น นางสมพร ลัมภเวส"],
+                    ["signPlace", "ทำที่ (สถานที่ทำสัญญา)", "เช่น 259 ซอยอ่อนนุช 39 แขวงพัฒนาการ เขตสวนหลวง กรุงเทพมหานคร"],
+                    ["propertyNo", "อาคารเลขที่", ""], ["propertyRoad", "ถนน (อาคารที่ให้เช่า)", ""],
+                    ["propertySubdistrict", "แขวง/ตำบล (อาคาร)", ""], ["propertyDistrict", "เขต/อำเภอ (อาคาร)", ""],
+                    ["propertyProvince", "จังหวัด (อาคาร)", ""], ["purpose", "เพื่อเป็นประโยชน์ในการ", "ห้องพักอาศัย"],
+                    ["defaultArea", "ขนาดพื้นที่ (ตั้งต้น)", "เช่น 24 ตร.ม."],
+                    ["electricText", "ค่าไฟ (ข้อความ)", "ว่าง = ใช้ค่าไฟจากหน้าระบบบิล เช่น หน่วยละ 7 บาท"],
+                    ["waterText", "ค่าน้ำ (ข้อความ)", "เช่น หน่วยแรก 50 บาท หน่วยต่อไปหน่วยละ 17 บาท"],
+                    ["commonFeeText", "ค่าบริการส่วนกลาง (ข้อความ)", "เช่น 100 บาท ต่อเดือน"],
+                    ["witness1", "พยาน 1", ""], ["witness2", "พยาน 2", ""],
+                  ] as [keyof ContractConfig, string, string][]).map(([k, label, ph]) => (
+                    <div key={k} className="col-12 col-md-6">
+                      <label className="form-label">{label}</label>
+                      <input className="form-control" value={String(contractCfg[k] ?? "")} placeholder={ph}
+                        onChange={(e) => setContractCfg({ ...contractCfg, [k]: e.target.value })} />
+                    </div>
+                  ))}
+                  {([
+                    ["defaultDeposit", "เงินประกัน (ตั้งต้น บาท)"], ["interestPercent", "ดอกเบี้ยค่าเช่าค้าง (% ต่อปี)"],
+                    ["moveOutFine", "ค่าปรับไม่ส่งมอบคืน (บาท/วัน)"], ["lateFee", "ค่าปรับชำระช้า (บาท/วัน — 0 = ใช้ค่าปรับในหน้าระบบบิล)"],
+                  ] as [keyof ContractConfig, string][]).map(([k, label]) => (
+                    <div key={k} className="col-12 col-md-6">
+                      <label className="form-label">{label}</label>
+                      <input type="number" min={0} className="form-control" value={Number(contractCfg[k]) || 0}
+                        onChange={(e) => setContractCfg({ ...contractCfg, [k]: Number(e.target.value) || 0 })} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="d-flex justify-content-between align-items-center mt-4 mb-1 flex-wrap gap-2">
+                  <label className="form-label fw-bold mb-0">ข้อความสัญญา (แม่แบบ)</label>
+                  <div className="d-flex gap-2">
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-1" />ดูตัวอย่าง</button>
+                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { if (window.confirm("คืนข้อความสัญญาเป็นแบบเริ่มต้น? ข้อความที่แก้ไว้จะหายไป")) setContractCfg({ ...contractCfg, template: DEFAULT_CONTRACT.template }); }}>คืนค่าเริ่มต้น</button>
+                  </div>
+                </div>
+                <textarea className="form-control" rows={18} style={{ fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
+                  onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
+                <div className="text-muted small mt-2">
+                  รูปแบบ: <code>{"# "}</code> หัวเรื่องกลางหน้า · <code>{"> "}</code> ชิดขวา · <code>{"~ "}</code> บรรทัดลายเซ็น · <code>---</code> ขึ้นหน้าใหม่ · เว้นบรรทัดเพื่อแยกข้อ · ตัวแปรเขียนเป็น <code>{"{{ชื่อตัวแปร}}"}</code>
+                </div>
+                <div className="mt-2 d-flex flex-wrap gap-1">
+                  {CONTRACT_VARIABLES.map((v) => (
+                    <span key={v.key} className="badge bg-secondary" style={{ fontWeight: 400, cursor: "pointer" }} title={`${v.label} — คลิกเพื่อคัดลอก`}
+                      onClick={() => navigator.clipboard?.writeText(`{{${v.key}}}`)}>{`{{${v.key}}}`} <span className="opacity-75">{v.label}</span></span>
+                  ))}
+                </div>
+                <div className="text-muted small mt-2">ข้อมูลที่กรอกเพิ่มได้ที่หน้าแก้ไขผู้เช่า (หัวข้อ "ข้อมูลสำหรับพิมพ์สัญญาเช่า"): วันที่ออกบัตรประชาชน, เงินประกัน, ขนาดพื้นที่ — วันที่ทำสัญญาใช้ "วันเข้าพัก" ของผู้เช่า</div>
+              </div>
+            )}
+
+            {contractPreview && (
+              <div className="confirm-overlay" style={{ alignItems: "flex-start", overflow: "auto" }} onClick={() => setContractPreview(false)}>
+                <div style={{ background: "#fff", width: "min(794px, 96vw)", margin: "3vh auto", padding: "40px 48px", borderRadius: 6, boxShadow: "0 8px 30px rgba(0,0,0,0.4)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
+                  <button className="btn btn-sm btn-outline-secondary" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => setContractPreview(false)}><i className="fas fa-times" /></button>
+                  <LeaseContractSheet blocks={renderContract(contractCfg.template, buildContractVars({
+                    tenant: { title: "นาย", firstName: "ตัวอย่าง", lastName: "ผู้เช่า", houseNo: "99", soi: "-", road: "-", tambon: "แขวงตัวอย่าง", amphoe: "เขตตัวอย่าง", province: "กรุงเทพมหานคร", idLicense: "1-2345-67890-12-3", tel: "081-234-5678", contractStartDate: "2026-01-01", contractEndDate: "2026-12-31", idCardIssued: "2020-05-10", deposit: 3000 },
+                    room: { number: "101", price: 2000 }, contract: contractCfg, yearFormat: config.yearFormat,
+                    electricRate: Number(electricRate) || 0, waterRate: Number(waterRate) || 0, overdueDay: Number(dueDay) || 5, overdueAmount: fineType === "fixed" ? Number(fineAmount) || 0 : 0,
+                  }))} />
+                </div>
+              </div>
+            )}
+
             {sectionVisible("menu") && (
               <div style={CATEGORY_CARD_STYLE} className="mb-4">
                 <h6 className="form-section-title"><i className="fas fa-bars me-2" />เมนูด้านข้าง</h6>

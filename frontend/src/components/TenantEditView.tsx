@@ -45,6 +45,7 @@ interface EditForm {
   houseNo: string; soi: string; road: string;
   province: string; amphoe: string; tambon: string; zipcode: string; address: string;
   contractStartDate: string; contractEndDate: string;
+  idCardIssued: string; deposit: string; contractArea: string;
 }
 
 export default function TenantEditView({
@@ -55,6 +56,9 @@ export default function TenantEditView({
   onSuccess: (updated: any) => void;
 }) {
   const [form, setForm] = useState<EditForm>({
+    idCardIssued: tenant.idCardIssued ?? "",
+    deposit: tenant.deposit ?? "",
+    contractArea: tenant.contractArea ?? "",
     amount: tenant.amount ?? "",
     idLicense: tenant.idLicense ?? "",
     title: tenant.title ?? "",
@@ -362,6 +366,23 @@ export default function TenantEditView({
             onChange={(v) => set("contractEndDate", v)}
             placeholder="เลือกวันหมดสัญญา"
           />
+        </div>
+
+        {/* ── ข้อมูลเพิ่มสำหรับพิมพ์สัญญาเช่า ── */}
+        <div className="col-12 mt-2">
+          <h5 className="form-section-title">ข้อมูลสำหรับพิมพ์สัญญาเช่า</h5>
+        </div>
+        <div className="col-md-4">
+          <label className="form-label">วันที่ออกบัตรประชาชน</label>
+          <ThaiDatePicker value={form.idCardIssued} onChange={(v) => set("idCardIssued", v)} placeholder="เลือกวันที่ออกบัตร" />
+        </div>
+        <div className="col-md-4">
+          <label className="form-label">เงินประกัน (บาท)</label>
+          <input type="number" min={0} className="form-control" value={form.deposit} onChange={(e) => set("deposit", e.target.value)} placeholder="ว่าง = ใช้ค่าตั้งต้นใน Settings" />
+        </div>
+        <div className="col-md-4">
+          <label className="form-label">ขนาดพื้นที่ที่เช่า</label>
+          <input className="form-control" value={form.contractArea} onChange={(e) => set("contractArea", e.target.value)} placeholder="เช่น 24 ตร.ม." />
         </div>
 
         {/* ── ผู้เช่าทดสอบ ── */}

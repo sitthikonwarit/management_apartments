@@ -56,6 +56,7 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
       liveMeterEnabled: r.liveMeterEnabled !== "false",
       splitRentByResidents: r.splitRentByResidents === "true",
     },
+    contract: (() => { try { const v = JSON.parse(r.contractConfig || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } })(),
     meterDigits: Math.max(3, Math.min(9, Number(r.meterDigits) || 5)),
     yearFormat: r.yearFormat === "CE" ? "CE" : "BE",
     // นาทีไม่มีการใช้งานแล้วเด้งออกจากระบบอัตโนมัติ — 0 = ปิดใช้งาน
@@ -248,6 +249,7 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       appNameColors: JSON.stringify(Array.isArray(b.appIdentity?.nameColors) ? b.appIdentity.nameColors : []),
       liveMeterEnabled: b.features?.liveMeterEnabled === false ? "false" : "true",
       splitRentByResidents: b.features?.splitRentByResidents ? "true" : "false",
+      contractConfig: JSON.stringify(b.contract && typeof b.contract === "object" ? b.contract : {}),
       meterDigits: String(Math.max(3, Math.min(9, Number(b.meterDigits) || 5))),
       yearFormat: b.yearFormat === "CE" ? "CE" : "BE",
       sessionTimeoutMinutes: String(Math.max(0, Number(b.sessionTimeoutMinutes) || 0)),

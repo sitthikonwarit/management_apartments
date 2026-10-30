@@ -77,6 +77,10 @@ export const tenants = pgTable("tenants", {
   overdueOverride: text("overdue_override").notNull().default("false"),
   // ผู้เช่า/ห้องทดสอบ — แสดงในตารางบิลตามปกติ (มีไฮไลต์) แต่ไม่นับรวมในสรุป Dashboard/ผลประกอบการ/ภาษี
   isTest: text("is_test").notNull().default("false"),
+  // ข้อมูลเพิ่มสำหรับพิมพ์สัญญาเช่าอัตโนมัติ (ดู frontend utils/contractTemplate.ts)
+  idCardIssued: str("id_card_issued"), // วันที่ออกบัตรประชาชน "YYYY-MM-DD"
+  deposit: str("deposit"), // เงินประกัน (บาท)
+  contractArea: str("contract_area"), // ขนาดพื้นที่ที่เช่า
   overdueEnabled: text("overdue_enabled").notNull().default("false"),
   overdueDay: str("overdue_day"),
   overdueFineType: str("overdue_fine_type"),
@@ -416,6 +420,8 @@ export const lineProfiles = pgTable("line_profiles", {
 // (แถวละ 1 องค์กร) แทนที่ sentinel "default" เดิม ดู getOrCreateConfig(orgId) ใน routes/settings.ts
 export const appConfig = pgTable("app_config", {
   id: text("id").primaryKey(),
+  // แม่แบบ/ข้อมูลสัญญาเช่า (JSON ทั้งก้อน แก้ที่ Settings > สัญญาเช่า)
+  contractConfig: text("contract_config").notNull().default("{}"),
   electricRate: str("electric_rate"),
   waterRate: str("water_rate"),
   // ── ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เปิด/ปิดได้ที่หน้า Settings เช่น ค่าไฟหน่วยละ 4 บาท

@@ -21,6 +21,8 @@ import { monthYearLabel, myScore, normalizeBillItem, type BillGroup } from "../u
 import { tenantDisplayName } from "../utils/tenantName";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
 import { toastSuccess, toastError } from "../utils/toast";
+import { LeaseContractPrint } from "../components/LeaseContract";
+import { buildContractVars, renderContract } from "../utils/contractTemplate";
 
 type ViewMode = "list" | "grid" | "table";
 type SubView = "list" | "detail" | "form" | "edit" | "tags";
@@ -89,6 +91,18 @@ function TenantDetailView({
   const roomNumber = room ? String(room.number) : (tenant.idRoom ? String(tenant.idRoom) : "");
   const allRoomsLabel = getTenantRoomsLabel(rooms, tenant); // ห้องหลัก + ห้องเพิ่มเติมทั้งหมด
   const myVehicles = vehicles.filter((v) => String(v.customerId) === String(tenant.id));
+
+  // พิมพ์สัญญาเช่าอัตโนมัติ — ดึงข้อมูลผู้เช่า/ห้อง/ค่าตั้งค่า แล้วกรอกลงแม่แบบ (แก้ข้อความได้ที่ Settings > สัญญาเช่า)
+  const [printingContract, setPrintingContract] = useState(false);
+  const contractBlocks = useMemo(() => {
+    if (!printingContract) return [];
+    const vars = buildContractVars({
+      tenant, room, contract: config.contract, yearFormat: config.yearFormat,
+      electricRate: config.electricRate, waterRate: config.waterRate,
+      overdueDay: config.overdue.day, overdueAmount: config.overdue.type === "fixed" ? config.overdue.amount : 0,
+    });
+    return renderContract(config.contract.template, vars);
+  }, [printingContract, tenant, room, config]);
 
   // ── บิล/ยอดค้างชำระของผู้เช่าคนนี้ (รวมทุกห้องที่เคยผูกกับผู้เช่ารายนี้) ──
   const myBillRows = bills
@@ -800,9 +814,13 @@ function TenantDetailView({
 
       </div>
 
+      {printingContract && <LeaseContractPrint blocks={contractBlocks} onDone={() => setPrintingContract(false)} />}
       <div className="detail-modal-footer">
         <button className="btn btn-outline-secondary" onClick={onBack}>
           <i className="fas fa-arrow-left me-1" />กลับ
+        </button>
+        <button className="btn btn-outline-secondary" onClick={() => setPrintingContract(true)}>
+          <i className="fas fa-file-contract me-2" />พิมพ์สัญญาเช่า
         </button>
         <button className="btn btn-primary" onClick={onEdit}>
           <i className="fas fa-edit me-2" />แก้ไขข้อมูล
