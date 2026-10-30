@@ -824,7 +824,7 @@ function TenantDetailView({
         <button className="btn btn-outline-secondary" onClick={onBack}>
           <i className="fas fa-arrow-left me-1" />กลับ
         </button>
-        <button className="btn btn-outline-secondary" onClick={() => setPreviewingContract(true)}>
+        <button className="btn btn-outline-secondary" onClick={() => setPrintingContract(true)}>
           <i className="fas fa-file-contract me-2" />พิมพ์สัญญาเช่า
         </button>
         <button className="btn btn-primary" onClick={onEdit}>

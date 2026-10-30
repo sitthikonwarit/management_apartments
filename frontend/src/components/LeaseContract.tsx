@@ -27,7 +27,7 @@ export const SHEET_CSS = `
 @media print {
   /* ขอบกระดาษ 0 แล้วให้แต่ละหน้า (.lease-page) เป็น A4 เต็มแผ่นที่มี padding เอง — โลโก้วางตำแหน่งสัมบูรณ์ในแผ่นได้โดยไม่ล้นขอบ
      (เนื้อหาล้นขอบ/ค่าติดลบทำให้ Chrome ย่อทั้งเอกสารหรือตัดโลโก้ตอนพิมพ์) */
-  .lease-page { width: 595.3pt; min-height: 841pt; margin: 0; box-shadow: none; background: #fff; break-after: page; page-break-after: always; }
+  .lease-page { width: 595.3pt; height: 841pt; min-height: 0; padding-bottom: 36pt; overflow: hidden; margin: 0; box-shadow: none; background: #fff; break-after: page; page-break-after: always; }
   .lease-page:last-of-type { break-after: auto; page-break-after: auto; }
 }
 `;
