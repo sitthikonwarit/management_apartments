@@ -953,11 +953,12 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
 }
 
 // ── การ์ดมิเตอร์ (ไฟ/น้ำ) พร้อมสูตรคำนวณ — ทรงเดียวกับต้นฉบับ ─────────────────
-function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula }: {
+function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula, rate, onRate, serviceOn, serviceRate, serviceFee }: {
   label: string; icon: string; color: string; tint: string; active: boolean;
   prev: number; curr: number; unit: number; price: number; formula: string;
   onToggleActive: (v: boolean) => void;
   onPrev: (v: number) => void; onCurr: (v: number) => void; onFormula: (v: string) => void;
+  rate: number; onRate: (v: number) => void; serviceOn: boolean; serviceRate: number; serviceFee: number;
 }) {
   const [mode, setMode] = useState<"standard" | "custom">(formula ? "custom" : "standard");
   const [showFormula, setShowFormula] = useState(false);
@@ -992,6 +993,21 @@ function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price,
           {!!formula && (
             <div className="text-end mt-1" style={{ fontSize: 10 }}>
               <span className="badge" style={{ background: color, color: "#fff" }}>ใช้สูตรพิเศษ</span>
+            </div>
+          )}
+          <div className="row g-2 align-items-center mt-2">
+            <label className="col-6 col-form-label small text-muted">อัตราต่อหน่วย (฿)</label>
+            <div className="col-6">
+              <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={rate} disabled={!active}
+                onChange={(e) => onRate(Number(e.target.value) || 0)} />
+            </div>
+          </div>
+          {serviceOn && (
+            <div className="small mt-2 p-2 rounded" style={{ border: "1px dashed var(--color-light)" }}>
+              <div className="d-flex justify-content-between"><span>{label}ตามหน่วย ({unit} หน่วย)</span><b>{money(price - serviceFee)} ฿</b></div>
+              <div className="d-flex justify-content-between" style={{ color }}>
+                <span><i className="fas fa-file-invoice me-1" />ค่าบริการ{label.replace("ค่า", "")} ({unit} × {serviceRate})</span><b>{money(serviceFee)} ฿</b>
+              </div>
             </div>
           )}
           {showFormula && (
@@ -1130,6 +1146,8 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onPrev={(v) => onUpdate((d) => { d.meterElectric.prev = v; })}
               onCurr={(v) => onUpdate((d) => { d.meterElectric.curr = v; })}
               onFormula={(v) => onUpdate((d) => { d.electricFormula = v; })}
+              rate={item.electricRate} onRate={(v) => onUpdate((d) => { d.electricRate = v; })}
+              serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.electricRate ?? 0} serviceFee={item.electricServiceFee || 0}
             />
             <MeterBlock label="ค่าน้ำ" icon="fa-tint" color="#0dcaf0" tint="rgba(13,202,240,0.1)"
               active={item.waterActive} prev={item.meterWater.prev} curr={item.meterWater.curr}
@@ -1138,7 +1156,51 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onPrev={(v) => onUpdate((d) => { d.meterWater.prev = v; })}
               onCurr={(v) => onUpdate((d) => { d.meterWater.curr = v; })}
               onFormula={(v) => onUpdate((d) => { d.waterFormula = v; })}
+              rate={item.waterRate} onRate={(v) => onUpdate((d) => { d.waterRate = v; })}
+              serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.waterRate ?? 0} serviceFee={item.waterServiceFee || 0}
             />
+
+            {/* ค่าบริการต่อหน่วย (เฉพาะบิลใบนี้) — เปิด/ปิด, อัตราไฟ/น้ำ และรูปแบบการแสดงบนบิล ตรงกับที่ขึ้นในตัวอย่างบิลด้านขวา */}
+            <div className="card mb-3 shadow-sm border-0">
+              <div className="card-body">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h6 className="mb-0 text-secondary"><i className="fas fa-file-invoice me-2" />ค่าบริการต่อหน่วย (บิลนี้)</h6>
+                  <div className="form-check form-switch mb-0">
+                    <input className="form-check-input" type="checkbox" checked={!!item.serviceFeeConfig?.enabled}
+                      onChange={(e) => onUpdate((d) => {
+                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
+                        d.serviceFeeConfig = { ...cur, enabled: e.target.checked } as any;
+                      })} />
+                  </div>
+                </div>
+                {item.serviceFeeConfig?.enabled ? (
+                  <>
+                    <div className="row g-2 mb-2">
+                      <div className="col-6">
+                        <small className="text-muted">ค่าบริการไฟ (฿/หน่วย)</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.electricRate}
+                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.electricRate = Number(e.target.value) || 0; })} />
+                      </div>
+                      <div className="col-6">
+                        <small className="text-muted">ค่าบริการน้ำ (฿/หน่วย)</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.waterRate}
+                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.waterRate = Number(e.target.value) || 0; })} />
+                      </div>
+                    </div>
+                    <div className="btn-group btn-group-sm w-100 mb-2" role="group">
+                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.displayMode !== "separate" ? " active" : ""}`}
+                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "combined"; })}>รวมในบรรทัดค่าไฟ/น้ำ</button>
+                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.displayMode === "separate" ? " active" : ""}`}
+                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "separate"; })}>แยกบรรทัดค่าบริการ</button>
+                    </div>
+                    <div className="small d-flex justify-content-between"><span>ค่าบริการไฟ ({item.meterElectric.unit} หน่วย)</span><b>{money(item.electricServiceFee || 0)} ฿</b></div>
+                    <div className="small d-flex justify-content-between"><span>ค่าบริการน้ำ ({item.meterWater.unit} หน่วย)</span><b>{money(item.waterServiceFee || 0)} ฿</b></div>
+                  </>
+                ) : (
+                  <div className="small text-muted">ไม่คิดค่าบริการต่อหน่วยสำหรับบิลใบนี้ — เปิดสวิตช์เพื่อคิดค่าบริการไฟ/น้ำ</div>
+                )}
+              </div>
+            </div>
 
             <div className="card mb-3 shadow-sm border-0">
               <div className="card-body">
@@ -1237,6 +1299,38 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                 </div>
               </div>
             </div>
+
+            {(item.outstandingItems.length > 0 || item.outstandingAmount > 0) && (
+              <div className="card mb-3 shadow-sm border-0">
+                <div className="card-body">
+                  <h6 className="text-muted small fw-bold mb-2"><i className="fas fa-clock-rotate-left me-2 text-danger" />ยอดค้างชำระยกมา</h6>
+                  {item.outstandingItems.length === 0 ? (
+                    <div className="row g-2 align-items-center">
+                      <label className="col-6 col-form-label small">ยอดค้างยกมา (฿)</label>
+                      <div className="col-6">
+                        <input type="number" min={0} className="form-control form-control-sm text-end" value={item.outstandingAmount}
+                          onChange={(e) => onUpdate((d) => { d.outstandingAmount = Math.max(0, Number(e.target.value) || 0); })} />
+                      </div>
+                    </div>
+                  ) : item.outstandingItems.map((o, i) => (
+                    <div key={`${o.monthYear}-${i}`} className="bill-line-row">
+                      <span className="name"><i className="fas fa-calendar-alt me-1 text-danger" />{monthYearLabel(o.monthYear)}</span>
+                      <input type="number" min={0} className="form-control form-control-sm text-end" style={{ maxWidth: 120 }} value={o.amount}
+                        onChange={(e) => onUpdate((d) => {
+                          const v = Math.max(0, Number(e.target.value) || 0);
+                          d.outstandingAmount = Math.max(0, (d.outstandingAmount || 0) - d.outstandingItems[i].amount + v);
+                          d.outstandingItems[i].amount = v;
+                        })} />
+                      <button type="button" className="btn btn-sm btn-outline-danger border-0" title="เอาเดือนนี้ออกจากยอดค้าง" onClick={() => onUpdate((d) => {
+                        d.outstandingAmount = Math.max(0, (d.outstandingAmount || 0) - d.outstandingItems[i].amount);
+                        d.outstandingItems.splice(i, 1);
+                      })}><i className="fas fa-times" /></button>
+                    </div>
+                  ))}
+                  <div className="small text-muted mt-2">รวมยอดค้างยกมา: <span className="fw-bold text-danger">{money(item.outstandingAmount)} ฿</span></div>
+                </div>
+              </div>
+            )}
 
             <div className="card mb-3 shadow-sm border-0">
               <div className="card-body">
