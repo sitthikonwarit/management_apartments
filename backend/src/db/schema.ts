@@ -431,6 +431,7 @@ export const appConfig = pgTable("app_config", {
   serviceFeeEnabled: text("service_fee_enabled").notNull().default("false"),
   serviceFeeWaterRate: str("service_fee_water_rate"),
   serviceFeeElectricRate: str("service_fee_electric_rate"),
+  serviceFeeMode: text("service_fee_mode").notNull().default("unit"), // unit = ต่อหน่วย / flat = เหมาจ่ายต่อเดือน
   serviceFeeWaterFlat: str("service_fee_water_flat"), // ค่าบริการเหมาจ่ายต่อเดือน (บาท/บิล) — บวกเพิ่มจากแบบต่อหน่วย
   serviceFeeElectricFlat: str("service_fee_electric_flat"),
   serviceFeeDisplayMode: text("service_fee_display_mode").notNull().default("combined"),

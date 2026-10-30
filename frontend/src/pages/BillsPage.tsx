@@ -1166,37 +1166,35 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
             <div className="card mb-3 shadow-sm border-0">
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h6 className="mb-0 text-secondary"><i className="fas fa-file-invoice me-2" />ค่าบริการต่อหน่วย (บิลนี้)</h6>
+                  <h6 className="mb-0 text-secondary"><i className="fas fa-file-invoice me-2" />ค่าบริการน้ำและไฟ (บิลนี้)</h6>
                   <div className="form-check form-switch mb-0">
                     <input className="form-check-input" type="checkbox" checked={!!item.serviceFeeConfig?.enabled}
                       onChange={(e) => onUpdate((d) => {
-                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, waterFlat: Number(config.serviceFee?.waterFlat) || 0, electricFlat: Number(config.serviceFee?.electricFlat) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
+                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, mode: config.serviceFee?.mode === "flat" ? "flat" : "unit", waterFlat: Number(config.serviceFee?.waterFlat) || 0, electricFlat: Number(config.serviceFee?.electricFlat) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
                         d.serviceFeeConfig = { ...cur, enabled: e.target.checked } as any;
                       })} />
                   </div>
                 </div>
                 {item.serviceFeeConfig?.enabled ? (
                   <>
+                    <div className="btn-group btn-group-sm w-100 mb-2" role="group">
+                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.mode === "flat" ? "" : " active"}`}
+                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.mode = "unit"; })}>ต่อหน่วย</button>
+                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.mode === "flat" ? " active" : ""}`}
+                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.mode = "flat"; })}>เหมาจ่าย</button>
+                    </div>
                     <div className="row g-2 mb-2">
                       <div className="col-6">
-                        <small className="text-muted">ค่าบริการไฟ (฿/หน่วย)</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.electricRate}
-                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.electricRate = Number(e.target.value) || 0; })} />
+                        <small className="text-muted">{item.serviceFeeConfig.mode === "flat" ? "ค่าบริการไฟ (฿/บิล)" : "ค่าบริการไฟ (฿/หน่วย)"}</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end"
+                          value={item.serviceFeeConfig.mode === "flat" ? (item.serviceFeeConfig.electricFlat ?? 0) : item.serviceFeeConfig.electricRate}
+                          onChange={(e) => onUpdate((d) => { const v = Number(e.target.value) || 0; if (d.serviceFeeConfig!.mode === "flat") d.serviceFeeConfig!.electricFlat = v; else d.serviceFeeConfig!.electricRate = v; })} />
                       </div>
                       <div className="col-6">
-                        <small className="text-muted">ค่าบริการน้ำ (฿/หน่วย)</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.waterRate}
-                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.waterRate = Number(e.target.value) || 0; })} />
-                      </div>
-                      <div className="col-6">
-                        <small className="text-muted">ไฟเหมาจ่าย (฿/บิล)</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.electricFlat ?? 0}
-                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.electricFlat = Number(e.target.value) || 0; })} />
-                      </div>
-                      <div className="col-6">
-                        <small className="text-muted">น้ำเหมาจ่าย (฿/บิล)</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={item.serviceFeeConfig.waterFlat ?? 0}
-                          onChange={(e) => onUpdate((d) => { d.serviceFeeConfig!.waterFlat = Number(e.target.value) || 0; })} />
+                        <small className="text-muted">{item.serviceFeeConfig.mode === "flat" ? "ค่าบริการน้ำ (฿/บิล)" : "ค่าบริการน้ำ (฿/หน่วย)"}</small>
+                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end"
+                          value={item.serviceFeeConfig.mode === "flat" ? (item.serviceFeeConfig.waterFlat ?? 0) : item.serviceFeeConfig.waterRate}
+                          onChange={(e) => onUpdate((d) => { const v = Number(e.target.value) || 0; if (d.serviceFeeConfig!.mode === "flat") d.serviceFeeConfig!.waterFlat = v; else d.serviceFeeConfig!.waterRate = v; })} />
                       </div>
                     </div>
                     <div className="btn-group btn-group-sm w-100 mb-2" role="group">
@@ -1205,11 +1203,11 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
                       <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.displayMode === "separate" ? " active" : ""}`}
                         onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "separate"; })}>แยกบรรทัดค่าบริการ</button>
                     </div>
-                    <div className="small d-flex justify-content-between"><span>ค่าบริการไฟ ({item.meterElectric.unit} หน่วย)</span><b>{money(item.electricServiceFee || 0)} ฿</b></div>
-                    <div className="small d-flex justify-content-between"><span>ค่าบริการน้ำ ({item.meterWater.unit} หน่วย)</span><b>{money(item.waterServiceFee || 0)} ฿</b></div>
+                    <div className="small d-flex justify-content-between"><span>ค่าบริการไฟ{item.serviceFeeConfig.mode === "flat" ? " (เหมาจ่าย)" : ` (${item.meterElectric.unit} หน่วย)`}</span><b>{money(item.electricServiceFee || 0)} ฿</b></div>
+                    <div className="small d-flex justify-content-between"><span>ค่าบริการน้ำ{item.serviceFeeConfig.mode === "flat" ? " (เหมาจ่าย)" : ` (${item.meterWater.unit} หน่วย)`}</span><b>{money(item.waterServiceFee || 0)} ฿</b></div>
                   </>
                 ) : (
-                  <div className="small text-muted">ไม่คิดค่าบริการต่อหน่วยสำหรับบิลใบนี้ — เปิดสวิตช์เพื่อคิดค่าบริการไฟ/น้ำ</div>
+                  <div className="small text-muted">ไม่คิดค่าบริการน้ำ/ไฟสำหรับบิลใบนี้ — เปิดสวิตช์เพื่อคิดค่าบริการไฟ/น้ำ</div>
                 )}
               </div>
             </div>

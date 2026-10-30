@@ -263,6 +263,7 @@ export default function SettingsPage() {
   const [serviceFeeEnabled, setServiceFeeEnabled] = useState(false);
   const [serviceFeeWaterRate, setServiceFeeWaterRate] = useState(0);
   const [serviceFeeElectricRate, setServiceFeeElectricRate] = useState(0);
+  const [serviceFeeMode, setServiceFeeMode] = useState<"unit" | "flat">("unit");
   const [serviceFeeWaterFlat, setServiceFeeWaterFlat] = useState(0);
   const [serviceFeeElectricFlat, setServiceFeeElectricFlat] = useState(0);
   const [serviceFeeDisplayMode, setServiceFeeDisplayMode] = useState<"combined" | "separate">("combined");
@@ -404,6 +405,7 @@ export default function SettingsPage() {
     setServiceFeeEnabled(config.serviceFee.enabled);
     setServiceFeeWaterRate(config.serviceFee.waterRate);
     setServiceFeeElectricRate(config.serviceFee.electricRate);
+    setServiceFeeMode(config.serviceFee.mode === "flat" ? "flat" : "unit");
     setServiceFeeWaterFlat(config.serviceFee.waterFlat ?? 0);
     setServiceFeeElectricFlat(config.serviceFee.electricFlat ?? 0);
     setServiceFeeDisplayMode(config.serviceFee.displayMode);
@@ -628,6 +630,7 @@ export default function SettingsPage() {
           enabled: serviceFeeEnabled,
           waterRate: Number(serviceFeeWaterRate) || 0,
           electricRate: Number(serviceFeeElectricRate) || 0,
+          mode: serviceFeeMode,
           waterFlat: Number(serviceFeeWaterFlat) || 0,
           electricFlat: Number(serviceFeeElectricFlat) || 0,
           displayMode: serviceFeeDisplayMode,
@@ -991,10 +994,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <Searchable query={q} keywords="ค่าบริการต่อหน่วย ค่าบริการเหมาจ่าย service fee ค่าบริการน้ำ ค่าบริการไฟ">
+                <Searchable query={q} keywords="ค่าบริการน้ำและไฟ ค่าบริการต่อหน่วย ค่าบริการเหมาจ่าย service fee ค่าบริการน้ำ ค่าบริการไฟ">
                   <div className="detail-section" style={CATEGORY_CARD_STYLE}>
                     <div className="d-flex justify-content-between align-items-center mb-3" style={{ borderBottom: "2px solid #b8860b", paddingBottom: 8 }}>
-                      <h6 className="mb-0" style={{ fontWeight: 700, color: "#b8860b", border: "none", padding: 0, margin: 0 }}><i className="fas fa-file-invoice-dollar me-2" />ค่าบริการต่อหน่วย</h6>
+                      <h6 className="mb-0" style={{ fontWeight: 700, color: "#b8860b", border: "none", padding: 0, margin: 0 }}><i className="fas fa-file-invoice-dollar me-2" />ค่าบริการน้ำและไฟ</h6>
                       <div className="form-check form-switch mb-0">
                         <input className="form-check-input" type="checkbox" id="serviceFeeEnable"
                           checked={serviceFeeEnabled} onChange={(e) => setServiceFeeEnabled(e.target.checked)} />
@@ -1002,6 +1005,19 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="row g-4" style={{ opacity: serviceFeeEnabled ? 1 : 0.5, pointerEvents: serviceFeeEnabled ? "auto" : "none" }}>
+                      <div className="col-md-4">
+                        <label className="form-label fw-bold">รูปแบบคิดค่าบริการ</label>
+                        <CustomSelect2
+                          value={{ value: serviceFeeMode, label: serviceFeeMode === "flat" ? "เหมาจ่าย (บาท/เดือน)" : "ต่อหน่วย (บาท/หน่วย)" }}
+                          options={[
+                            { value: "unit", label: "ต่อหน่วย (บาท/หน่วย)" },
+                            { value: "flat", label: "เหมาจ่าย (บาท/เดือน)" },
+                          ]}
+                          onChange={(o: any) => setServiceFeeMode(o?.value === "flat" ? "flat" : "unit")}
+                          isSearchable={false}
+                        />
+                      </div>
+                      {serviceFeeMode !== "flat" && (<>
                       <div className="col-md-4">
                         <label className="form-label fw-bold"><i className="fas fa-bolt text-warning me-1" />ค่าบริการไฟ (บาท/หน่วย)</label>
                         <div className="input-group">
@@ -1018,6 +1034,8 @@ export default function SettingsPage() {
                           <span className="input-group-text">บาท</span>
                         </div>
                       </div>
+                      </>)}
+                      {serviceFeeMode === "flat" && (<>
                       <div className="col-md-4">
                         <label className="form-label fw-bold"><i className="fas fa-bolt text-warning me-1" />ค่าบริการไฟเหมาจ่าย (บาท/เดือน)</label>
                         <div className="input-group">
@@ -1034,6 +1052,7 @@ export default function SettingsPage() {
                           <span className="input-group-text">บาท</span>
                         </div>
                       </div>
+                      </>)}
                       <div className="col-md-4">
                         <label className="form-label fw-bold">การแสดงผลในรายละเอียดบิล</label>
                         <CustomSelect2
@@ -1052,7 +1071,7 @@ export default function SettingsPage() {
                           {serviceFeeDisplayMode === "separate"
                             ? "ในรายละเอียดบิลจะแยกเป็น 2 บรรทัด (ค่าไฟ และ ค่าบริการไฟ)"
                             : "ในรายละเอียดบิลจะรวมแสดงเป็นบรรทัดเดียว (ค่าไฟ)"}
-                          {" "}ยอดรวมที่เรียกเก็บเท่ากันทั้งสองแบบ ต่างกันแค่การแสดงผล · ค่าบริการเหมาจ่ายคิดเป็นยอดคงที่ต่อบิล (ไม่คูณหน่วย) เฉพาะบิลที่เปิดคิดค่าน้ำ/ไฟ
+                          {" "}ยอดรวมที่เรียกเก็บเท่ากันทั้งสองแบบ ต่างกันแค่การแสดงผล · แบบเหมาจ่ายคิดเป็นยอดคงที่ต่อบิล (ไม่คูณหน่วย) เฉพาะบิลที่เปิดคิดค่าน้ำ/ไฟ
                         </small>
                       </div>
                     </div>
