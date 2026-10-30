@@ -1,6 +1,7 @@
 import { DEFAULT_CONTRACT, CONTRACT_VARIABLES, buildContractVars, renderContract, type ContractConfig } from "../utils/contractTemplate";
 import { LeaseContractSheet } from "../components/LeaseContract";
-import ContractEditor from "../components/ContractEditor";
+import ContractEditor, { type ContractEditorHandle } from "../components/ContractEditor";
+import ContractDataPanel from "../components/ContractDataPanel";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SelectRaw from "react-select";
@@ -279,6 +280,7 @@ export default function SettingsPage() {
   const [contractPreview, setContractPreview] = useState(false);
   const [contractCodeMode, setContractCodeMode] = useState(false);
   const [contractEditorOpen, setContractEditorOpen] = useState(false);
+  const contractEditorRef = useRef<ContractEditorHandle>(null);
   const [lineEnabled, setLineEnabled] = useState(false);
   const [lineToken, setLineToken] = useState("");
   const [lineTokenVisible, setLineTokenVisible] = useState(false);
@@ -874,70 +876,11 @@ export default function SettingsPage() {
             {sectionVisible("contract") && (
               <div style={CATEGORY_CARD_STYLE} className="mb-4">
                 <h6 className="form-section-title"><i className="fas fa-file-contract me-2" />สัญญาเช่า (พิมพ์อัตโนมัติจากหน้าผู้เช่า)</h6>
-                <p className="text-muted small">กรอกข้อมูลผู้ให้เช่า/อาคาร/ค่าต่างๆ และแก้ข้อความสัญญาได้ทั้งฉบับ แล้วกด "บันทึกทั้งหมด" ด้านบน — ที่หน้าผู้เช่า กด "พิมพ์สัญญาเช่า" ระบบจะดึงชื่อ ที่อยู่ เลขบัตร ห้อง ค่าเช่า วันที่สัญญา มากรอกให้ ช่องที่ไม่มีข้อมูลจะเป็นเส้นประให้เขียนเอง</p>
-                <div className="row g-3">
-                  {([
-                    ["lessorName", "ชื่อผู้ให้เช่า", "เช่น นางสมพร ลัมภเวส"],
-                    ["signPlace", "ทำที่ (สถานที่ทำสัญญา)", "เช่น 259 ซอยอ่อนนุช 39 แขวงพัฒนาการ เขตสวนหลวง กรุงเทพมหานคร"],
-                    ["propertyNo", "อาคารเลขที่", ""], ["propertyRoad", "ถนน (อาคารที่ให้เช่า)", ""],
-                    ["propertySubdistrict", "แขวง/ตำบล (อาคาร)", ""], ["propertyDistrict", "เขต/อำเภอ (อาคาร)", ""],
-                    ["propertyProvince", "จังหวัด (อาคาร)", ""], ["purpose", "เพื่อเป็นประโยชน์ในการ", "ห้องพักอาศัย"],
-                    ["defaultArea", "ขนาดพื้นที่ (ตั้งต้น)", "เช่น 24 ตร.ม."],
-                    ["electricText", "ค่าไฟ (ข้อความ)", "ว่าง = ใช้ค่าไฟจากหน้าระบบบิล เช่น หน่วยละ 7 บาท"],
-                    ["waterText", "ค่าน้ำ (ข้อความ)", "เช่น หน่วยแรก 50 บาท หน่วยต่อไปหน่วยละ 17 บาท"],
-                    ["commonFeeText", "ค่าบริการส่วนกลาง (ข้อความ)", "เช่น 100 บาท ต่อเดือน"],
-                    ["earlyMoveOutText", "ย้ายออกก่อน (เงื่อนไขท้ายสัญญา)", "เช่น ครบ 6 เดือน — ว่าง = เว้นเป็นจุดให้เขียนเอง"],
-                    ["witness1", "พยาน 1", ""], ["witness2", "พยาน 2", ""],
-                  ] as [keyof ContractConfig, string, string][]).map(([k, label, ph]) => (
-                    <div key={k} className="col-12 col-md-6">
-                      <label className="form-label">{label}</label>
-                      <input className="form-control" value={String(contractCfg[k] ?? "")} placeholder={ph}
-                        onChange={(e) => setContractCfg({ ...contractCfg, [k]: e.target.value })} />
-                    </div>
-                  ))}
-                  {([
-                    ["defaultDeposit", "เงินประกัน (ตั้งต้น บาท)"], ["interestPercent", "ดอกเบี้ยค่าเช่าค้าง (% ต่อปี)"],
-                    ["moveOutFine", "ค่าปรับไม่ส่งมอบคืน (บาท/วัน)"], ["lateFee", "ค่าปรับชำระช้า (บาท/วัน — 0 = ใช้ค่าปรับในหน้าระบบบิล)"],
-                  ] as [keyof ContractConfig, string][]).map(([k, label]) => (
-                    <div key={k} className="col-12 col-md-6">
-                      <label className="form-label">{label}</label>
-                      <input type="number" min={0} className="form-control" value={Number(contractCfg[k]) || 0}
-                        onChange={(e) => setContractCfg({ ...contractCfg, [k]: Number(e.target.value) || 0 })} />
-                    </div>
-                  ))}
+                <p className="text-muted small">แก้ข้อความสัญญา ข้อมูลผู้ให้เช่า/อาคาร/ค่าต่างๆ และเพิ่มข้อมูลของคุณเองได้ทั้งหมดในตัวแก้ไขเต็มหน้า — ที่หน้าผู้เช่า กด "พิมพ์สัญญาเช่า" ระบบจะดึงชื่อ ที่อยู่ เลขบัตร ห้อง ค่าเช่า วันที่สัญญา มาเติมให้เอง ช่องที่ไม่มีข้อมูลจะเป็นเส้นประให้เขียนเอง</p>
+                <div className="p-4 text-center" style={{ border: "1px dashed var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
+                  <div className="text-muted mb-3">แผ่น A4 เต็มหน้าจอ ฟอนต์ TH Sarabun เหมือนตอนพิมพ์ มีแผงข้อมูลด้านข้างให้กรอก/เพิ่ม/แก้ไขเอง</div>
+                  <button type="button" className="btn btn-primary" onClick={() => setContractEditorOpen(true)}><i className="fas fa-pen-to-square me-2" />เปิดตัวแก้ไขสัญญาแบบเต็มหน้า</button>
                 </div>
-
-                <label className="d-flex align-items-center gap-2 mt-3" style={{ cursor: "pointer" }}>
-                  <input type="checkbox" className="form-check-input mt-0" checked={contractCfg.showLogo !== false} onChange={(e) => setContractCfg({ ...contractCfg, showLogo: e.target.checked })} />
-                  แสดงโลโก้ (จากหน้ารูปลักษณ์) มุมขวาบนของสัญญา
-                </label>
-                <div className="d-flex justify-content-between align-items-center mt-4 mb-1 flex-wrap gap-2">
-                  <label className="form-label fw-bold mb-0">ข้อความสัญญา (แม่แบบ)</label>
-                  <div className="d-flex gap-2">
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractCodeMode((v) => !v)}><i className="fas fa-code me-1" />{contractCodeMode ? "กลับไปแก้บนหน้ากระดาษ" : "แก้แบบโค้ด"}</button>
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-1" />ดูตัวอย่างข้อมูลจริง</button>
-                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { if (window.confirm("คืนข้อความสัญญาเป็นแบบเริ่มต้น? ข้อความที่แก้ไว้จะหายไป")) setContractCfg({ ...contractCfg, template: DEFAULT_CONTRACT.template }); }}>คืนค่าเริ่มต้น</button>
-                  </div>
-                </div>
-                {contractCodeMode ? (
-                  <textarea className="form-control" rows={18} style={{ fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
-                    onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
-                ) : (
-                  <div className="p-4 text-center" style={{ border: "1px dashed var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
-                    <div className="text-muted mb-3">แก้ข้อความสัญญาบนหน้ากระดาษ A4 เต็มหน้าจอ (ฟอนต์ TH Sarabun เหมือนตอนพิมพ์)</div>
-                    <button type="button" className="btn btn-primary" onClick={() => setContractEditorOpen(true)}><i className="fas fa-pen-to-square me-2" />เปิดตัวแก้ไขสัญญาแบบเต็มหน้า</button>
-                  </div>
-                )}
-                <div className="text-muted small mt-2">
-                  รูปแบบ: <code>{"# "}</code> หัวเรื่องกลางหน้า · <code>{"> "}</code> ชิดขวา · <code>{"~ "}</code> บรรทัดลายเซ็น · <code>---</code> ขึ้นหน้าใหม่ · เว้นบรรทัดเพื่อแยกข้อ · ตัวแปรเขียนเป็น <code>{"{{ชื่อตัวแปร}}"}</code>
-                </div>
-                <div className="mt-2 d-flex flex-wrap gap-1">
-                  {CONTRACT_VARIABLES.map((v) => (
-                    <span key={v.key} className="badge bg-secondary" style={{ fontWeight: 400, cursor: "pointer" }} title={`${v.label} — คลิกเพื่อคัดลอก`}
-                      onClick={() => navigator.clipboard?.writeText(`{{${v.key}}}`)}>{`{{${v.key}}}`} <span className="opacity-75">{v.label}</span></span>
-                  ))}
-                </div>
-                <div className="text-muted small mt-2">ข้อมูลที่กรอกเพิ่มได้ที่หน้าแก้ไขผู้เช่า (หัวข้อ "ข้อมูลสำหรับพิมพ์สัญญาเช่า"): วันที่ออกบัตรประชาชน, เงินประกัน, ขนาดพื้นที่ — วันที่ทำสัญญาใช้ "วันเข้าพัก" ของผู้เช่า</div>
               </div>
             )}
 
@@ -946,8 +889,10 @@ export default function SettingsPage() {
                 <div style={{ background: "#fff", borderBottom: "1px solid #dadce0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <i className="fas fa-file-contract" style={{ color: "#1a73e8" }} />
                   <strong style={{ color: "#202124" }}>แก้ไขสัญญาเช่า (แม่แบบ)</strong>
-                  <span className="text-muted small d-none d-md-inline">แก้แล้วกด "บันทึก" เพื่อใช้กับสัญญาที่พิมพ์ต่อไป</span>
-                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  <span className="text-muted small d-none d-lg-inline">แก้แล้วกด "บันทึก" เพื่อใช้กับสัญญาที่พิมพ์ต่อไป</span>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn btn-outline-secondary" onClick={() => setContractCodeMode((v) => !v)}><i className="fas fa-code me-2" />{contractCodeMode ? "แก้บนหน้ากระดาษ" : "แก้แบบโค้ด"}</button>
+                    <button className="btn btn-outline-danger" onClick={() => { if (window.confirm("คืนข้อความสัญญาเป็นแบบเริ่มต้น? ข้อความที่แก้ไว้จะหายไป (ข้อมูลที่กรอกไว้ยังอยู่)")) setContractCfg((c) => ({ ...c, template: DEFAULT_CONTRACT.template })); }}>คืนค่าเริ่มต้น</button>
                     <button className="btn btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-2" />ดูตัวอย่างข้อมูลจริง</button>
                     <button className="btn btn-primary" onClick={handleSaveAll} disabled={saving}>
                       {saving ? <span className="spinner-border spinner-border-sm me-2" /> : <i className="fas fa-save me-2" />}บันทึก
@@ -955,9 +900,18 @@ export default function SettingsPage() {
                     <button className="btn btn-outline-secondary" onClick={() => setContractEditorOpen(false)}><i className="fas fa-times" /></button>
                   </div>
                 </div>
-                <div style={{ flex: 1, minHeight: 0, padding: "10px 16px", display: "flex", flexDirection: "column" }}>
-                  <ContractEditor fullPage value={contractCfg.template} onChange={(v) => setContractCfg((c) => ({ ...c, template: v }))}
-                    logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} />
+                <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+                  <div style={{ flex: 1, minWidth: 0, padding: "10px 16px", display: "flex", flexDirection: "column" }}>
+                    {contractCodeMode ? (
+                      <textarea className="form-control" style={{ flex: 1, fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
+                        onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
+                    ) : (
+                      <ContractEditor ref={contractEditorRef} fullPage value={contractCfg.template} customVars={contractCfg.customVars ?? []}
+                        onChange={(v) => setContractCfg((c) => ({ ...c, template: v }))}
+                        logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} />
+                    )}
+                  </div>
+                  <ContractDataPanel cfg={contractCfg} onChange={setContractCfg} onInsert={(k) => contractEditorRef.current?.insertVar(k)} />
                 </div>
               </div>
             )}

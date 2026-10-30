@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CONTRACT_VARIABLES } from "../utils/contractTemplate";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { CONTRACT_VARIABLES, type ContractCustomVar } from "../utils/contractTemplate";
 import { SHEET_CSS } from "./LeaseContract";
 
 // ตัวแก้ไขสัญญาแบบ Google Docs: แก้ข้อความบนหน้า A4 ได้โดยตรง (ฟอนต์/ระยะ/เยื้องเหมือนตอนพิมพ์จริง) ตัวแปรเป็นชิปสีฟ้า
@@ -31,11 +31,10 @@ function serialize(lines: Line[]): string {
   }).join("\n");
 }
 
-const labelOf = (key: string) => CONTRACT_VARIABLES.find((v) => v.key === key)?.label ?? key;
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // ข้อความแม่แบบ → HTML ของย่อหน้า (ตัวแปรเป็นชิปที่แก้ข้อความข้างในไม่ได้)
-function toHtml(text: string): string {
+function toHtml(text: string, labelOf: (k: string) => string): string {
   const re = /\{\{\s*([A-Za-z0-9_]+)(?:\s*\|\s*(\d+(?:\.\d+)?))?\s*\}\}/g;
   let out = ""; let last = 0; let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -67,13 +66,13 @@ const EDITOR_CSS = `
 .lc-editor .lc-toolbar .btn { padding: 2px 9px; font-size: 0.82rem; }
 `;
 
-function EditablePara({ line, onText, onKey, onFocus, onPaste }: {
-  line: Line; onText: (id: number, text: string) => void; onKey: (e: React.KeyboardEvent<HTMLElement>, id: number) => void;
+function EditablePara({ line, labelOf, onText, onKey, onFocus, onPaste }: {
+  line: Line; labelOf: (k: string) => string; onText: (id: number, text: string) => void; onKey: (e: React.KeyboardEvent<HTMLElement>, id: number) => void;
   onFocus: (id: number) => void; onPaste: (e: React.ClipboardEvent<HTMLElement>) => void;
 }) {
   const ref = useRef<HTMLParagraphElement>(null);
   // ตั้งเนื้อหาครั้งเดียวตอนสร้าง — หลังจากนั้นเบราว์เซอร์จัดการการพิมพ์เอง (ไม่เรนเดอร์ทับ ไม่กระโดดเคอร์เซอร์)
-  useEffect(() => { if (ref.current) ref.current.innerHTML = toHtml(line.text); }, []);
+  useEffect(() => { if (ref.current) ref.current.innerHTML = toHtml(line.text, labelOf); }, []);
   const cls = line.kind === "title" ? "lc-title" : line.kind === "right" ? "lc-right" : line.kind === "sign" ? "lc-sign" : line.kind === "signName" ? "lc-signName" : "lc-para";
   return (
     <p ref={ref} className={`${cls} lc-edit`} contentEditable suppressContentEditableWarning spellCheck={false}
@@ -83,7 +82,12 @@ function EditablePara({ line, onText, onKey, onFocus, onPaste }: {
   );
 }
 
-export default function ContractEditor({ value, onChange, logoUrl, fullPage }: { value: string; onChange: (v: string) => void; logoUrl?: string; fullPage?: boolean }) {
+export interface ContractEditorHandle { insertVar: (key: string) => void }
+
+const ContractEditor = forwardRef<ContractEditorHandle, { value: string; onChange: (v: string) => void; logoUrl?: string; fullPage?: boolean; customVars?: ContractCustomVar[] }>(
+function ContractEditor({ value, onChange, logoUrl, fullPage, customVars = [] }, handleRef) {
+  const allVars = useMemo(() => [...CONTRACT_VARIABLES, ...customVars.map((c) => ({ key: c.key, label: c.label }))], [customVars]);
+  const labelOf = (key: string) => allVars.find((v) => v.key === key)?.label ?? key;
   const [lines, setLines] = useState<Line[]>(() => parse(value));
   const [resetKey, setResetKey] = useState(0);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -170,7 +174,9 @@ export default function ContractEditor({ value, onChange, logoUrl, fullPage }: {
   };
   const removeLine = (id: number) => update((p) => (p.length > 1 ? p.filter((l) => l.id !== id) : p), true);
 
-  const vars = useMemo(() => CONTRACT_VARIABLES.filter((v) => !varQuery || v.label.includes(varQuery) || v.key.toLowerCase().includes(varQuery.toLowerCase())), [varQuery]);
+  useImperativeHandle(handleRef, () => ({ insertVar }));
+
+  const vars = useMemo(() => allVars.filter((v) => !varQuery || v.label.includes(varQuery) || v.key.toLowerCase().includes(varQuery.toLowerCase())), [varQuery, allVars]);
 
   // แบ่งหน้าตามบรรทัดขึ้นหน้าใหม่
   const pages: Line[][] = [[]];
@@ -218,7 +224,7 @@ export default function ContractEditor({ value, onChange, logoUrl, fullPage }: {
               <div key={`${resetKey}-${pi}`}>
                 <div className="lease-page">
                   {pi === 0 && logoUrl && <img src={logoUrl} alt="" className="lc-logo" />}
-                  {page.map((l) => <EditablePara key={`${resetKey}-${l.id}`} line={l} onText={onText} onKey={onKey} onFocus={setActiveId} onPaste={onPaste} />)}
+                  {page.map((l) => <EditablePara key={`${resetKey}-${l.id}`} line={l} labelOf={labelOf} onText={onText} onKey={onKey} onFocus={setActiveId} onPaste={onPaste} />)}
                 </div>
                 {pi < pbIds.length && (
                   <div className="lc-pb">
@@ -232,4 +238,6 @@ export default function ContractEditor({ value, onChange, logoUrl, fullPage }: {
       </div>
     </div>
   );
-}
+});
+
+export default ContractEditor;

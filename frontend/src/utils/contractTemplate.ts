@@ -3,6 +3,8 @@ import type { YearFormat } from "./yearFormat";
 // ── สัญญาเช่า: ข้อมูลตั้งต้น + แม่แบบข้อความ (แก้ได้ที่ Settings > สัญญาเช่า) + ตัวแปลงเป็นข้อความสำเร็จรูป ──
 // ตัวแปรในแม่แบบเขียนเป็น {{ชื่อตัวแปร}} — ตัวแปรที่ไม่มีข้อมูลจะแสดงเป็นเส้นประให้เขียนเองหลังพิมพ์ (เหมือนสัญญาตัวอย่าง)
 
+export interface ContractCustomVar { key: string; label: string; value: string }
+
 export interface ContractConfig {
   lessorName: string;        // ชื่อผู้ให้เช่า
   signPlace: string;         // "ทำที่" (สถานที่ทำสัญญา)
@@ -23,6 +25,7 @@ export interface ContractConfig {
   witness1: string;
   witness2: string;
   earlyMoveOutText: string;  // เงื่อนไขย้ายออกก่อน (เช่น "ครบ 6 เดือน") — ว่าง = เว้นเป็นจุดให้เขียนเอง
+  customVars: ContractCustomVar[]; // ข้อมูลที่เพิ่มเองในตัวแก้ไขสัญญา (ใช้เป็น {{key}} ได้)
   showLogo: boolean;         // แสดงโลโก้ (จาก Settings > รูปลักษณ์) มุมขวาบนหน้าแรก
   template: string;          // ข้อความสัญญาทั้งฉบับ
 }
@@ -67,7 +70,7 @@ export const DEFAULT_CONTRACT: ContractConfig = {
   purpose: "ห้องพักอาศัย", defaultArea: "", defaultDeposit: 0,
   electricText: "", waterText: "", commonFeeText: "",
   interestPercent: 15, moveOutFine: 100, lateFee: 0,
-  witness1: "", witness2: "", earlyMoveOutText: "", showLogo: true,
+  witness1: "", witness2: "", earlyMoveOutText: "", showLogo: true, customVars: [],
   template: DEFAULT_CONTRACT_TEMPLATE,
 };
 
@@ -141,7 +144,7 @@ export function buildContractVars(opts: {
   const lateFee = Number(c.lateFee) || Number(opts.overdueAmount) || 0;
   const moveOut = Number(c.moveOutFine) || 0;
   const dueDay = Number(opts.overdueDay);
-  return {
+  const vars: Record<string, string> = {
     lessorName: c.lessorName, signPlace: c.signPlace,
     contractDate: longThaiDate(t?.contractStartDate || todayISO(), yearFormat),
     tenantName: `${t?.title ?? ""}${t?.firstName ?? ""} ${t?.lastName ?? ""}`.trim(),
@@ -163,6 +166,8 @@ export function buildContractVars(opts: {
     lateFee: lateFee ? num(lateFee) : "", lateFeeText: lateFee ? thaiBahtText(lateFee) : "",
     earlyMoveOutText: c.earlyMoveOutText, witness1: c.witness1, witness2: c.witness2,
   };
+  for (const cv of c.customVars ?? []) vars[cv.key] = cv.value;
+  return vars;
 }
 
 // ข้อความแม่แบบ → ส่วนย่อยที่เรนเดอร์ได้ (ข้อความ/ช่องว่างเส้นประ)
