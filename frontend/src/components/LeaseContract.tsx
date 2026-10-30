@@ -3,14 +3,16 @@ import { createPortal } from "react-dom";
 import type { ContractBlock } from "../utils/contractTemplate";
 
 // ขนาด/ระยะทั้งหมดอ้างอิงจากสัญญาตัวอย่าง (THSarabunPSK 16pt บน A4: ขอบซ้าย-ขวา 90pt, บรรทัดละ 18.1pt, ย่อหน้าเยื้อง 70pt,
-// บล็อกลายเซ็นเริ่มที่ 196pt จากขอบซ้าย) — Sarabun (ฟอนต์เว็บ) กว้างกว่า PSK จึงใช้ 10.44pt ให้ตัดบรรทัดตรงกับตัวอย่าง
+// บล็อกลายเซ็นเริ่มที่ 196pt จากขอบซ้าย) — ใช้ฟอนต์ TH Sarabun (ไฟล์อยู่ใน public/fonts) 16pt เหมือนต้นฉบับ
 // สีตัวอักษรบังคับดำสนิทเสมอ (กันธีมมืด/สีของแอปไหลเข้ามา) และเส้นประใต้ค่าที่เติมใช้ text-decoration จริง ตรงกับตัวอักษรเสมอ
 const SHEET_CSS = `
+@font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: block; }
 .lease-pages { background: transparent; }
 .lease-page { position: relative; box-sizing: border-box; width: 595.3pt; min-height: 841.9pt; padding: 72pt 90pt; margin: 0 auto 14pt; background: #fff;
   box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); }
 .lease-sheet, .lease-sheet * { color: #000 !important; -webkit-text-fill-color: #000 !important; }
-.lease-sheet { font-family: 'Sarabun','TH Sarabun New','TH SarabunPSK',sans-serif; font-size: 10.44pt; line-height: 18.1pt; font-weight: 400; background: transparent;
+.lease-sheet { font-family: 'THSarabunPSK','TH Sarabun New','TH SarabunPSK','Sarabun',sans-serif; font-size: 16pt; line-height: 18.1pt; font-weight: 400; background: transparent;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; text-rendering: geometricPrecision; }
 .lease-sheet p { margin: 0; white-space: pre-wrap; }
 .lease-sheet .lc-title { text-align: center; font-weight: 700; }
@@ -30,7 +32,7 @@ const SHEET_CSS = `
 `;
 
 const NB = " ";
-const SPACE_PT = 2.4; // ความกว้างช่องว่างไม่ตัดบรรทัดโดยประมาณที่ 10.44pt
+const SPACE_PT = 3.6; // ความกว้างช่องว่างไม่ตัดบรรทัดโดยประมาณที่ 16pt (TH Sarabun)
 
 // แบ่งสัญญาเป็นหน้าตามบรรทัด "---"
 function splitPages(blocks: ContractBlock[]): ContractBlock[][] {
@@ -49,7 +51,7 @@ function Block({ b }: { b: ContractBlock }) {
     <p className={cls}>
       {b.parts.map((p, j) => {
         if (p.blankWidth) return <span key={j} className="lc-fill">{NB.repeat(Math.max(2, Math.round(p.blankWidth / SPACE_PT)))}</span>;
-        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(5) + p.text + NB.repeat(5)}</span>;
+        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(4) + p.text + NB.repeat(4)}</span>;
         return <span key={j}>{p.text}</span>;
       })}
     </p>
@@ -106,7 +108,10 @@ export function LeaseContractPrint({ blocks, logoUrl, onDone }: { blocks: Contra
     const after = () => { if (!cancelled) onDone(); };
     window.addEventListener("afterprint", after);
     // รอฟอนต์/โลโก้โหลดก่อนสั่งพิมพ์ ไม่งั้นหน้าพิมพ์อาจใช้ฟอนต์สำรองหรือไม่มีโลโก้
-    const ready = (document as any).fonts?.ready ?? Promise.resolve();
+    const fonts = (document as any).fonts;
+    const ready = fonts?.load
+      ? Promise.all([fonts.load("16pt THSarabunPSK"), fonts.load("bold 16pt THSarabunPSK")]).then(() => fonts.ready).catch(() => undefined)
+      : Promise.resolve();
     const imgReady = logoUrl
       ? new Promise<void>((res) => { const im = new Image(); im.onload = () => res(); im.onerror = () => res(); im.src = logoUrl; })
       : Promise.resolve();
