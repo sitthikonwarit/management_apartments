@@ -46,7 +46,7 @@ function parseTenant(r: TenantRow) {
     pdfLinks: j(r.pdfLinks, []).map((f: any) => (f?.url ? { ...f, url: signUploadPath(f.url) } : f)),
     driveImageUrl: signUploadPath(r.driveImageUrl),
     isTest: r.isTest === "true",
-    idCardIssued: r.idCardIssued, deposit: r.deposit, contractArea: r.contractArea,
+    idCardIssued: r.idCardIssued, deposit: r.deposit, contractArea: r.contractArea, contractSignDate: r.contractSignDate,
     overdue: {
       override: r.overdueOverride === "true",
       enabled: r.overdueEnabled === "true",
@@ -222,6 +222,7 @@ export const tenantsRoute = new Elysia({ prefix: "/tenants" })
       idCardIssued: String(formData.idCardIssued ?? ""),
       deposit: String(formData.deposit ?? ""),
       contractArea: String(formData.contractArea ?? ""),
+      contractSignDate: String(formData.contractSignDate ?? ""),
       overdueOverride: formData.overdue?.override ? "true" : "false",
       overdueEnabled: formData.overdue?.enabled ? "true" : "false",
       overdueDay: String(Number(formData.overdue?.day) || 0),

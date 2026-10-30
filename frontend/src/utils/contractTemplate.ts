@@ -146,7 +146,7 @@ export function buildContractVars(opts: {
   const dueDay = Number(opts.overdueDay);
   const vars: Record<string, string> = {
     lessorName: c.lessorName, signPlace: c.signPlace,
-    contractDate: longThaiDate(t?.contractStartDate || todayISO(), yearFormat),
+    contractDate: longThaiDate(t?.contractSignDate || t?.contractStartDate || todayISO(), yearFormat),
     tenantName: `${t?.title ?? ""}${t?.firstName ?? ""} ${t?.lastName ?? ""}`.trim(),
     tenantHouseNo: t?.houseNo ?? "", tenantMoo: t?.moo ?? "", tenantSoi: t?.soi ?? "", tenantRoad: t?.road || t?.soi || "",
     tenantSubdistrict: t?.tambon ?? "", tenantDistrict: t?.amphoe ?? "", tenantProvince: t?.province ?? "",

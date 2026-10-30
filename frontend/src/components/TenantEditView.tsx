@@ -45,7 +45,7 @@ interface EditForm {
   houseNo: string; soi: string; road: string;
   province: string; amphoe: string; tambon: string; zipcode: string; address: string;
   contractStartDate: string; contractEndDate: string;
-  idCardIssued: string; deposit: string; contractArea: string;
+  idCardIssued: string; deposit: string; contractArea: string; contractSignDate: string;
 }
 
 export default function TenantEditView({
@@ -59,6 +59,7 @@ export default function TenantEditView({
     idCardIssued: tenant.idCardIssued ?? "",
     deposit: tenant.deposit ?? "",
     contractArea: tenant.contractArea ?? "",
+    contractSignDate: tenant.contractSignDate ?? "",
     amount: tenant.amount ?? "",
     idLicense: tenant.idLicense ?? "",
     title: tenant.title ?? "",
@@ -351,7 +352,7 @@ export default function TenantEditView({
         <div className="col-12 mt-2">
           <h5 className="form-section-title">สัญญาเช่า</h5>
         </div>
-        <div className="col-md-6">
+        <div className="col-md-4">
           <label className="form-label">วันเข้าพัก</label>
           <ThaiDatePicker
             value={form.contractStartDate}
@@ -359,7 +360,15 @@ export default function TenantEditView({
             placeholder="เลือกวันเข้าพัก"
           />
         </div>
-        <div className="col-md-6">
+        <div className="col-md-4">
+          <label className="form-label">วันที่ทำสัญญา</label>
+          <ThaiDatePicker
+            value={form.contractSignDate}
+            onChange={(v) => set("contractSignDate", v)}
+            placeholder="ว่าง = ใช้วันเข้าพัก"
+          />
+        </div>
+        <div className="col-md-4">
           <label className="form-label">วันหมดอายุสัญญา</label>
           <ThaiDatePicker
             value={form.contractEndDate}

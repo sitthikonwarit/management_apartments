@@ -81,6 +81,7 @@ export const tenants = pgTable("tenants", {
   idCardIssued: str("id_card_issued"), // วันที่ออกบัตรประชาชน "YYYY-MM-DD"
   deposit: str("deposit"), // เงินประกัน (บาท)
   contractArea: str("contract_area"), // ขนาดพื้นที่ที่เช่า
+  contractSignDate: str("contract_sign_date"), // วันที่ทำสัญญา "YYYY-MM-DD" (ว่าง = ใช้วันเข้าพัก)
   overdueEnabled: text("overdue_enabled").notNull().default("false"),
   overdueDay: str("overdue_day"),
   overdueFineType: str("overdue_fine_type"),
