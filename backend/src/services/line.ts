@@ -1116,21 +1116,35 @@ export async function sendPaymentReceiptLine(orgId: string, input: PaymentReceip
   }
 
   const [tenant] = await db.select().from(tenants).where(and(eq(tenants.id, String(input.tenantId)), eq(tenants.orgId, orgId)));
-  const lineUserId = (tenant?.lineUserId ?? "").trim();
-  if (!lineUserId || !lineUserId.startsWith("U")) {
+  // ผู้รับ = ผู้ทำสัญญาหลัก + ผู้ร่วมพักอาศัยทุกคนที่ผูก LINE User ID ไว้ (ขึ้นต้นด้วย "U") — ใบเสร็จเนื้อหาเดียวกัน
+  // (ชื่อห้อง/ยอด) ส่งถึงทุกคนในห้อง ไม่ขึ้นกับตัวเลือกส่งบิลให้ผู้ร่วมพัก เพราะใบเสร็จเป็นหลักฐานที่ทุกคนควรเห็น
+  const mainUid = (tenant?.lineUserId ?? "").trim();
+  let coResidents: any[] = [];
+  try { coResidents = tenant?.coResidents ? JSON.parse(tenant.coResidents) : []; } catch { coResidents = []; }
+  const recipients = [...new Set([
+    mainUid,
+    ...(Array.isArray(coResidents) ? coResidents.map((c: any) => String(c?.lineId ?? "").trim()) : []),
+  ].filter((uid) => uid.startsWith("U")))];
+  if (recipients.length === 0) {
     return { success: false, message: "ผู้เช่าห้องนี้ยังไม่ได้ผูก LINE User ID" };
   }
 
   try {
-    await pushLineMessage(settings.token, lineUserId, [buildPaymentReceiptFlexMessage(input, settings)]);
-
-    const snapshot = buildChatReceiptSnapshot(input, settings);
-    await logOutboundChatMessage(
-      orgId, lineUserId, String(input.tenantId ?? ""), "receipt", JSON.stringify(snapshot),
-      input.actor || "พนักงาน"
-    );
-
-    return { success: true, message: "ส่งใบเสร็จทาง LINE สำเร็จ" };
+    const message = buildPaymentReceiptFlexMessage(input, settings);
+    const snapshot = JSON.stringify(buildChatReceiptSnapshot(input, settings));
+    let sent = 0;
+    let lastErr = "";
+    for (const uid of recipients) {
+      try {
+        await pushLineMessage(settings.token, uid, [message]);
+        await logOutboundChatMessage(orgId, uid, String(input.tenantId ?? ""), "receipt", snapshot, input.actor || "พนักงาน");
+        sent++;
+      } catch (e: any) {
+        lastErr = e?.message ?? "Unknown error";
+      }
+    }
+    if (sent === 0) return { success: false, message: `ส่งใบเสร็จไม่สำเร็จ: ${lastErr}` };
+    return { success: true, message: recipients.length > 1 ? `ส่งใบเสร็จทาง LINE สำเร็จ (${sent}/${recipients.length} คนในห้อง)` : "ส่งใบเสร็จทาง LINE สำเร็จ" };
   } catch (e: any) {
     return { success: false, message: `ส่งใบเสร็จไม่สำเร็จ: ${e?.message ?? "Unknown error"}` };
   }
