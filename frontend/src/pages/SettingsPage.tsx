@@ -932,7 +932,7 @@ export default function SettingsPage() {
 
             {contractPreview && (
               <div className="confirm-overlay" style={{ alignItems: "flex-start", overflow: "auto" }} onClick={() => setContractPreview(false)}>
-                <div style={{ background: "#fff", width: "595pt", maxWidth: "100%", boxSizing: "border-box", margin: "3vh auto", padding: "72pt 90pt", borderRadius: 4, boxShadow: "0 8px 30px rgba(0,0,0,0.4)", position: "relative", overflowX: "auto" }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ width: "max-content", margin: "3vh auto", position: "relative" }} onClick={(e) => e.stopPropagation()}>
                   <button className="btn btn-sm btn-outline-secondary" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => setContractPreview(false)}><i className="fas fa-times" /></button>
                   <LeaseContractSheet logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} blocks={renderContract(contractCfg.template, buildContractVars({
                     tenant: { title: "นาย", firstName: "ตัวอย่าง", lastName: "ผู้เช่า", houseNo: "99", soi: "-", road: "-", tambon: "แขวงตัวอย่าง", amphoe: "เขตตัวอย่าง", province: "กรุงเทพมหานคร", idLicense: "1-2345-67890-12-3", tel: "081-234-5678", contractStartDate: "2026-01-01", contractEndDate: "2026-12-31", idCardIssued: "2020-05-10", deposit: 3000 },

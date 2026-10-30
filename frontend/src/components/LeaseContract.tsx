@@ -3,10 +3,15 @@ import { createPortal } from "react-dom";
 import type { ContractBlock } from "../utils/contractTemplate";
 
 // ขนาด/ระยะทั้งหมดอ้างอิงจากสัญญาตัวอย่าง (THSarabunPSK 16pt บน A4: ขอบซ้าย-ขวา 90pt, บรรทัดละ 18.1pt, ย่อหน้าเยื้อง 70pt,
-// บล็อกลายเซ็นเริ่มที่ 196pt จากขอบซ้าย) — Sarabun (ฟอนต์เว็บ) กว้างกว่า PSK จึงใช้ 10.5pt ให้ความกว้างบรรทัดเท่าตัวอย่าง
+// บล็อกลายเซ็นเริ่มที่ 196pt จากขอบซ้าย) — Sarabun (ฟอนต์เว็บ) กว้างกว่า PSK จึงใช้ 10.44pt ให้ตัดบรรทัดตรงกับตัวอย่าง
+// สีตัวอักษรบังคับดำสนิทเสมอ (กันธีมมืด/สีของแอปไหลเข้ามา) และเส้นประใต้ค่าที่เติมใช้ text-decoration จริง ตรงกับตัวอักษรเสมอ
 const SHEET_CSS = `
-.lease-sheet { font-family: 'Sarabun','TH Sarabun New','TH SarabunPSK',sans-serif; font-size: 10.5pt; line-height: 18.1pt; color: #000; background: #fff;
-  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.lease-pages { background: transparent; }
+.lease-page { position: relative; box-sizing: border-box; width: 595.3pt; min-height: 841.9pt; padding: 72pt 90pt; margin: 0 auto 14pt; background: #fff;
+  box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); }
+.lease-sheet, .lease-sheet * { color: #000 !important; -webkit-text-fill-color: #000 !important; }
+.lease-sheet { font-family: 'Sarabun','TH Sarabun New','TH SarabunPSK',sans-serif; font-size: 10.44pt; line-height: 18.1pt; font-weight: 400; background: transparent;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; text-rendering: geometricPrecision; }
 .lease-sheet p { margin: 0; white-space: pre-wrap; }
 .lease-sheet .lc-title { text-align: center; font-weight: 700; }
 .lease-sheet .lc-right { text-align: right; }
@@ -14,30 +19,81 @@ const SHEET_CSS = `
 .lease-sheet .lc-space { height: 18.1pt; }
 .lease-sheet .lc-sign { margin-left: 196pt; margin-top: 12pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-signName { margin-left: 217pt; text-align: left; white-space: pre; }
-.lease-sheet .lc-fill { padding: 0 14pt; background-image: repeating-linear-gradient(90deg, #000 0, #000 1.4pt, transparent 1.4pt, transparent 2.8pt);
-  background-size: 100% 0.5pt; background-repeat: no-repeat; background-position: 0 calc(100% - 3.1pt); }
-.lease-sheet .lc-blankfill { display: inline-block; padding: 0; vertical-align: baseline; background-position: 0 calc(100% - 4pt); }
-.lease-sheet .lc-logo { position: absolute; top: -36pt; left: 355pt; width: 80.8pt; height: 80.8pt; object-fit: contain; }
-.lease-sheet .lc-break { break-after: page; page-break-after: always; height: 0; }
+.lease-sheet .lc-fill { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #000; text-decoration-thickness: 0.8pt;
+  text-underline-offset: 1.6pt; text-decoration-skip-ink: none; }
+.lease-sheet .lc-logo { position: absolute; top: 36.1pt; left: 445.1pt; width: 80.8pt; height: 80.8pt; object-fit: contain; }
+@media print {
+  .lease-page { width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; background: transparent; }
+  .lease-page + .lease-page { break-before: page; page-break-before: always; }
+  .lease-sheet .lc-logo { top: -35.9pt; left: 355.1pt; }
+}
 `;
 
-// แสดงสัญญาที่แปลงแล้ว (บล็อกจาก renderContract) — ใช้ทั้งในหน้าตัวอย่างบนจอและตอนพิมพ์
-export function LeaseContractSheet({ blocks, logoUrl }: { blocks: ContractBlock[]; logoUrl?: string }) {
+const NB = " ";
+const SPACE_PT = 2.4; // ความกว้างช่องว่างไม่ตัดบรรทัดโดยประมาณที่ 10.44pt
+
+// แบ่งสัญญาเป็นหน้าตามบรรทัด "---"
+function splitPages(blocks: ContractBlock[]): ContractBlock[][] {
+  const pages: ContractBlock[][] = [[]];
+  for (const b of blocks) {
+    if (b.kind === "pagebreak") pages.push([]);
+    else pages[pages.length - 1].push(b);
+  }
+  return pages;
+}
+
+function Block({ b }: { b: ContractBlock }) {
+  if (!("parts" in b)) return <div className="lc-space" />;
+  const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : "lc-para";
   return (
-    <div className="lease-sheet" style={{ position: "relative" }}>
-      {logoUrl && <img src={logoUrl} alt="" className="lc-logo" />}
-      <style>{SHEET_CSS}</style>
-      {blocks.map((b, i) => {
-        if (!("parts" in b)) return b.kind === "pagebreak" ? <div key={i} className="lc-break" /> : <div key={i} className="lc-space" />;
-        const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : "lc-para";
-        return (
-          <p key={i} className={cls}>
-            {b.parts.map((p, j) => p.blankWidth
-              ? <span key={j} className="lc-fill lc-blankfill" style={{ width: `${p.blankWidth}pt` }}>&nbsp;</span>
-              : <span key={j} className={p.fill ? "lc-fill" : undefined}>{p.text}</span>)}
-          </p>
-        );
+    <p className={cls}>
+      {b.parts.map((p, j) => {
+        if (p.blankWidth) return <span key={j} className="lc-fill">{NB.repeat(Math.max(2, Math.round(p.blankWidth / SPACE_PT)))}</span>;
+        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(5) + p.text + NB.repeat(5)}</span>;
+        return <span key={j}>{p.text}</span>;
       })}
+    </p>
+  );
+}
+
+// สัญญาทั้งฉบับเป็นหน้า A4 (บนจอเป็นแผ่นขาวมีเงาแบบ Google Docs / ตอนพิมพ์ใช้ขอบจาก @page)
+export function LeaseContractSheet({ blocks, logoUrl }: { blocks: ContractBlock[]; logoUrl?: string }) {
+  const pages = splitPages(blocks);
+  return (
+    <div className="lease-pages lease-sheet">
+      <style>{SHEET_CSS}</style>
+      {pages.map((page, i) => (
+        <div key={i} className="lease-page">
+          {i === 0 && logoUrl && <img src={logoUrl} alt="" className="lc-logo" />}
+          {page.map((b, k) => <Block key={k} b={b} />)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ตัวอย่างก่อนพิมพ์ (พื้นหลังเทา แผ่นขาวมีเงา) + ปุ่มพิมพ์/ปิด
+export function LeaseContractPreview({ blocks, logoUrl, onPrint, onClose }: { blocks: ContractBlock[]; logoUrl?: string; onPrint: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "#f1f3f4", display: "flex", flexDirection: "column" }} className="no-print">
+      <div style={{ background: "#fff", borderBottom: "1px solid #dadce0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <i className="fas fa-file-contract" style={{ color: "#1a73e8" }} />
+        <strong style={{ color: "#202124" }}>สัญญาเช่า — ตัวอย่างก่อนพิมพ์</strong>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" onClick={onPrint}><i className="fas fa-print me-2" />พิมพ์ / บันทึกเป็น PDF</button>
+          <button className="btn btn-outline-secondary" onClick={onClose}><i className="fas fa-times" /></button>
+        </div>
+      </div>
+      <div style={{ overflow: "auto", flex: 1, padding: "20px 12px" }}>
+        <div style={{ width: "max-content", margin: "0 auto" }}>
+          <LeaseContractSheet blocks={blocks} logoUrl={logoUrl} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -49,7 +105,7 @@ export function LeaseContractPrint({ blocks, logoUrl, onDone }: { blocks: Contra
     let cancelled = false;
     const after = () => { if (!cancelled) onDone(); };
     window.addEventListener("afterprint", after);
-    // รอฟอนต์โหลดก่อนสั่งพิมพ์ ไม่งั้นหน้าพิมพ์อาจใช้ฟอนต์สำรอง
+    // รอฟอนต์/โลโก้โหลดก่อนสั่งพิมพ์ ไม่งั้นหน้าพิมพ์อาจใช้ฟอนต์สำรองหรือไม่มีโลโก้
     const ready = (document as any).fonts?.ready ?? Promise.resolve();
     const imgReady = logoUrl
       ? new Promise<void>((res) => { const im = new Image(); im.onload = () => res(); im.onerror = () => res(); im.src = logoUrl; })
