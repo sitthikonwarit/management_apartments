@@ -572,7 +572,7 @@ export function buildChatBillSnapshot(item: any, monthYear: string, settings: Li
   if (item.electricActive) {
     const fee = feeEnabled ? (Number(item.electricServiceFee) || 0) : 0;
     const feeSeparate = separateFee ? fee : 0;
-    const flatSvc = svc?.mode === "flat";
+    const flatSvc = (svc?.electricMode ?? svc?.mode) === "flat";
     const electricRate = fee > 0 && !separateFee && !flatSvc ? (Number(item.electricRate) || 0) + (Number(svc?.electricRate) || 0) : item.electricRate;
     const note = fee > 0 && !separateFee ? (flatSvc ? ` (รวมค่าบริการเหมาจ่าย ${fmtMoney(fee)} บาท)` : ` (ค่าไฟ ${fmtMoney(item.electricRate)} + ค่าบริการ ${fmtMoney(svc?.electricRate)} บาท/หน่วย)`) : "";
     rows.push({
@@ -581,21 +581,22 @@ export function buildChatBillSnapshot(item: any, monthYear: string, settings: Li
       price: (Number(item.priceElectric) || 0) - feeSeparate,
     });
     if (feeSeparate > 0) {
-      rows.push({ icon: ICONS.ELEC, name: svc!.mode === "flat" ? "ค่าบริการไฟ (เหมาจ่าย)" : `ค่าบริการไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`, sub: svc!.mode === "flat" ? "เหมาจ่าย" : `หน่วยละ ${fmtMoney(svc!.electricRate)} บาท`, price: feeSeparate });
+      rows.push({ icon: ICONS.ELEC, name: (svc!.electricMode ?? svc!.mode) === "flat" ? "ค่าบริการไฟ (เหมาจ่าย)" : `ค่าบริการไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`, sub: (svc!.electricMode ?? svc!.mode) === "flat" ? "เหมาจ่าย" : `หน่วยละ ${fmtMoney(svc!.electricRate)} บาท`, price: feeSeparate });
     }
   }
   if (item.waterActive) {
     const fee = feeEnabled ? (Number(item.waterServiceFee) || 0) : 0;
     const feeSeparate = separateFee ? fee : 0;
-    const waterRate = fee > 0 && !separateFee && !flatSvc ? (Number(item.waterRate) || 0) + (Number(svc?.waterRate) || 0) : item.waterRate;
-    const note = fee > 0 && !separateFee ? (flatSvc ? ` (รวมค่าบริการเหมาจ่าย ${fmtMoney(fee)} บาท)` : ` (ค่าน้ำ ${fmtMoney(item.waterRate)} + ค่าบริการ ${fmtMoney(svc?.waterRate)} บาท/หน่วย)`) : "";
+    const flatSvcW = (svc?.waterMode ?? svc?.mode) === "flat";
+    const waterRate = fee > 0 && !separateFee && !flatSvcW ? (Number(item.waterRate) || 0) + (Number(svc?.waterRate) || 0) : item.waterRate;
+    const note = fee > 0 && !separateFee ? (flatSvcW ? ` (รวมค่าบริการเหมาจ่าย ${fmtMoney(fee)} บาท)` : ` (ค่าน้ำ ${fmtMoney(item.waterRate)} + ค่าบริการ ${fmtMoney(svc?.waterRate)} บาท/หน่วย)`) : "";
     rows.push({
       icon: ICONS.WATER, name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
       sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · ${tieredWater ? tariffText(item.waterTariff) : `หน่วยละ ${fmtMoney(waterRate)} บาท${note}`}`,
       price: (Number(item.priceWater) || 0) - feeSeparate,
     });
     if (feeSeparate > 0) {
-      rows.push({ icon: ICONS.WATER, name: svc!.mode === "flat" ? "ค่าบริการน้ำ (เหมาจ่าย)" : `ค่าบริการน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`, sub: svc!.mode === "flat" ? "เหมาจ่าย" : `หน่วยละ ${fmtMoney(svc!.waterRate)} บาท`, price: feeSeparate });
+      rows.push({ icon: ICONS.WATER, name: (svc!.waterMode ?? svc!.mode) === "flat" ? "ค่าบริการน้ำ (เหมาจ่าย)" : `ค่าบริการน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`, sub: (svc!.waterMode ?? svc!.mode) === "flat" ? "เหมาจ่าย" : `หน่วยละ ${fmtMoney(svc!.waterRate)} บาท`, price: feeSeparate });
     }
   }
   (item.billTagItems ?? []).forEach((t: any) => {

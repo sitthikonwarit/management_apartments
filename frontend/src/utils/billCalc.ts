@@ -462,6 +462,16 @@ export interface WaterElectricRow {
 }
 
 // ชื่อแถว/คำอธิบายใต้ชื่อของแถวน้ำ-ไฟ ใช้ร่วมกันทุกที่ที่แสดงบิล (ตัวอย่างบิล, ใบแจ้งหนี้, ใบพิมพ์)
+// ค่าบริการน้ำและไฟตั้งแยกกันได้ในบิลเดียว: เปิด/ปิด และรูปแบบ (ต่อหน่วย/เหมาจ่าย) ของไฟกับน้ำเป็นอิสระต่อกัน
+// (ฟิลด์ electricEnabled/waterEnabled/electricMode/waterMode ว่าง = ตามค่ารวม enabled/mode เดิม)
+export function svcKindOn(svc: AppConfig["serviceFee"] | undefined, kind: "water" | "electric"): boolean {
+  if (!svc?.enabled) return false;
+  return (kind === "water" ? svc.waterEnabled : svc.electricEnabled) !== false;
+}
+export function svcKindFlat(svc: AppConfig["serviceFee"] | undefined, kind: "water" | "electric"): boolean {
+  return ((kind === "water" ? svc?.waterMode : svc?.electricMode) ?? svc?.mode) === "flat";
+}
+
 export function waterElectricRowName(r: WaterElectricRow): string {
   return r.flat ? `${r.label} (เหมาจ่าย)` : `${r.label} (${r.unit} หน่วย)`;
 }
@@ -483,7 +493,8 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
   const rows: WaterElectricRow[] = [];
   const tieredElec = !item.electricFormula && item.electricTariff?.mode === "tiered";
   const tieredWater = !item.waterFormula && item.waterTariff?.mode === "tiered";
-  const flatFee = !!svc && svc.mode === "flat";
+  const flatElec = svcKindFlat(svc, "electric");
+  const flatWater = svcKindFlat(svc, "water");
   const elecFormula = tieredElec ? describeTariff(item.electricTariff!) : undefined;
   const waterFormula = tieredWater ? describeTariff(item.waterTariff!) : undefined;
 
@@ -491,12 +502,12 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
     const fee = feeEnabled ? (Number(item.electricServiceFee) || 0) : 0;
     if (separate) {
       rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee, formula: elecFormula });
-      if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee, flat: flatFee });
+      if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee, flat: flatElec });
     } else {
       rows.push({
         kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit,
-        rate: item.electricRate + (fee > 0 && !flatFee ? svc!.electricRate : 0), price: item.priceElectric, formula: elecFormula,
-        note: fee > 0 ? (flatFee ? `รวมค่าบริการเหมาจ่าย ${money2(fee)} บาท` : `ค่าไฟ ${money2(item.electricRate)} + ค่าบริการ ${money2(svc!.electricRate)} บาท/หน่วย`) : undefined,
+        rate: item.electricRate + (fee > 0 && !flatElec ? svc!.electricRate : 0), price: item.priceElectric, formula: elecFormula,
+        note: fee > 0 ? (flatElec ? `รวมค่าบริการเหมาจ่าย ${money2(fee)} บาท` : `ค่าไฟ ${money2(item.electricRate)} + ค่าบริการ ${money2(svc!.electricRate)} บาท/หน่วย`) : undefined,
       });
     }
   }
@@ -504,12 +515,12 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
     const fee = feeEnabled ? (Number(item.waterServiceFee) || 0) : 0;
     if (separate) {
       rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee, formula: waterFormula });
-      if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee, flat: flatFee });
+      if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee, flat: flatWater });
     } else {
       rows.push({
         kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit,
-        rate: item.waterRate + (fee > 0 && !flatFee ? svc!.waterRate : 0), price: item.priceWater, formula: waterFormula,
-        note: fee > 0 ? (flatFee ? `รวมค่าบริการเหมาจ่าย ${money2(fee)} บาท` : `ค่าน้ำ ${money2(item.waterRate)} + ค่าบริการ ${money2(svc!.waterRate)} บาท/หน่วย`) : undefined,
+        rate: item.waterRate + (fee > 0 && !flatWater ? svc!.waterRate : 0), price: item.priceWater, formula: waterFormula,
+        note: fee > 0 ? (flatWater ? `รวมค่าบริการเหมาจ่าย ${money2(fee)} บาท` : `ค่าน้ำ ${money2(item.waterRate)} + ค่าบริการ ${money2(svc!.waterRate)} บาท/หน่วย`) : undefined,
       });
     }
   }
@@ -623,8 +634,8 @@ export function recalcItem(
   item.electricTariff = electricTariff;
   const wf = item.waterFormula || waterDefault;
   const ef = item.electricFormula || electricDefault;
-  item.waterServiceFee = item.waterActive && svcCfg.enabled ? (svcCfg.mode === "flat" ? Number(svcCfg.waterFlat) || 0 : item.meterWater.unit * svcCfg.waterRate) : 0;
-  item.electricServiceFee = item.electricActive && svcCfg.enabled ? (svcCfg.mode === "flat" ? Number(svcCfg.electricFlat) || 0 : item.meterElectric.unit * svcCfg.electricRate) : 0;
+  item.waterServiceFee = item.waterActive && svcKindOn(svcCfg, "water") ? (svcKindFlat(svcCfg, "water") ? Number(svcCfg.waterFlat) || 0 : item.meterWater.unit * svcCfg.waterRate) : 0;
+  item.electricServiceFee = item.electricActive && svcKindOn(svcCfg, "electric") ? (svcKindFlat(svcCfg, "electric") ? Number(svcCfg.electricFlat) || 0 : item.meterElectric.unit * svcCfg.electricRate) : 0;
   item.priceWater = (item.waterActive ? (!item.waterFormula && waterTariff.mode === "tiered" ? calcTariff(item.meterWater.unit, waterTariff) : calculateComplexPrice(item.meterWater.unit, item.waterRate, wf)) : 0) + item.waterServiceFee;
   item.priceElectric = (item.electricActive ? (!item.electricFormula && electricTariff.mode === "tiered" ? calcTariff(item.meterElectric.unit, electricTariff) : calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef)) : 0) + item.electricServiceFee;
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);

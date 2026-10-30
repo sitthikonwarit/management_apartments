@@ -20,7 +20,7 @@ import {
   monthYearLabel, myScore, prevMY, padZ, specialDiscountExpiredToday, isTestItem,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
-  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, waterElectricRowName, waterElectricRowSub, ROUNDING_DISCOUNT_ID,
+  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, svcKindOn, svcKindFlat, waterElectricRowName, waterElectricRowSub, ROUNDING_DISCOUNT_ID,
   reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
@@ -957,12 +957,25 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
 }
 
 // ── การ์ดมิเตอร์ (ไฟ/น้ำ) พร้อมสูตรคำนวณ — ทรงเดียวกับต้นฉบับ ─────────────────
-function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula, rate, onRate, serviceOn, serviceRate, serviceFee, tariff, onTariff, kind }: {
+// เปิด/ปิดค่าบริการของไฟหรือน้ำอย่างใดอย่างหนึ่งในบิลนี้ (ค่ารวม enabled เปิดเมื่อมีอย่างน้อยหนึ่งอย่างเปิดอยู่)
+function setSvcKind(d: BillItem, kind: "water" | "electric", on: boolean) {
+  const cfg = d.serviceFeeConfig;
+  if (!cfg) return;
+  const other = kind === "water" ? "electric" : "water";
+  const wasOn = !!cfg.enabled;
+  if (on && !wasOn) { cfg.enabled = true; (cfg as any)[`${other}Enabled`] = false; }
+  (cfg as any)[`${kind}Enabled`] = on;
+  if (!on && !svcKindOn(cfg, other)) cfg.enabled = false;
+}
+
+function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula, rate, onRate, svcOn, svcFlat, svcValue, svcFee, onSvcToggle, onSvcMode, onSvcValue, tariff, onTariff, kind }: {
   label: string; icon: string; color: string; tint: string; active: boolean;
   prev: number; curr: number; unit: number; price: number; formula: string;
   onToggleActive: (v: boolean) => void;
   onPrev: (v: number) => void; onCurr: (v: number) => void; onFormula: (v: string) => void;
-  rate: number; onRate: (v: number) => void; serviceOn: boolean; serviceRate: number; serviceFee: number;
+  rate: number; onRate: (v: number) => void;
+  svcOn: boolean; svcFlat: boolean; svcValue: number; svcFee: number;
+  onSvcToggle: (v: boolean) => void; onSvcMode: (flat: boolean) => void; onSvcValue: (v: number) => void;
   tariff: Tariff; onTariff: (t: Tariff) => void; kind: "water" | "electric";
 }) {
   const [mode, setMode] = useState<"standard" | "custom">(formula ? "custom" : "standard");
@@ -1008,14 +1021,34 @@ function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price,
             </div>
           </div>
           <div className="mt-2"><TariffEditor compact kind={kind} tariff={tariff} onChange={onTariff} /></div>
-          {serviceOn && (
-            <div className="small mt-2 p-2 rounded" style={{ border: "1px dashed var(--color-light)" }}>
-              <div className="d-flex justify-content-between"><span>{label}ตามหน่วย ({unit} หน่วย)</span><b>{money(price - serviceFee)} ฿</b></div>
-              <div className="d-flex justify-content-between" style={{ color }}>
-                <span><i className="fas fa-file-invoice me-1" />ค่าบริการ{label.replace("ค่า", "")} ({unit} × {serviceRate})</span><b>{money(serviceFee)} ฿</b>
+          <div className="mt-3 p-2 rounded" style={{ border: "1px dashed var(--color-light)" }}>
+            <div className="d-flex justify-content-between align-items-center">
+              <span className="small fw-bold" style={{ color }}><i className="fas fa-file-invoice me-1" />ค่าบริการ{label.replace("ค่า", "")}</span>
+              <div className="form-check form-switch mb-0">
+                <input className="form-check-input" type="checkbox" checked={svcOn} onChange={(e) => onSvcToggle(e.target.checked)} />
               </div>
             </div>
-          )}
+            {svcOn ? (
+              <>
+                <div className="btn-group btn-group-sm w-100 my-2" role="group">
+                  <button type="button" className={`btn btn-outline-secondary${svcFlat ? "" : " active"}`} onClick={() => onSvcMode(false)}>ต่อหน่วย</button>
+                  <button type="button" className={`btn btn-outline-secondary${svcFlat ? " active" : ""}`} onClick={() => onSvcMode(true)}>เหมาจ่าย</button>
+                </div>
+                <div className="row g-2 align-items-center">
+                  <label className="col-6 col-form-label small text-muted">{svcFlat ? "ค่าบริการ (฿/บิล)" : "ค่าบริการ (฿/หน่วย)"}</label>
+                  <div className="col-6">
+                    <input type="number" step="any" min={0} className="form-control form-control-sm text-end" value={svcValue}
+                      onChange={(e) => onSvcValue(Number(e.target.value) || 0)} />
+                  </div>
+                </div>
+                <div className="small d-flex justify-content-between mt-1">
+                  <span>ค่าบริการ{label.replace("ค่า", "")}{svcFlat ? " (เหมาจ่าย)" : ` (${unit} หน่วย)`}</span><b>{money(svcFee)} ฿</b>
+                </div>
+              </>
+            ) : (
+              <div className="small text-muted mt-1">ไม่คิดค่าบริการ{label.replace("ค่า", "")}ในบิลนี้</div>
+            )}
+          </div>
           {showFormula && (
             <div className="mt-2">
               <div className="form-check form-switch">
@@ -1153,7 +1186,11 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onCurr={(v) => onUpdate((d) => { d.meterElectric.curr = v; })}
               onFormula={(v) => onUpdate((d) => { d.electricFormula = v; })}
               rate={item.electricRate} onRate={(v) => onUpdate((d) => { d.electricRate = v; })}
-              serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.electricRate ?? 0} serviceFee={item.electricServiceFee || 0}
+              svcOn={svcKindOn(item.serviceFeeConfig, "electric")} svcFlat={svcKindFlat(item.serviceFeeConfig, "electric")}
+              svcValue={svcKindFlat(item.serviceFeeConfig, "electric") ? (item.serviceFeeConfig?.electricFlat ?? 0) : (item.serviceFeeConfig?.electricRate ?? 0)} svcFee={item.electricServiceFee || 0}
+              onSvcToggle={(v) => onUpdate((d) => setSvcKind(d, "electric", v))}
+              onSvcMode={(flat) => onUpdate((d) => { d.serviceFeeConfig!.electricMode = flat ? "flat" : "unit"; })}
+              onSvcValue={(v) => onUpdate((d) => { if (svcKindFlat(d.serviceFeeConfig, "electric")) d.serviceFeeConfig!.electricFlat = v; else d.serviceFeeConfig!.electricRate = v; })}
               kind="electric" tariff={item.electricTariff ?? normalizeTariff(null)} onTariff={(t) => onUpdate((d) => { d.electricTariff = t; })}
             />
             <MeterBlock label="ค่าน้ำ" icon="fa-tint" color="#0dcaf0" tint="rgba(13,202,240,0.1)"
@@ -1164,59 +1201,28 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onCurr={(v) => onUpdate((d) => { d.meterWater.curr = v; })}
               onFormula={(v) => onUpdate((d) => { d.waterFormula = v; })}
               rate={item.waterRate} onRate={(v) => onUpdate((d) => { d.waterRate = v; })}
-              serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.waterRate ?? 0} serviceFee={item.waterServiceFee || 0}
+              svcOn={svcKindOn(item.serviceFeeConfig, "water")} svcFlat={svcKindFlat(item.serviceFeeConfig, "water")}
+              svcValue={svcKindFlat(item.serviceFeeConfig, "water") ? (item.serviceFeeConfig?.waterFlat ?? 0) : (item.serviceFeeConfig?.waterRate ?? 0)} svcFee={item.waterServiceFee || 0}
+              onSvcToggle={(v) => onUpdate((d) => setSvcKind(d, "water", v))}
+              onSvcMode={(flat) => onUpdate((d) => { d.serviceFeeConfig!.waterMode = flat ? "flat" : "unit"; })}
+              onSvcValue={(v) => onUpdate((d) => { if (svcKindFlat(d.serviceFeeConfig, "water")) d.serviceFeeConfig!.waterFlat = v; else d.serviceFeeConfig!.waterRate = v; })}
               kind="water" tariff={item.waterTariff ?? normalizeTariff(null)} onTariff={(t) => onUpdate((d) => { d.waterTariff = t; })}
             />
 
-            {/* ค่าบริการต่อหน่วย (เฉพาะบิลใบนี้) — เปิด/ปิด, อัตราไฟ/น้ำ และรูปแบบการแสดงบนบิล ตรงกับที่ขึ้นในตัวอย่างบิลด้านขวา */}
-            <div className="card mb-3 shadow-sm border-0">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h6 className="mb-0 text-secondary"><i className="fas fa-file-invoice me-2" />ค่าบริการน้ำและไฟ (บิลนี้)</h6>
-                  <div className="form-check form-switch mb-0">
-                    <input className="form-check-input" type="checkbox" checked={!!item.serviceFeeConfig?.enabled}
-                      onChange={(e) => onUpdate((d) => {
-                        const cur = d.serviceFeeConfig ?? { enabled: false, waterRate: Number(config.serviceFee?.waterRate) || 0, electricRate: Number(config.serviceFee?.electricRate) || 0, mode: config.serviceFee?.mode === "flat" ? "flat" : "unit", waterFlat: Number(config.serviceFee?.waterFlat) || 0, electricFlat: Number(config.serviceFee?.electricFlat) || 0, displayMode: config.serviceFee?.displayMode === "separate" ? "separate" : "combined" };
-                        d.serviceFeeConfig = { ...cur, enabled: e.target.checked } as any;
-                      })} />
+            {/* รูปแบบการแสดงค่าบริการบนบิล (ใช้ร่วมกันทั้งไฟและน้ำ) — เปิด/ปิด และอัตราตั้งแยกในการ์ดค่าไฟ/ค่าน้ำด้านบน */}
+            {(svcKindOn(item.serviceFeeConfig, "electric") || svcKindOn(item.serviceFeeConfig, "water")) && (
+              <div className="card mb-3 shadow-sm border-0">
+                <div className="card-body">
+                  <div className="small text-muted mb-2">การแสดงค่าบริการในรายละเอียดบิล</div>
+                  <div className="btn-group btn-group-sm w-100" role="group">
+                    <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig!.displayMode !== "separate" ? " active" : ""}`}
+                      onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "combined"; })}>รวมในบรรทัดค่าไฟ/น้ำ</button>
+                    <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig!.displayMode === "separate" ? " active" : ""}`}
+                      onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "separate"; })}>แยกบรรทัดค่าบริการ</button>
                   </div>
                 </div>
-                {item.serviceFeeConfig?.enabled ? (
-                  <>
-                    <div className="btn-group btn-group-sm w-100 mb-2" role="group">
-                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.mode === "flat" ? "" : " active"}`}
-                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.mode = "unit"; })}>ต่อหน่วย</button>
-                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.mode === "flat" ? " active" : ""}`}
-                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.mode = "flat"; })}>เหมาจ่าย</button>
-                    </div>
-                    <div className="row g-2 mb-2">
-                      <div className="col-6">
-                        <small className="text-muted">{item.serviceFeeConfig.mode === "flat" ? "ค่าบริการไฟ (฿/บิล)" : "ค่าบริการไฟ (฿/หน่วย)"}</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end"
-                          value={item.serviceFeeConfig.mode === "flat" ? (item.serviceFeeConfig.electricFlat ?? 0) : item.serviceFeeConfig.electricRate}
-                          onChange={(e) => onUpdate((d) => { const v = Number(e.target.value) || 0; if (d.serviceFeeConfig!.mode === "flat") d.serviceFeeConfig!.electricFlat = v; else d.serviceFeeConfig!.electricRate = v; })} />
-                      </div>
-                      <div className="col-6">
-                        <small className="text-muted">{item.serviceFeeConfig.mode === "flat" ? "ค่าบริการน้ำ (฿/บิล)" : "ค่าบริการน้ำ (฿/หน่วย)"}</small>
-                        <input type="number" step="any" min={0} className="form-control form-control-sm text-end"
-                          value={item.serviceFeeConfig.mode === "flat" ? (item.serviceFeeConfig.waterFlat ?? 0) : item.serviceFeeConfig.waterRate}
-                          onChange={(e) => onUpdate((d) => { const v = Number(e.target.value) || 0; if (d.serviceFeeConfig!.mode === "flat") d.serviceFeeConfig!.waterFlat = v; else d.serviceFeeConfig!.waterRate = v; })} />
-                      </div>
-                    </div>
-                    <div className="btn-group btn-group-sm w-100 mb-2" role="group">
-                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.displayMode !== "separate" ? " active" : ""}`}
-                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "combined"; })}>รวมในบรรทัดค่าไฟ/น้ำ</button>
-                      <button type="button" className={`btn btn-outline-secondary${item.serviceFeeConfig.displayMode === "separate" ? " active" : ""}`}
-                        onClick={() => onUpdate((d) => { d.serviceFeeConfig!.displayMode = "separate"; })}>แยกบรรทัดค่าบริการ</button>
-                    </div>
-                    <div className="small d-flex justify-content-between"><span>ค่าบริการไฟ{item.serviceFeeConfig.mode === "flat" ? " (เหมาจ่าย)" : ` (${item.meterElectric.unit} หน่วย)`}</span><b>{money(item.electricServiceFee || 0)} ฿</b></div>
-                    <div className="small d-flex justify-content-between"><span>ค่าบริการน้ำ{item.serviceFeeConfig.mode === "flat" ? " (เหมาจ่าย)" : ` (${item.meterWater.unit} หน่วย)`}</span><b>{money(item.waterServiceFee || 0)} ฿</b></div>
-                  </>
-                ) : (
-                  <div className="small text-muted">ไม่คิดค่าบริการน้ำ/ไฟสำหรับบิลใบนี้ — เปิดสวิตช์เพื่อคิดค่าบริการไฟ/น้ำ</div>
-                )}
               </div>
-            </div>
+            )}
 
             <div className="card mb-3 shadow-sm border-0">
               <div className="card-body">
