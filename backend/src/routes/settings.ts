@@ -23,6 +23,10 @@ function parseFormula(r: typeof appSettings.$inferSelect) {
   };
 }
 
+function parseTariff(v: string) {
+  try { const o = v ? JSON.parse(v) : null; return o && typeof o === "object" ? o : null; } catch { return null; }
+}
+
 function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
   return {
     // รหัสองค์กรไว้ต่อท้าย ?org= ใน Endpoint URL ของ LIFF app แต่ละองค์กร (ดู lib/orgContext.ts,
@@ -30,6 +34,8 @@ function parseConfig(r: typeof appConfig.$inferSelect, orgSlug: string) {
     orgSlug,
     electricRate: Number(r.electricRate) || 0,
     waterRate: Number(r.waterRate) || 0,
+    waterTariff: parseTariff(r.waterTariff),
+    electricTariff: parseTariff(r.electricTariff),
     serviceFee: {
       enabled: r.serviceFeeEnabled === "true",
       waterRate: Number(r.serviceFeeWaterRate) || 0,
@@ -235,6 +241,8 @@ export const settingsRoute = new Elysia({ prefix: "/settings" })
       lineBotUserId,
       electricRate: String(Number(b.electricRate) || 0),
       waterRate: String(Number(b.waterRate) || 0),
+      waterTariff: b.waterTariff ? JSON.stringify(b.waterTariff) : "",
+      electricTariff: b.electricTariff ? JSON.stringify(b.electricTariff) : "",
       serviceFeeEnabled: b.serviceFee?.enabled ? "true" : "false",
       serviceFeeWaterRate: String(Number(b.serviceFee?.waterRate) || 0),
       serviceFeeElectricRate: String(Number(b.serviceFee?.electricRate) || 0),

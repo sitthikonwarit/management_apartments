@@ -1,6 +1,8 @@
 import type { AppConfig } from "../context/AppConfigContext";
 import { toDisplayYear, normalizeYearToCE } from "./yearFormat";
 import { tenantOccupiesRoom } from "./tenantRoom";
+import { calcTariff, normalizeTariff, type Tariff } from "./tariff";
+export { calcTariff, normalizeTariff, type Tariff };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface BillTagItem { id: string; name: string; price: number; color?: string; icon?: string }
@@ -75,6 +77,9 @@ export interface BillItem {
   electricDefaultFormula?: string;
   overdueConfig?: AppConfig["overdue"];
   serviceFeeConfig?: AppConfig["serviceFee"];
+  // อัตราน้ำ/ไฟแบบก้าวหน้าตามจริง ที่ล็อกไว้กับบิล (แก้เฉพาะบิลนี้ได้ ไม่ตามการแก้ Settings ภายหลัง)
+  waterTariff?: Tariff;
+  electricTariff?: Tariff;
   // ── ปัดเศษยอดบิลลง (ก่อนถึงวันครบกำหนดชำระเท่านั้น) — ล็อกไว้กับบิลเหมือน overdueConfig/serviceFeeConfig
   // ด้านบน เพื่อไม่ให้การแก้ "ค่าเริ่มต้น" ในหน้าตั้งค่าภายหลัง ย้อนไปเปลี่ยนยอดบิลเก่าที่ปิดไปแล้ว
   roundingConfig?: AppConfig["rounding"];
@@ -462,30 +467,32 @@ export function buildWaterElectricRows(item: BillItem): WaterElectricRow[] {
   function money2(n: number) { return (Number(n) || 0).toFixed(2); }
 
   const rows: WaterElectricRow[] = [];
+  const tieredElec = !item.electricFormula && item.electricTariff?.mode === "tiered";
+  const tieredWater = !item.waterFormula && item.waterTariff?.mode === "tiered";
 
   if (item.electricActive) {
     const fee = feeEnabled ? (Number(item.electricServiceFee) || 0) : 0;
     if (separate) {
-      rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee });
+      rows.push({ kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit, rate: item.electricRate, price: item.priceElectric - fee, note: tieredElec ? "อัตราก้าวหน้า (รวม VAT)" : undefined });
       if (fee > 0) rows.push({ kind: "electricFee", label: "ค่าบริการไฟ", unit: item.meterElectric.unit, rate: svc!.electricRate, price: fee });
     } else {
       rows.push({
         kind: "electric", label: "ค่าไฟ", unit: item.meterElectric.unit,
         rate: item.electricRate + (fee > 0 ? svc!.electricRate : 0), price: item.priceElectric,
-        note: fee > 0 ? `ค่าไฟ ${money2(item.electricRate)} + ค่าบริการ ${money2(svc!.electricRate)} บาท/หน่วย` : undefined,
+        note: tieredElec ? "อัตราก้าวหน้า (รวม VAT)" : fee > 0 ? `ค่าไฟ ${money2(item.electricRate)} + ค่าบริการ ${money2(svc!.electricRate)} บาท/หน่วย` : undefined,
       });
     }
   }
   if (item.waterActive) {
     const fee = feeEnabled ? (Number(item.waterServiceFee) || 0) : 0;
     if (separate) {
-      rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee });
+      rows.push({ kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit, rate: item.waterRate, price: item.priceWater - fee, note: tieredWater ? "อัตราก้าวหน้า (รวม VAT)" : undefined });
       if (fee > 0) rows.push({ kind: "waterFee", label: "ค่าบริการน้ำ", unit: item.meterWater.unit, rate: svc!.waterRate, price: fee });
     } else {
       rows.push({
         kind: "water", label: "ค่าน้ำ", unit: item.meterWater.unit,
         rate: item.waterRate + (fee > 0 ? svc!.waterRate : 0), price: item.priceWater,
-        note: fee > 0 ? `ค่าน้ำ ${money2(item.waterRate)} + ค่าบริการ ${money2(svc!.waterRate)} บาท/หน่วย` : undefined,
+        note: tieredWater ? "อัตราก้าวหน้า (รวม VAT)" : fee > 0 ? `ค่าน้ำ ${money2(item.waterRate)} + ค่าบริการ ${money2(svc!.waterRate)} บาท/หน่วย` : undefined,
       });
     }
   }
@@ -593,12 +600,16 @@ export function recalcItem(
   };
   item.roundingConfig = roundingCfg;
 
+  const waterTariff = item.waterTariff ?? normalizeTariff(config.waterTariff);
+  const electricTariff = item.electricTariff ?? normalizeTariff(config.electricTariff);
+  item.waterTariff = waterTariff;
+  item.electricTariff = electricTariff;
   const wf = item.waterFormula || waterDefault;
   const ef = item.electricFormula || electricDefault;
   item.waterServiceFee = item.waterActive && svcCfg.enabled ? (svcCfg.mode === "flat" ? Number(svcCfg.waterFlat) || 0 : item.meterWater.unit * svcCfg.waterRate) : 0;
   item.electricServiceFee = item.electricActive && svcCfg.enabled ? (svcCfg.mode === "flat" ? Number(svcCfg.electricFlat) || 0 : item.meterElectric.unit * svcCfg.electricRate) : 0;
-  item.priceWater = (item.waterActive ? calculateComplexPrice(item.meterWater.unit, item.waterRate, wf) : 0) + item.waterServiceFee;
-  item.priceElectric = (item.electricActive ? calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef) : 0) + item.electricServiceFee;
+  item.priceWater = (item.waterActive ? (!item.waterFormula && waterTariff.mode === "tiered" ? calcTariff(item.meterWater.unit, waterTariff) : calculateComplexPrice(item.meterWater.unit, item.waterRate, wf)) : 0) + item.waterServiceFee;
+  item.priceElectric = (item.electricActive ? (!item.electricFormula && electricTariff.mode === "tiered" ? calcTariff(item.meterElectric.unit, electricTariff) : calculateComplexPrice(item.meterElectric.unit, item.electricRate, ef)) : 0) + item.electricServiceFee;
   item.priceVehicle = (item.billVehicleItems || []).reduce((s, v) => s + (Number(v.price) || 0), 0);
 
   calculateOverdueFine(item, overdueCfg, monthYear);
@@ -825,6 +836,9 @@ export function normalizeBillItem(raw: any): BillItem {
     // บิลเก่าก่อนมีระบบ "ค่าบริการต่อหน่วย" (ไม่เคยมีฟิลด์นี้เก็บไว้เลย) ต้องล็อกเป็น "ปิดใช้งาน" ถาวรตรงนี้
     // ห้ามปล่อยเป็น undefined เหมือนสูตร/ค่าปรับด้านบน เพราะ recalcItem จะ backfill ด้วยค่าปัจจุบันจาก Settings
     // ทันทีที่เปิดบิลเก่ามาแก้/รีเฟรช ทำให้บิลเก่าโดนบวกค่าบริการย้อนหลังทั้งที่ตอนออกบิลจริงยังไม่มีระบบนี้
+    // บิลเก่าก่อนมีอัตราก้าวหน้า ล็อกเป็น "อัตราเดียว" ถาวร (เหตุผลเดียวกับ serviceFeeConfig ด้านล่าง)
+    waterTariff: raw?.waterTariff ? normalizeTariff(raw.waterTariff) : normalizeTariff(null),
+    electricTariff: raw?.electricTariff ? normalizeTariff(raw.electricTariff) : normalizeTariff(null),
     serviceFeeConfig: raw?.serviceFeeConfig
       ? { ...raw.serviceFeeConfig }
       : { enabled: false, waterRate: 0, electricRate: 0, displayMode: "combined" },

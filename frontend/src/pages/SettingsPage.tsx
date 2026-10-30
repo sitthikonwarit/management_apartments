@@ -1,6 +1,8 @@
 import { DEFAULT_CONTRACT, CONTRACT_VARIABLES, buildContractVars, renderContract, type ContractConfig } from "../utils/contractTemplate";
 import { LeaseContractSheet } from "../components/LeaseContract";
 import ContractEditor, { type ContractEditorHandle } from "../components/ContractEditor";
+import TariffEditor from "../components/TariffEditor";
+import { normalizeTariff, type Tariff } from "../utils/tariff";
 import ContractDataPanel from "../components/ContractDataPanel";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -263,6 +265,8 @@ export default function SettingsPage() {
   const [serviceFeeEnabled, setServiceFeeEnabled] = useState(false);
   const [serviceFeeWaterRate, setServiceFeeWaterRate] = useState(0);
   const [serviceFeeElectricRate, setServiceFeeElectricRate] = useState(0);
+  const [waterTariff, setWaterTariff] = useState<Tariff>(normalizeTariff(null));
+  const [electricTariff, setElectricTariff] = useState<Tariff>(normalizeTariff(null));
   const [serviceFeeMode, setServiceFeeMode] = useState<"unit" | "flat">("unit");
   const [serviceFeeWaterFlat, setServiceFeeWaterFlat] = useState(0);
   const [serviceFeeElectricFlat, setServiceFeeElectricFlat] = useState(0);
@@ -405,6 +409,8 @@ export default function SettingsPage() {
     setServiceFeeEnabled(config.serviceFee.enabled);
     setServiceFeeWaterRate(config.serviceFee.waterRate);
     setServiceFeeElectricRate(config.serviceFee.electricRate);
+    setWaterTariff(normalizeTariff(config.waterTariff));
+    setElectricTariff(normalizeTariff(config.electricTariff));
     setServiceFeeMode(config.serviceFee.mode === "flat" ? "flat" : "unit");
     setServiceFeeWaterFlat(config.serviceFee.waterFlat ?? 0);
     setServiceFeeElectricFlat(config.serviceFee.electricFlat ?? 0);
@@ -626,6 +632,7 @@ export default function SettingsPage() {
         ratesConfirmed: config.ratesConfirmed, // อ่านอย่างเดียวเหมือนกัน — ตั้งได้แค่จาก OnboardingWizard.tsx เท่านั้น
         electricRate: Number(electricRate) || 0,
         waterRate: Number(waterRate) || 0,
+        waterTariff, electricTariff,
         serviceFee: {
           enabled: serviceFeeEnabled,
           waterRate: Number(serviceFeeWaterRate) || 0,
@@ -978,6 +985,7 @@ export default function SettingsPage() {
                           <span className="input-group-text">บาท</span>
                         </div>
                         <div className="form-text small">ราคาพื้นฐานเมื่อไม่มีสูตรคำนวณ</div>
+                        <div className="mt-2"><TariffEditor kind="electric" tariff={electricTariff} onChange={setElectricTariff} /></div>
                       </div>
                     </Searchable>
                     <Searchable query={q} keywords="ค่าน้ำ น้ำประปา water rate">
@@ -989,8 +997,10 @@ export default function SettingsPage() {
                           <span className="input-group-text">บาท</span>
                         </div>
                         <div className="form-text small">ราคาพื้นฐานเมื่อไม่มีสูตรคำนวณ</div>
+                        <div className="mt-2"><TariffEditor kind="water" tariff={waterTariff} onChange={setWaterTariff} /></div>
                       </div>
                     </Searchable>
+                    <div className="col-12"><small className="text-muted">อัตราก้าวหน้าใช้กับบิลที่สร้างใหม่เท่านั้น — บิลที่สร้างไปแล้วล็อกอัตราไว้กับบิล ไม่เปลี่ยนตามการบันทึกตั้งค่า (แก้เฉพาะบิลได้ที่หน้าแก้ไขบิล) · ถ้าห้องไหนตั้ง "สูตรพิเศษ" ไว้ จะใช้สูตรนั้นก่อน</small></div>
                   </div>
                 </div>
 

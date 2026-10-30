@@ -1,6 +1,7 @@
 import { DEFAULT_CONTRACT, type ContractConfig } from "../utils/contractTemplate";
 import { createContext, useContext, useEffect, useState } from "react";
 import { settingsApi } from "../api/client";
+import { DEFAULT_TARIFF, normalizeTariff, type Tariff } from "../utils/tariff";
 import { setGlobalYearFormat, type YearFormat } from "../utils/yearFormat";
 import { useAuth } from "./AuthContext";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
@@ -39,6 +40,8 @@ export interface AppConfig {
   orgSlug: string;
   electricRate: number;
   waterRate: number;
+  waterTariff: Tariff;
+  electricTariff: Tariff;
   // ค่าบริการต่อหน่วย (ส่วนเพิ่มจากค่าน้ำ/ค่าไฟฐาน) — เช่น ค่าไฟหน่วยละ 4 บาท + ค่าบริการหน่วยละ 3 บาท
   // displayMode เลือกได้ว่าจะรวมยอดค่าบริการเข้าบรรทัดค่าน้ำ/ค่าไฟเดียวกัน หรือแยกเป็นบรรทัดต่างหากในรายละเอียดบิล
   serviceFee: { enabled: boolean; waterRate: number; electricRate: number; mode?: "unit" | "flat"; waterFlat?: number; electricFlat?: number; displayMode: "combined" | "separate" };
@@ -118,6 +121,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   orgSlug: "",
   electricRate: 0,
   waterRate: 0,
+  waterTariff: DEFAULT_TARIFF,
+  electricTariff: DEFAULT_TARIFF,
   serviceFee: { enabled: false, waterRate: 0, electricRate: 0, mode: "unit", waterFlat: 0, electricFlat: 0, displayMode: "combined" },
   overdue: { enabled: false, day: 5, type: "fixed", amount: 0 },
   rounding: { enabled: false, unit: 5 },
@@ -176,6 +181,8 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
         ...DEFAULT_APP_CONFIG,
         ...data,
         appIdentity: { ...DEFAULT_APP_CONFIG.appIdentity, ...data.appIdentity },
+        waterTariff: normalizeTariff(data.waterTariff),
+        electricTariff: normalizeTariff(data.electricTariff),
         serviceFee: { ...DEFAULT_APP_CONFIG.serviceFee, ...data.serviceFee },
         overdue: { ...DEFAULT_APP_CONFIG.overdue, ...data.overdue },
         rounding: { ...DEFAULT_APP_CONFIG.rounding, ...data.rounding },

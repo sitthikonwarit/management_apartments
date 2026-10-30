@@ -12,6 +12,8 @@ import ColResizeHandle from "../components/ColResizeHandle";
 import ThaiDatePicker from "../components/ThaiDatePicker";
 import EmptyState from "../components/EmptyState";
 import PinMenuPopup, { type PinMenuState } from "../components/PinMenuPopup";
+import TariffEditor from "../components/TariffEditor";
+import { normalizeTariff, type Tariff } from "../utils/tariff";
 import {
   type BillGroup, type BillItem, type BillLineItem, type GenCtx, type OutstandingItem, type OutstandingAdjustment,
   type SpecialDiscount,
@@ -955,12 +957,13 @@ function PaymentModal({ item, history, monthYear, config, allBills, onClose, onC
 }
 
 // ── การ์ดมิเตอร์ (ไฟ/น้ำ) พร้อมสูตรคำนวณ — ทรงเดียวกับต้นฉบับ ─────────────────
-function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula, rate, onRate, serviceOn, serviceRate, serviceFee }: {
+function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price, formula, onToggleActive, onPrev, onCurr, onFormula, rate, onRate, serviceOn, serviceRate, serviceFee, tariff, onTariff, kind }: {
   label: string; icon: string; color: string; tint: string; active: boolean;
   prev: number; curr: number; unit: number; price: number; formula: string;
   onToggleActive: (v: boolean) => void;
   onPrev: (v: number) => void; onCurr: (v: number) => void; onFormula: (v: string) => void;
   rate: number; onRate: (v: number) => void; serviceOn: boolean; serviceRate: number; serviceFee: number;
+  tariff: Tariff; onTariff: (t: Tariff) => void; kind: "water" | "electric";
 }) {
   const [mode, setMode] = useState<"standard" | "custom">(formula ? "custom" : "standard");
   const [showFormula, setShowFormula] = useState(false);
@@ -1004,6 +1007,7 @@ function MeterBlock({ label, icon, color, tint, active, prev, curr, unit, price,
                 onChange={(e) => onRate(Number(e.target.value) || 0)} />
             </div>
           </div>
+          <div className="mt-2"><TariffEditor compact kind={kind} tariff={tariff} onChange={onTariff} /></div>
           {serviceOn && (
             <div className="small mt-2 p-2 rounded" style={{ border: "1px dashed var(--color-light)" }}>
               <div className="d-flex justify-content-between"><span>{label}ตามหน่วย ({unit} หน่วย)</span><b>{money(price - serviceFee)} ฿</b></div>
@@ -1150,6 +1154,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onFormula={(v) => onUpdate((d) => { d.electricFormula = v; })}
               rate={item.electricRate} onRate={(v) => onUpdate((d) => { d.electricRate = v; })}
               serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.electricRate ?? 0} serviceFee={item.electricServiceFee || 0}
+              kind="electric" tariff={item.electricTariff ?? normalizeTariff(null)} onTariff={(t) => onUpdate((d) => { d.electricTariff = t; })}
             />
             <MeterBlock label="ค่าน้ำ" icon="fa-tint" color="#0dcaf0" tint="rgba(13,202,240,0.1)"
               active={item.waterActive} prev={item.meterWater.prev} curr={item.meterWater.curr}
@@ -1160,6 +1165,7 @@ function BillDetailPage({ item, items, currentIndex, monthYear, config, paymentH
               onFormula={(v) => onUpdate((d) => { d.waterFormula = v; })}
               rate={item.waterRate} onRate={(v) => onUpdate((d) => { d.waterRate = v; })}
               serviceOn={!!item.serviceFeeConfig?.enabled} serviceRate={item.serviceFeeConfig?.waterRate ?? 0} serviceFee={item.waterServiceFee || 0}
+              kind="water" tariff={item.waterTariff ?? normalizeTariff(null)} onTariff={(t) => onUpdate((d) => { d.waterTariff = t; })}
             />
 
             {/* ค่าบริการต่อหน่วย (เฉพาะบิลใบนี้) — เปิด/ปิด, อัตราไฟ/น้ำ และรูปแบบการแสดงบนบิล ตรงกับที่ขึ้นในตัวอย่างบิลด้านขวา */}

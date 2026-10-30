@@ -551,6 +551,8 @@ export function buildChatBillSnapshot(item: any, monthYear: string, settings: Li
   const svc = item.serviceFeeConfig;
   const feeEnabled = !!svc?.enabled;
   const separateFee = feeEnabled && svc?.displayMode === "separate";
+  const tieredElec = !item.electricFormula && item.electricTariff?.mode === "tiered";
+  const tieredWater = !item.waterFormula && item.waterTariff?.mode === "tiered";
   if (item.electricActive) {
     const fee = feeEnabled ? (Number(item.electricServiceFee) || 0) : 0;
     const feeSeparate = separateFee ? fee : 0;
@@ -558,7 +560,7 @@ export function buildChatBillSnapshot(item: any, monthYear: string, settings: Li
     const note = fee > 0 && !separateFee ? ` (ค่าไฟ ${fmtMoney(item.electricRate)} + ค่าบริการ ${fmtMoney(svc?.electricRate)} บาท/หน่วย)` : "";
     rows.push({
       icon: ICONS.ELEC, name: `ค่าไฟ (${item.meterElectric?.unit ?? 0} หน่วย)`,
-      sub: `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · หน่วยละ ${fmtMoney(electricRate)} บาท${note}`,
+      sub: `เดือนก่อน ${item.meterElectric?.prev ?? 0} → เดือนนี้ ${item.meterElectric?.curr ?? 0} · ${tieredElec ? "อัตราก้าวหน้า (รวม VAT)" : `หน่วยละ ${fmtMoney(electricRate)} บาท${note}`}`,
       price: (Number(item.priceElectric) || 0) - feeSeparate,
     });
     if (feeSeparate > 0) {
@@ -572,7 +574,7 @@ export function buildChatBillSnapshot(item: any, monthYear: string, settings: Li
     const note = fee > 0 && !separateFee ? ` (ค่าน้ำ ${fmtMoney(item.waterRate)} + ค่าบริการ ${fmtMoney(svc?.waterRate)} บาท/หน่วย)` : "";
     rows.push({
       icon: ICONS.WATER, name: `ค่าน้ำ (${item.meterWater?.unit ?? 0} หน่วย)`,
-      sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · หน่วยละ ${fmtMoney(waterRate)} บาท${note}`,
+      sub: `เดือนก่อน ${item.meterWater?.prev ?? 0} → เดือนนี้ ${item.meterWater?.curr ?? 0} · ${tieredWater ? "อัตราก้าวหน้า (รวม VAT)" : `หน่วยละ ${fmtMoney(waterRate)} บาท${note}`}`,
       price: (Number(item.priceWater) || 0) - feeSeparate,
     });
     if (feeSeparate > 0) {
