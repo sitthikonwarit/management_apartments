@@ -278,6 +278,7 @@ export default function SettingsPage() {
   const [contractCfg, setContractCfg] = useState<ContractConfig>(config.contract ?? DEFAULT_CONTRACT);
   const [contractPreview, setContractPreview] = useState(false);
   const [contractCodeMode, setContractCodeMode] = useState(false);
+  const [contractEditorOpen, setContractEditorOpen] = useState(false);
   const [lineEnabled, setLineEnabled] = useState(false);
   const [lineToken, setLineToken] = useState("");
   const [lineTokenVisible, setLineTokenVisible] = useState(false);
@@ -922,8 +923,10 @@ export default function SettingsPage() {
                   <textarea className="form-control" rows={18} style={{ fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
                     onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
                 ) : (
-                  <ContractEditor value={contractCfg.template} onChange={(v) => setContractCfg((c) => ({ ...c, template: v }))}
-                    logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} />
+                  <div className="p-4 text-center" style={{ border: "1px dashed var(--color-light)", borderRadius: "var(--border-radius-1)" }}>
+                    <div className="text-muted mb-3">แก้ข้อความสัญญาบนหน้ากระดาษ A4 เต็มหน้าจอ (ฟอนต์ TH Sarabun เหมือนตอนพิมพ์)</div>
+                    <button type="button" className="btn btn-primary" onClick={() => setContractEditorOpen(true)}><i className="fas fa-pen-to-square me-2" />เปิดตัวแก้ไขสัญญาแบบเต็มหน้า</button>
+                  </div>
                 )}
                 <div className="text-muted small mt-2">
                   รูปแบบ: <code>{"# "}</code> หัวเรื่องกลางหน้า · <code>{"> "}</code> ชิดขวา · <code>{"~ "}</code> บรรทัดลายเซ็น · <code>---</code> ขึ้นหน้าใหม่ · เว้นบรรทัดเพื่อแยกข้อ · ตัวแปรเขียนเป็น <code>{"{{ชื่อตัวแปร}}"}</code>
@@ -938,8 +941,29 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {contractEditorOpen && (
+              <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "#f1f3f4", display: "flex", flexDirection: "column" }}>
+                <div style={{ background: "#fff", borderBottom: "1px solid #dadce0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <i className="fas fa-file-contract" style={{ color: "#1a73e8" }} />
+                  <strong style={{ color: "#202124" }}>แก้ไขสัญญาเช่า (แม่แบบ)</strong>
+                  <span className="text-muted small d-none d-md-inline">แก้แล้วกด "บันทึก" เพื่อใช้กับสัญญาที่พิมพ์ต่อไป</span>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <button className="btn btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-2" />ดูตัวอย่างข้อมูลจริง</button>
+                    <button className="btn btn-primary" onClick={handleSaveAll} disabled={saving}>
+                      {saving ? <span className="spinner-border spinner-border-sm me-2" /> : <i className="fas fa-save me-2" />}บันทึก
+                    </button>
+                    <button className="btn btn-outline-secondary" onClick={() => setContractEditorOpen(false)}><i className="fas fa-times" /></button>
+                  </div>
+                </div>
+                <div style={{ flex: 1, minHeight: 0, padding: "10px 16px", display: "flex", flexDirection: "column" }}>
+                  <ContractEditor fullPage value={contractCfg.template} onChange={(v) => setContractCfg((c) => ({ ...c, template: v }))}
+                    logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} />
+                </div>
+              </div>
+            )}
+
             {contractPreview && (
-              <div className="confirm-overlay" style={{ alignItems: "flex-start", overflow: "auto" }} onClick={() => setContractPreview(false)}>
+              <div className="confirm-overlay" style={{ alignItems: "flex-start", overflow: "auto", zIndex: 1700 }} onClick={() => setContractPreview(false)}>
                 <div style={{ width: "max-content", margin: "3vh auto", position: "relative" }} onClick={(e) => e.stopPropagation()}>
                   <button className="btn btn-sm btn-outline-secondary" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => setContractPreview(false)}><i className="fas fa-times" /></button>
                   <LeaseContractSheet logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} blocks={renderContract(contractCfg.template, buildContractVars({

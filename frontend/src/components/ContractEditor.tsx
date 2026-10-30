@@ -83,7 +83,7 @@ function EditablePara({ line, onText, onKey, onFocus, onPaste }: {
   );
 }
 
-export default function ContractEditor({ value, onChange, logoUrl }: { value: string; onChange: (v: string) => void; logoUrl?: string }) {
+export default function ContractEditor({ value, onChange, logoUrl, fullPage }: { value: string; onChange: (v: string) => void; logoUrl?: string; fullPage?: boolean }) {
   const [lines, setLines] = useState<Line[]>(() => parse(value));
   const [resetKey, setResetKey] = useState(0);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -180,7 +180,7 @@ export default function ContractEditor({ value, onChange, logoUrl }: { value: st
   const kinds: [Kind, string][] = [["para", "ย่อหน้า"], ["title", "หัวเรื่อง (กลาง ตัวหนา)"], ["right", "ชิดขวา"], ["sign", "ลายเซ็น"], ["signName", "ชื่อใต้ลายเซ็น"]];
 
   return (
-    <div className="lc-editor" ref={root}>
+    <div className="lc-editor" ref={root} style={fullPage ? { display: "flex", flexDirection: "column", height: "100%", minHeight: 0 } : undefined}>
       <style>{SHEET_CSS}{EDITOR_CSS}</style>
       <div className="lc-toolbar">
         <select className="form-select form-select-sm" style={{ width: 190 }} value={active && active.kind !== "pagebreak" ? active.kind : ""} disabled={!active}
@@ -211,7 +211,7 @@ export default function ContractEditor({ value, onChange, logoUrl }: { value: st
         <span className="text-muted small ms-auto">คลิกที่ข้อความเพื่อแก้ไข · Enter = ย่อหน้าใหม่ · ชิปสีฟ้า = ข้อมูลที่ระบบเติมให้</span>
       </div>
 
-      <div style={{ background: "#f1f3f4", padding: "16px 8px", borderRadius: 8, overflow: "auto", maxHeight: "78vh" }}>
+      <div style={fullPage ? { background: "#f1f3f4", padding: "20px 12px", borderRadius: 8, overflow: "auto", flex: 1, minHeight: 0 } : { background: "#f1f3f4", padding: "16px 8px", borderRadius: 8, overflow: "auto", maxHeight: "78vh" }}>
         <div style={{ width: "max-content", margin: "0 auto" }}>
           <div className="lease-pages lease-sheet">
             {pages.map((page, pi) => (
