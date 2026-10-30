@@ -1,5 +1,5 @@
 import type { BillItem } from "../utils/billCalc";
-import { monthYearLabel, buildWaterElectricRows } from "../utils/billCalc";
+import { monthYearLabel, buildWaterElectricRows, waterElectricRowName, waterElectricRowSub } from "../utils/billCalc";
 
 // รับแค่ส่วนของ AppConfig ที่ใช้จริง (ไม่ใช่ทั้งก้อน) เพื่อให้เรียกใช้จากหน้าที่ไม่มี useAppConfig() ได้ด้วย
 // (เช่นหน้า LIFF ฝั่งผู้เช่า ที่ดึงค่าจาก endpoint สาธารณะ /liff/config แทน ไม่ใช่ context ของพนักงาน)
@@ -34,11 +34,8 @@ export function BillLinePreview({ item, monthYear, config }: { item: BillItem; m
     rows.push({
       icon: isFee ? "fa-file-invoice-dollar" : isElectric ? "fa-bolt" : "fa-tint",
       iconBg: isFee ? "#6c757d" : isElectric ? "#fd7e14" : "#0dcaf0",
-      name: `${r.label} (${r.unit} หน่วย)`,
-      sub: (isFee
-        ? `หน่วยละ ${money(r.rate)} บาท`
-        : `เดือนก่อน ${isElectric ? item.meterElectric.prev : item.meterWater.prev} → เดือนนี้ ${isElectric ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`)
-        + (r.note ? ` (${r.note})` : ""),
+      name: waterElectricRowName(r),
+      sub: waterElectricRowSub(r, isElectric ? item.meterElectric.prev : item.meterWater.prev, isElectric ? item.meterElectric.curr : item.meterWater.curr, " → "),
       price: r.price,
     });
   });

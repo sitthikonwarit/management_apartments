@@ -20,7 +20,7 @@ import {
   monthYearLabel, myScore, prevMY, padZ, specialDiscountExpiredToday, isTestItem,
   generateBillForMonth, refreshDerivedFields, recalcItem, resolveDefaultFormulas,
   syncTenantForItem, normalizeBillItem, getRoomsAwaitingMeterReading, closeOutstandingBills,
-  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, ROUNDING_DISCOUNT_ID,
+  adjustedOutstandingAmount, applyPartialOutstandingPayment, buildWaterElectricRows, waterElectricRowName, waterElectricRowSub, ROUNDING_DISCOUNT_ID,
   reconcileOutstandingItems, thaiBahtText,
 } from "../utils/billCalc";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
@@ -1490,11 +1490,8 @@ function BillSlip({ item, monthYear, config, payerName, payerIndex, payerCount, 
   const waterElectricRows = buildWaterElectricRows(item)
     .filter((r) => (r.kind === "water" || r.kind === "waterFee" ? showWater : showElectric))
     .map((r) => ({
-      name: `${r.label} (${r.unit} หน่วย)`, price: r.price,
-      sub: (r.kind === "electricFee" || r.kind === "waterFee"
-        ? `หน่วยละ ${money(r.rate)} บาท`
-        : `${r.kind === "electric" ? item.meterElectric.prev : item.meterWater.prev} → ${r.kind === "electric" ? item.meterElectric.curr : item.meterWater.curr} · หน่วยละ ${money(r.rate)} บาท`)
-        + (r.note ? ` (${r.note})` : ""),
+      name: waterElectricRowName(r), price: r.price,
+      sub: waterElectricRowSub(r, r.kind === "electric" ? item.meterElectric.prev : item.meterWater.prev, r.kind === "electric" ? item.meterElectric.curr : item.meterWater.curr, " → "),
     }));
   const rows: { name: string; price: number; sub?: string }[] = [
     ...(showRoom ? [{ name: "ค่าห้อง", price: item.priceRoom }] : []),
@@ -1574,15 +1571,15 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
   const showRoom = !lineKeys || lineKeys.has("room");
   const showOutstanding = !lineKeys || lineKeys.has("outstanding");
 
-  type PrettyRow = { name: string; prev?: number; curr?: number; unit?: number; rate?: number; price: number };
+  type PrettyRow = { name: string; prev?: number; curr?: number; unit?: number; rate?: number | string; price: number };
   const waterElectricRows: PrettyRow[] = buildWaterElectricRows(item)
     .filter((r) => (r.kind === "water" || r.kind === "waterFee" ? showWater : showElectric))
     .map((r) => ({
-      name: r.label,
+      name: r.flat ? `${r.label} (เหมาจ่าย)` : r.formula ? `${r.label} (${r.formula})` : r.label,
       prev: r.kind === "electric" ? item.meterElectric.prev : r.kind === "water" ? item.meterWater.prev : undefined,
       curr: r.kind === "electric" ? item.meterElectric.curr : r.kind === "water" ? item.meterWater.curr : undefined,
-      unit: r.unit,
-      rate: r.rate,
+      unit: r.flat ? undefined : r.unit,
+      rate: r.flat ? undefined : r.formula ? "ก้าวหน้า" : r.rate,
       price: r.price,
     }));
   const rows: PrettyRow[] = [
@@ -1653,7 +1650,7 @@ function BillSlipPretty({ item, monthYear, config, payerName, payerIndex, payerC
                 <td className="bsp-col-name">{r.name}</td>
                 <td>{r.prev ?? ""}</td>
                 <td>{r.curr ?? ""}</td>
-                <td>{r.rate ? money(r.rate) : ""}</td>
+                <td>{typeof r.rate === "string" ? r.rate : r.rate ? money(r.rate) : ""}</td>
                 <td>{r.unit ?? ""}</td>
                 <td className="bsp-col-amt">{r.price < 0 ? "-" : ""}{money(Math.abs(r.price))}</td>
               </tr>

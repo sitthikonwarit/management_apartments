@@ -34,3 +34,19 @@ export function calcTariff(units: number, t: Tariff): number {
   const total = (base + t.fixedFee + u * t.ftRate) * (1 + t.vatPercent / 100);
   return Math.round(total * 100) / 100;
 }
+
+// ข้อความสูตรอัตราก้าวหน้าสำหรับแสดงในบิล เช่น "สูตร: ขั้นละ 1-30×8.5, 31-40×10.03, 41+×10.5 + ค่าบริการ 25 + Ft 0.3972×หน่วย รวม VAT 7%"
+export function describeTariff(t: Tariff): string {
+  const n = (v: number) => String(Math.round(v * 10000) / 10000);
+  let prev = 0;
+  const parts = t.tiers.map((tier) => {
+    const label = tier.upTo == null ? `${prev + 1}+` : `${prev + 1}-${tier.upTo}`;
+    if (tier.upTo != null) prev = tier.upTo;
+    return `${label}×${n(tier.rate)}`;
+  });
+  let s = `สูตร: ขั้นละ ${parts.join(", ")}`;
+  if (t.fixedFee) s += ` + ค่าบริการ ${n(t.fixedFee)}`;
+  if (t.ftRate) s += ` + Ft ${n(t.ftRate)}×หน่วย`;
+  if (t.vatPercent) s += ` รวม VAT ${n(t.vatPercent)}%`;
+  return s;
+}
