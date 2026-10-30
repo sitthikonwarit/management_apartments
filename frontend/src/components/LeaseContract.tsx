@@ -14,7 +14,7 @@ export const SHEET_CSS = `
 .lease-sheet, .lease-sheet * { color: #000 !important; -webkit-text-fill-color: #000 !important; }
 .lease-sheet { font-family: 'THSarabunPSK','TH Sarabun New','TH SarabunPSK','Sarabun',sans-serif; font-size: 16pt; line-height: 18.1pt; font-weight: 400; background: transparent;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; text-rendering: geometricPrecision; }
-.lease-sheet p { margin: 0; white-space: pre-wrap; }
+.lease-sheet p { margin: 0; white-space: break-spaces; }
 .lease-sheet .lc-title { text-align: center; font-weight: 700; }
 .lease-sheet .lc-right { text-align: right; }
 .lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 70pt; }
