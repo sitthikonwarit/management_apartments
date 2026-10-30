@@ -25,9 +25,10 @@ export const SHEET_CSS = `
   text-underline-offset: 1.6pt; text-decoration-skip-ink: none; }
 .lease-sheet .lc-logo { position: absolute; top: 36.1pt; left: 445.1pt; width: 80.8pt; height: 80.8pt; object-fit: contain; }
 @media print {
-  .lease-page { width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; background: transparent; }
-  .lease-page + .lease-page { break-before: page; page-break-before: always; }
-  .lease-sheet .lc-logo { top: -35.9pt; left: 355.1pt; }
+  /* ขอบกระดาษ 0 แล้วให้แต่ละหน้า (.lease-page) เป็น A4 เต็มแผ่นที่มี padding เอง — โลโก้วางตำแหน่งสัมบูรณ์ในแผ่นได้โดยไม่ล้นขอบ
+     (เนื้อหาล้นขอบ/ค่าติดลบทำให้ Chrome ย่อทั้งเอกสารหรือตัดโลโก้ตอนพิมพ์) */
+  .lease-page { width: 595.3pt; min-height: 841pt; margin: 0; box-shadow: none; background: #fff; break-after: page; page-break-after: always; }
+  .lease-page:last-of-type { break-after: auto; page-break-after: auto; }
 }
 `;
 
@@ -124,9 +125,9 @@ export function LeaseContractPrint({ blocks, logoUrl, onDone }: { blocks: Contra
       <style>{`
         .lease-print-root { display: none; }
         @media print {
-          @page { size: A4 portrait; margin: 72pt 90pt; }
+          @page { size: 595.3pt 841.9pt; margin: 0; }
           #root { display: none !important; }
-          html, body { background: #fff !important; }
+          html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; width: auto !important; }
           .lease-print-root { display: block !important; }
         }
       `}</style>
