@@ -12,24 +12,29 @@ const SHEET_CSS = `
 .lease-sheet .lc-right { text-align: right; }
 .lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 70pt; }
 .lease-sheet .lc-space { height: 18.1pt; }
-.lease-sheet .lc-sign { margin-left: 196pt; text-align: left; white-space: pre; }
+.lease-sheet .lc-sign { margin-left: 196pt; margin-top: 12pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-signName { margin-left: 217pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-fill { padding: 0 14pt; background-image: repeating-linear-gradient(90deg, #000 0, #000 1.4pt, transparent 1.4pt, transparent 2.8pt);
   background-size: 100% 0.5pt; background-repeat: no-repeat; background-position: 0 calc(100% - 3.1pt); }
+.lease-sheet .lc-blankfill { display: inline-block; padding: 0; vertical-align: baseline; background-position: 0 calc(100% - 4pt); }
+.lease-sheet .lc-logo { position: absolute; top: -36pt; left: 355pt; width: 80.8pt; height: 80.8pt; object-fit: contain; }
 .lease-sheet .lc-break { break-after: page; page-break-after: always; height: 0; }
 `;
 
 // แสดงสัญญาที่แปลงแล้ว (บล็อกจาก renderContract) — ใช้ทั้งในหน้าตัวอย่างบนจอและตอนพิมพ์
-export function LeaseContractSheet({ blocks }: { blocks: ContractBlock[] }) {
+export function LeaseContractSheet({ blocks, logoUrl }: { blocks: ContractBlock[]; logoUrl?: string }) {
   return (
-    <div className="lease-sheet">
+    <div className="lease-sheet" style={{ position: "relative" }}>
+      {logoUrl && <img src={logoUrl} alt="" className="lc-logo" />}
       <style>{SHEET_CSS}</style>
       {blocks.map((b, i) => {
         if (!("parts" in b)) return b.kind === "pagebreak" ? <div key={i} className="lc-break" /> : <div key={i} className="lc-space" />;
         const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : "lc-para";
         return (
           <p key={i} className={cls}>
-            {b.parts.map((p, j) => <span key={j} className={p.fill ? "lc-fill" : undefined}>{p.text}</span>)}
+            {b.parts.map((p, j) => p.blankWidth
+              ? <span key={j} className="lc-fill lc-blankfill" style={{ width: `${p.blankWidth}pt` }}>&nbsp;</span>
+              : <span key={j} className={p.fill ? "lc-fill" : undefined}>{p.text}</span>)}
           </p>
         );
       })}
@@ -39,14 +44,17 @@ export function LeaseContractSheet({ blocks }: { blocks: ContractBlock[] }) {
 
 // พิมพ์สัญญา: เรนเดอร์ผ่าน portal ลง body (นอก #root) แล้วซ่อนแอปทั้งหมดตอนพิมพ์ — เปิดไดอะล็อกพิมพ์ของเบราว์เซอร์ทันที
 // ปิดตัวเองเมื่อพิมพ์/ยกเลิกเสร็จ (afterprint)
-export function LeaseContractPrint({ blocks, onDone }: { blocks: ContractBlock[]; onDone: () => void }) {
+export function LeaseContractPrint({ blocks, logoUrl, onDone }: { blocks: ContractBlock[]; logoUrl?: string; onDone: () => void }) {
   useEffect(() => {
     let cancelled = false;
     const after = () => { if (!cancelled) onDone(); };
     window.addEventListener("afterprint", after);
     // รอฟอนต์โหลดก่อนสั่งพิมพ์ ไม่งั้นหน้าพิมพ์อาจใช้ฟอนต์สำรอง
     const ready = (document as any).fonts?.ready ?? Promise.resolve();
-    Promise.resolve(ready).then(() => setTimeout(() => { if (!cancelled) window.print(); }, 150));
+    const imgReady = logoUrl
+      ? new Promise<void>((res) => { const im = new Image(); im.onload = () => res(); im.onerror = () => res(); im.src = logoUrl; })
+      : Promise.resolve();
+    Promise.all([Promise.resolve(ready), imgReady]).then(() => setTimeout(() => { if (!cancelled) window.print(); }, 150));
     return () => { cancelled = true; window.removeEventListener("afterprint", after); };
   }, []);
 
@@ -61,7 +69,7 @@ export function LeaseContractPrint({ blocks, onDone }: { blocks: ContractBlock[]
           .lease-print-root { display: block !important; }
         }
       `}</style>
-      <LeaseContractSheet blocks={blocks} />
+      <LeaseContractSheet blocks={blocks} logoUrl={logoUrl} />
     </div>,
     document.body
   );

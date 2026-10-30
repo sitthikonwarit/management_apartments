@@ -814,7 +814,7 @@ function TenantDetailView({
 
       </div>
 
-      {printingContract && <LeaseContractPrint blocks={contractBlocks} onDone={() => setPrintingContract(false)} />}
+      {printingContract && <LeaseContractPrint blocks={contractBlocks} logoUrl={config.contract.showLogo !== false ? config.appIdentity.logoUrl : undefined} onDone={() => setPrintingContract(false)} />}
       <div className="detail-modal-footer">
         <button className="btn btn-outline-secondary" onClick={onBack}>
           <i className="fas fa-arrow-left me-1" />กลับ

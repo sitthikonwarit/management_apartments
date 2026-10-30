@@ -883,6 +883,7 @@ export default function SettingsPage() {
                     ["electricText", "ค่าไฟ (ข้อความ)", "ว่าง = ใช้ค่าไฟจากหน้าระบบบิล เช่น หน่วยละ 7 บาท"],
                     ["waterText", "ค่าน้ำ (ข้อความ)", "เช่น หน่วยแรก 50 บาท หน่วยต่อไปหน่วยละ 17 บาท"],
                     ["commonFeeText", "ค่าบริการส่วนกลาง (ข้อความ)", "เช่น 100 บาท ต่อเดือน"],
+                    ["earlyMoveOutText", "ย้ายออกก่อน (เงื่อนไขท้ายสัญญา)", "เช่น ครบ 6 เดือน — ว่าง = เว้นเป็นจุดให้เขียนเอง"],
                     ["witness1", "พยาน 1", ""], ["witness2", "พยาน 2", ""],
                   ] as [keyof ContractConfig, string, string][]).map(([k, label, ph]) => (
                     <div key={k} className="col-12 col-md-6">
@@ -903,6 +904,10 @@ export default function SettingsPage() {
                   ))}
                 </div>
 
+                <label className="d-flex align-items-center gap-2 mt-3" style={{ cursor: "pointer" }}>
+                  <input type="checkbox" className="form-check-input mt-0" checked={contractCfg.showLogo !== false} onChange={(e) => setContractCfg({ ...contractCfg, showLogo: e.target.checked })} />
+                  แสดงโลโก้ (จากหน้ารูปลักษณ์) มุมขวาบนของสัญญา
+                </label>
                 <div className="d-flex justify-content-between align-items-center mt-4 mb-1 flex-wrap gap-2">
                   <label className="form-label fw-bold mb-0">ข้อความสัญญา (แม่แบบ)</label>
                   <div className="d-flex gap-2">
@@ -929,7 +934,7 @@ export default function SettingsPage() {
               <div className="confirm-overlay" style={{ alignItems: "flex-start", overflow: "auto" }} onClick={() => setContractPreview(false)}>
                 <div style={{ background: "#fff", width: "595pt", maxWidth: "100%", boxSizing: "border-box", margin: "3vh auto", padding: "72pt 90pt", borderRadius: 4, boxShadow: "0 8px 30px rgba(0,0,0,0.4)", position: "relative", overflowX: "auto" }} onClick={(e) => e.stopPropagation()}>
                   <button className="btn btn-sm btn-outline-secondary" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => setContractPreview(false)}><i className="fas fa-times" /></button>
-                  <LeaseContractSheet blocks={renderContract(contractCfg.template, buildContractVars({
+                  <LeaseContractSheet logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} blocks={renderContract(contractCfg.template, buildContractVars({
                     tenant: { title: "นาย", firstName: "ตัวอย่าง", lastName: "ผู้เช่า", houseNo: "99", soi: "-", road: "-", tambon: "แขวงตัวอย่าง", amphoe: "เขตตัวอย่าง", province: "กรุงเทพมหานคร", idLicense: "1-2345-67890-12-3", tel: "081-234-5678", contractStartDate: "2026-01-01", contractEndDate: "2026-12-31", idCardIssued: "2020-05-10", deposit: 3000 },
                     room: { number: "101", price: 2000 }, contract: contractCfg, yearFormat: config.yearFormat,
                     electricRate: Number(electricRate) || 0, waterRate: Number(waterRate) || 0, overdueDay: Number(dueDay) || 5, overdueAmount: fineType === "fixed" ? Number(fineAmount) || 0 : 0,
