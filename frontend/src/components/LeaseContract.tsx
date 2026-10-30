@@ -5,7 +5,7 @@ import type { ContractBlock } from "../utils/contractTemplate";
 // ขนาด/ระยะทั้งหมดอ้างอิงจากสัญญาตัวอย่าง (THSarabunPSK 16pt บน A4: ขอบซ้าย-ขวา 90pt, บรรทัดละ 18.1pt, ย่อหน้าเยื้อง 70pt,
 // บล็อกลายเซ็นเริ่มที่ 196pt จากขอบซ้าย) — ใช้ฟอนต์ TH Sarabun (ไฟล์อยู่ใน public/fonts) 16pt เหมือนต้นฉบับ
 // สีตัวอักษรบังคับดำสนิทเสมอ (กันธีมมืด/สีของแอปไหลเข้ามา) และเส้นประใต้ค่าที่เติมใช้ text-decoration จริง ตรงกับตัวอักษรเสมอ
-const SHEET_CSS = `
+export const SHEET_CSS = `
 @font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: block; }
 @font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: block; }
 .lease-pages { background: transparent; }

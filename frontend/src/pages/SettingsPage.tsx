@@ -1,5 +1,6 @@
 import { DEFAULT_CONTRACT, CONTRACT_VARIABLES, buildContractVars, renderContract, type ContractConfig } from "../utils/contractTemplate";
 import { LeaseContractSheet } from "../components/LeaseContract";
+import ContractEditor from "../components/ContractEditor";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SelectRaw from "react-select";
@@ -276,6 +277,7 @@ export default function SettingsPage() {
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(30);
   const [contractCfg, setContractCfg] = useState<ContractConfig>(config.contract ?? DEFAULT_CONTRACT);
   const [contractPreview, setContractPreview] = useState(false);
+  const [contractCodeMode, setContractCodeMode] = useState(false);
   const [lineEnabled, setLineEnabled] = useState(false);
   const [lineToken, setLineToken] = useState("");
   const [lineTokenVisible, setLineTokenVisible] = useState(false);
@@ -911,12 +913,18 @@ export default function SettingsPage() {
                 <div className="d-flex justify-content-between align-items-center mt-4 mb-1 flex-wrap gap-2">
                   <label className="form-label fw-bold mb-0">ข้อความสัญญา (แม่แบบ)</label>
                   <div className="d-flex gap-2">
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-1" />ดูตัวอย่าง</button>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractCodeMode((v) => !v)}><i className="fas fa-code me-1" />{contractCodeMode ? "กลับไปแก้บนหน้ากระดาษ" : "แก้แบบโค้ด"}</button>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setContractPreview(true)}><i className="fas fa-eye me-1" />ดูตัวอย่างข้อมูลจริง</button>
                     <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { if (window.confirm("คืนข้อความสัญญาเป็นแบบเริ่มต้น? ข้อความที่แก้ไว้จะหายไป")) setContractCfg({ ...contractCfg, template: DEFAULT_CONTRACT.template }); }}>คืนค่าเริ่มต้น</button>
                   </div>
                 </div>
-                <textarea className="form-control" rows={18} style={{ fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
-                  onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
+                {contractCodeMode ? (
+                  <textarea className="form-control" rows={18} style={{ fontFamily: "monospace", fontSize: "0.85rem" }} value={contractCfg.template}
+                    onChange={(e) => setContractCfg({ ...contractCfg, template: e.target.value })} />
+                ) : (
+                  <ContractEditor value={contractCfg.template} onChange={(v) => setContractCfg((c) => ({ ...c, template: v }))}
+                    logoUrl={contractCfg.showLogo !== false ? config.appIdentity.logoUrl : undefined} />
+                )}
                 <div className="text-muted small mt-2">
                   รูปแบบ: <code>{"# "}</code> หัวเรื่องกลางหน้า · <code>{"> "}</code> ชิดขวา · <code>{"~ "}</code> บรรทัดลายเซ็น · <code>---</code> ขึ้นหน้าใหม่ · เว้นบรรทัดเพื่อแยกข้อ · ตัวแปรเขียนเป็น <code>{"{{ชื่อตัวแปร}}"}</code>
                 </div>
