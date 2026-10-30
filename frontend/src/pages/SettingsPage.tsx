@@ -885,10 +885,10 @@ export default function SettingsPage() {
             )}
 
             {contractEditorOpen && (
-              <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "#f1f3f4", display: "flex", flexDirection: "column" }}>
-                <div style={{ background: "#fff", borderBottom: "1px solid #dadce0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "var(--color-background)", display: "flex", flexDirection: "column" }}>
+                <div style={{ background: "var(--color-white)", borderBottom: "1px solid var(--color-light)", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <i className="fas fa-file-contract" style={{ color: "#1a73e8" }} />
-                  <strong style={{ color: "#202124" }}>แก้ไขสัญญาเช่า (แม่แบบ)</strong>
+                  <strong style={{ color: "var(--color-dark)" }}>แก้ไขสัญญาเช่า (แม่แบบ)</strong>
                   <span className="text-muted small d-none d-lg-inline">แก้แล้วกด "บันทึก" เพื่อใช้กับสัญญาที่พิมพ์ต่อไป</span>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-outline-secondary" onClick={() => setContractCodeMode((v) => !v)}><i className="fas fa-code me-2" />{contractCodeMode ? "แก้บนหน้ากระดาษ" : "แก้แบบโค้ด"}</button>

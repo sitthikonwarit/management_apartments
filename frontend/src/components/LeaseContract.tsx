@@ -83,10 +83,10 @@ export function LeaseContractPreview({ blocks, logoUrl, onPrint, onClose }: { bl
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "#f1f3f4", display: "flex", flexDirection: "column" }} className="no-print">
-      <div style={{ background: "#fff", borderBottom: "1px solid #dadce0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "var(--color-background)", display: "flex", flexDirection: "column" }} className="no-print">
+      <div style={{ background: "var(--color-white)", borderBottom: "1px solid var(--color-light)", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <i className="fas fa-file-contract" style={{ color: "#1a73e8" }} />
-        <strong style={{ color: "#202124" }}>สัญญาเช่า — ตัวอย่างก่อนพิมพ์</strong>
+        <strong style={{ color: "var(--color-dark)" }}>สัญญาเช่า — ตัวอย่างก่อนพิมพ์</strong>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="btn btn-primary" onClick={onPrint}><i className="fas fa-print me-2" />พิมพ์ / บันทึกเป็น PDF</button>
           <button className="btn btn-outline-secondary" onClick={onClose}><i className="fas fa-times" /></button>

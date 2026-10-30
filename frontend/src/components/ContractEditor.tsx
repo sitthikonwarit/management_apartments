@@ -61,8 +61,8 @@ const EDITOR_CSS = `
 .lc-editor .lc-edit:focus { background: rgba(26,115,232,.07); }
 .lc-editor .lease-sheet .lc-chip { background: #e8f0fe; border: 1px solid #c6dafc; border-radius: 6px; padding: 0 5px; margin: 0 1px; font-size: 13pt; line-height: 15pt;
   color: #1967d2 !important; -webkit-text-fill-color: #1967d2 !important; text-indent: 0; user-select: all; white-space: nowrap; }
-.lc-editor .lc-pb { text-align: center; color: #5f6368; font-family: sans-serif; font-size: 11px; margin: 6px 0; border-top: 1px dashed #bbb; padding-top: 2px; }
-.lc-editor .lc-toolbar { position: sticky; top: 0; z-index: 5; background: #fff; border: 1px solid #dadce0; border-radius: 8px; padding: 6px 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.lc-editor .lc-pb { text-align: center; color: var(--color-dark-variant); font-family: sans-serif; font-size: 11px; margin: 6px 0; border-top: 1px dashed var(--color-dark-variant); padding-top: 2px; }
+.lc-editor .lc-toolbar { position: sticky; top: 0; z-index: 5; background: var(--color-white); border: 1px solid var(--color-light); border-radius: 8px; padding: 6px 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .lc-editor .lc-toolbar .btn { padding: 2px 9px; font-size: 0.82rem; }
 `;
 
@@ -199,13 +199,13 @@ function ContractEditor({ value, onChange, logoUrl, fullPage, customVars = [] },
             <i className="fas fa-plus me-1" />แทรกข้อมูลอัตโนมัติ
           </button>
           {varMenu && (
-            <div style={{ position: "absolute", top: "110%", left: 0, zIndex: 20, width: 260, maxHeight: 300, overflow: "auto", background: "#fff", border: "1px solid #dadce0", borderRadius: 8, boxShadow: "0 4px 14px rgba(0,0,0,.2)", padding: 6 }}>
+            <div style={{ position: "absolute", top: "110%", left: 0, zIndex: 20, width: 260, maxHeight: 300, overflow: "auto", background: "var(--color-white)", border: "1px solid var(--color-light)", borderRadius: 8, boxShadow: "0 4px 14px rgba(0,0,0,.3)", padding: 6 }}>
               <input className="form-control form-control-sm mb-1" placeholder="ค้นหา..." autoFocus value={varQuery} onChange={(e) => setVarQuery(e.target.value)} />
               {vars.map((v) => (
-                <div key={v.key} style={{ padding: "4px 8px", cursor: "pointer", fontSize: 13, color: "#202124", borderRadius: 4 }}
+                <div key={v.key} style={{ padding: "4px 8px", cursor: "pointer", fontSize: 13, color: "var(--color-dark)", borderRadius: 4 }}
                   onMouseDown={(e) => { e.preventDefault(); insertVar(v.key); }}
-                  onMouseOver={(e) => (e.currentTarget.style.background = "#f1f3f4")} onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
-                  {v.label} <span style={{ color: "#80868b", fontSize: 11 }}>{`{{${v.key}}}`}</span>
+                  onMouseOver={(e) => (e.currentTarget.style.background = "var(--color-light)")} onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
+                  {v.label} <span style={{ color: "var(--color-dark-variant)", fontSize: 11 }}>{`{{${v.key}}}`}</span>
                 </div>
               ))}
             </div>
@@ -217,7 +217,7 @@ function ContractEditor({ value, onChange, logoUrl, fullPage, customVars = [] },
         <span className="text-muted small ms-auto">คลิกที่ข้อความเพื่อแก้ไข · Enter = ย่อหน้าใหม่ · ชิปสีฟ้า = ข้อมูลที่ระบบเติมให้</span>
       </div>
 
-      <div style={fullPage ? { background: "#f1f3f4", padding: "20px 12px", borderRadius: 8, overflow: "auto", flex: 1, minHeight: 0 } : { background: "#f1f3f4", padding: "16px 8px", borderRadius: 8, overflow: "auto", maxHeight: "78vh" }}>
+      <div style={fullPage ? { background: "var(--color-background)", padding: "20px 12px", borderRadius: 8, overflow: "auto", flex: 1, minHeight: 0 } : { background: "var(--color-background)", padding: "16px 8px", borderRadius: 8, overflow: "auto", maxHeight: "78vh" }}>
         <div style={{ width: "max-content", margin: "0 auto" }}>
           <div className="lease-pages lease-sheet">
             {pages.map((page, pi) => (

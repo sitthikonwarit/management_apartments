@@ -26,13 +26,13 @@ export default function ContractDataPanel({ cfg, onChange, onInsert }: {
   const custom = cfg.customVars ?? [];
   const setCustom = (next: ContractCustomVar[]) => onChange({ ...cfg, customVars: next });
   const addCustom = () => setCustom([...custom, { key: `cv_${Date.now().toString(36)}`, label: `ข้อมูลใหม่ ${custom.length + 1}`, value: "" }]);
-  const lbl: React.CSSProperties = { fontSize: "0.74rem", color: "#5f6368", marginBottom: 2, display: "block" };
+  const lbl: React.CSSProperties = { fontSize: "0.74rem", color: "var(--color-dark-variant)", marginBottom: 2, display: "block" };
   const inp = "form-control form-control-sm";
 
   return (
-    <div style={{ width: 340, flexShrink: 0, background: "#fff", borderLeft: "1px solid #dadce0", overflow: "auto", padding: 14, color: "#202124" }} className="nicescrollbar">
+    <div style={{ width: 340, flexShrink: 0, background: "var(--color-white)", borderLeft: "1px solid var(--color-light)", overflow: "auto", padding: 14, color: "var(--color-dark)" }} className="nicescrollbar">
       <div style={{ fontWeight: 700, marginBottom: 6 }}><i className="fas fa-list-check me-2 text-primary" />ข้อมูลที่ใช้ในสัญญา</div>
-      <div style={{ fontSize: "0.76rem", color: "#5f6368", marginBottom: 12 }}>
+      <div style={{ fontSize: "0.76rem", color: "var(--color-dark-variant)", marginBottom: 12 }}>
         กรอกค่าที่ใช้ซ้ำทุกสัญญา ระบบนำไปใส่ในชิปสีฟ้าของเอกสารเอง ส่วนข้อมูลผู้เช่า ห้อง ค่าเช่า ดึงจากหน้าผู้เช่าอัตโนมัติ
       </div>
 
@@ -56,13 +56,13 @@ export default function ContractDataPanel({ cfg, onChange, onInsert }: {
         แสดงโลโก้มุมขวาบนของหน้า 1
       </label>
 
-      <div className="d-flex justify-content-between align-items-center" style={{ margin: "14px 0 6px", borderTop: "1px solid #eee", paddingTop: 10 }}>
+      <div className="d-flex justify-content-between align-items-center" style={{ margin: "14px 0 6px", borderTop: "1px solid var(--color-light)", paddingTop: 10 }}>
         <span style={{ fontWeight: 600, fontSize: "0.82rem" }}>ข้อมูลที่เพิ่มเอง</span>
         <button type="button" className="btn btn-sm btn-primary" style={{ padding: "1px 10px" }} onClick={addCustom}><i className="fas fa-plus me-1" />เพิ่ม</button>
       </div>
-      {custom.length === 0 && <div style={{ fontSize: "0.76rem", color: "#80868b" }}>ยังไม่มี — กด "เพิ่ม" แล้วตั้งชื่อ+ค่า จากนั้นกด "แทรก" ลงในเอกสาร</div>}
+      {custom.length === 0 && <div style={{ fontSize: "0.76rem", color: "var(--color-dark-variant)" }}>ยังไม่มี — กด "เพิ่ม" แล้วตั้งชื่อ+ค่า จากนั้นกด "แทรก" ลงในเอกสาร</div>}
       {custom.map((cv, i) => (
-        <div key={cv.key} className="mb-2 p-2" style={{ border: "1px solid #e0e3e7", borderRadius: 8 }}>
+        <div key={cv.key} className="mb-2 p-2" style={{ border: "1px solid var(--color-light)", borderRadius: 8 }}>
           <label style={lbl}>ชื่อข้อมูล</label>
           <input className={inp + " mb-1"} value={cv.label} onChange={(e) => setCustom(custom.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
           <label style={lbl}>ค่า</label>
