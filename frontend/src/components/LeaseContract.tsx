@@ -33,6 +33,7 @@ export const SHEET_CSS = `
 `;
 
 const NB = " "; // ช่องว่างธรรมดา (white-space: pre-wrap เก็บไว้) — ใช้ nbsp ไม่ได้ เพราะทำให้บรรทัดตัดไม่ได้จนค่าที่เติมล้นขอบขวา
+const NBSP = " ";
 const SPACE_PT = 3.6; // ความกว้างช่องว่างไม่ตัดบรรทัดโดยประมาณที่ 16pt (TH Sarabun)
 
 // แบ่งสัญญาเป็นหน้าตามบรรทัด "---"
@@ -51,8 +52,9 @@ function Block({ b }: { b: ContractBlock }) {
   return (
     <p className={cls}>
       {b.parts.map((p, j) => {
-        if (p.blankWidth) return <span key={j} className="lc-fill">{NB.repeat(Math.max(2, Math.round(p.blankWidth / SPACE_PT)))}</span>;
-        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(4) + p.text + NB.repeat(4)}</span>;
+        // ช่องว่างท้ายค่าที่เติมเป็น nbsp เพื่อให้ติดกับตัวอักษรถัดไป (เช่น ")") ไม่ถูกตัดตกบรรทัดใหม่ — ส่วนหน้าค่าเป็นช่องว่างธรรมดาตัดบรรทัดได้
+        if (p.blankWidth) return <span key={j} className="lc-fill">{NB.repeat(Math.max(0, Math.round(p.blankWidth / SPACE_PT) - 2)) + NBSP.repeat(2)}</span>;
+        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(4) + p.text + NBSP.repeat(4)}</span>;
         return <span key={j}>{p.text}</span>;
       })}
     </p>
