@@ -17,8 +17,7 @@ export const SHEET_CSS = `
 .lease-sheet p { margin: 0; white-space: break-spaces; }
 .lease-sheet .lc-title { text-align: center; font-weight: 700; }
 .lease-sheet .lc-right { text-align: right; }
-.lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 57pt; }
-.lease-sheet .lc-item { text-indent: 88pt; }
+.lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 70pt; }
 .lease-sheet .lc-space { height: 18.1pt; }
 .lease-sheet .lc-sign { margin-left: 156pt; margin-top: 12pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-signName { margin-left: 177pt; text-align: left; white-space: pre; }
@@ -49,7 +48,7 @@ function splitPages(blocks: ContractBlock[]): ContractBlock[][] {
 
 function Block({ b }: { b: ContractBlock }) {
   if (!("parts" in b)) return <div className="lc-space" />;
-  const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : b.parts[0]?.text.startsWith("ข้อ") ? "lc-para lc-item" : "lc-para";
+  const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : "lc-para";
   return (
     <p className={cls}>
       {b.parts.map((p, j) => {
