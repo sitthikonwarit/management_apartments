@@ -54,7 +54,7 @@ function Block({ b }: { b: ContractBlock }) {
       {b.parts.map((p, j) => {
         // ช่องว่างท้ายค่าที่เติมเป็น nbsp เพื่อให้ติดกับตัวอักษรถัดไป (เช่น ")") ไม่ถูกตัดตกบรรทัดใหม่ — ส่วนหน้าค่าเป็นช่องว่างธรรมดาตัดบรรทัดได้
         if (p.blankWidth) return <span key={j} className="lc-fill">{NB.repeat(Math.max(0, Math.round(p.blankWidth / SPACE_PT) - 2)) + NBSP.repeat(2)}</span>;
-        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(4) + p.text + NBSP.repeat(4)}</span>;
+        if (p.fill) return <span key={j} className="lc-fill">{NB.repeat(3) + p.text + NBSP.repeat(3)}</span>;
         return <span key={j}>{p.text}</span>;
       })}
     </p>
