@@ -19,10 +19,11 @@ export const SHEET_CSS = `
 .lease-sheet .lc-right { text-align: right; }
 .lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 70pt; }
 .lease-sheet .lc-space { height: 18.1pt; }
-.lease-sheet .lc-sign { margin-left: 156pt; margin-top: 12pt; text-align: left; white-space: pre; }
-.lease-sheet .lc-signName { margin-left: 177pt; text-align: left; white-space: pre; }
+.lease-sheet .lc-sign { margin-left: 295pt; margin-top: 12pt; text-align: left; white-space: pre; }
+.lease-sheet .lc-signName { margin-left: 315pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-fill { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #000; text-decoration-thickness: 0.8pt;
   text-underline-offset: 1.6pt; text-decoration-skip-ink: none; }
+.lease-sheet .lc-footer { position: absolute; left: 0; right: 0; bottom: 30pt; text-align: center; font-size: 11pt; line-height: 13pt; }
 .lease-sheet .lc-logo { position: absolute; top: 28pt; left: 486pt; width: 62pt; height: 62pt; object-fit: contain; }
 @media print {
   /* ขอบกระดาษ 0 แล้วให้แต่ละหน้า (.lease-page) เป็น A4 เต็มแผ่นที่มี padding เอง — โลโก้วางตำแหน่งสัมบูรณ์ในแผ่นได้โดยไม่ล้นขอบ
@@ -71,6 +72,7 @@ export function LeaseContractSheet({ blocks, logoUrl }: { blocks: ContractBlock[
         <div key={i} className="lease-page">
           {i === 0 && logoUrl && <img src={logoUrl} alt="" className="lc-logo" />}
           {page.map((b, k) => <Block key={k} b={b} />)}
+          <div className="lc-footer">สัญญาเช่าที่ดินใช้สำหรับ บ้านบุญอัมพร เท่านั้น</div>
         </div>
       ))}
     </div>
