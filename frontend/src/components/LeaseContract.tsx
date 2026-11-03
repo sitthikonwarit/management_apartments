@@ -9,7 +9,7 @@ export const SHEET_CSS = `
 @font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: block; }
 @font-face { font-family: 'THSarabunPSK'; src: url('/fonts/THSarabun-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: block; }
 .lease-pages { background: transparent; }
-.lease-page { position: relative; box-sizing: border-box; width: 595.3pt; min-height: 841.9pt; padding: 72pt 90pt; margin: 0 auto 14pt; background: #fff;
+.lease-page { position: relative; box-sizing: border-box; width: 595.3pt; min-height: 841.9pt; padding: 72pt 48pt; margin: 0 auto 14pt; background: #fff;
   box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); }
 .lease-sheet, .lease-sheet * { color: #000 !important; -webkit-text-fill-color: #000 !important; }
 .lease-sheet { font-family: 'THSarabunPSK','TH Sarabun New','TH SarabunPSK','Sarabun',sans-serif; font-size: 16pt; line-height: 18.1pt; font-weight: 400; background: transparent;
@@ -17,13 +17,14 @@ export const SHEET_CSS = `
 .lease-sheet p { margin: 0; white-space: break-spaces; }
 .lease-sheet .lc-title { text-align: center; font-weight: 700; }
 .lease-sheet .lc-right { text-align: right; }
-.lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 70pt; }
+.lease-sheet .lc-para { text-align: justify; text-justify: inter-character; text-indent: 57pt; }
+.lease-sheet .lc-item { text-indent: 88pt; }
 .lease-sheet .lc-space { height: 18.1pt; }
-.lease-sheet .lc-sign { margin-left: 196pt; margin-top: 12pt; text-align: left; white-space: pre; }
-.lease-sheet .lc-signName { margin-left: 217pt; text-align: left; white-space: pre; }
+.lease-sheet .lc-sign { margin-left: 156pt; margin-top: 12pt; text-align: left; white-space: pre; }
+.lease-sheet .lc-signName { margin-left: 177pt; text-align: left; white-space: pre; }
 .lease-sheet .lc-fill { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #000; text-decoration-thickness: 0.8pt;
   text-underline-offset: 1.6pt; text-decoration-skip-ink: none; }
-.lease-sheet .lc-logo { position: absolute; top: 36.1pt; left: 445.1pt; width: 80.8pt; height: 80.8pt; object-fit: contain; }
+.lease-sheet .lc-logo { position: absolute; top: 28pt; left: 486pt; width: 62pt; height: 62pt; object-fit: contain; }
 @media print {
   /* ขอบกระดาษ 0 แล้วให้แต่ละหน้า (.lease-page) เป็น A4 เต็มแผ่นที่มี padding เอง — โลโก้วางตำแหน่งสัมบูรณ์ในแผ่นได้โดยไม่ล้นขอบ
      (เนื้อหาล้นขอบ/ค่าติดลบทำให้ Chrome ย่อทั้งเอกสารหรือตัดโลโก้ตอนพิมพ์) */
@@ -48,7 +49,7 @@ function splitPages(blocks: ContractBlock[]): ContractBlock[][] {
 
 function Block({ b }: { b: ContractBlock }) {
   if (!("parts" in b)) return <div className="lc-space" />;
-  const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : "lc-para";
+  const cls = b.kind === "title" ? "lc-title" : b.kind === "right" ? "lc-right" : b.kind === "sign" ? "lc-sign" : b.kind === "signName" ? "lc-signName" : b.parts[0]?.text.startsWith("ข้อ") ? "lc-para lc-item" : "lc-para";
   return (
     <p className={cls}>
       {b.parts.map((p, j) => {
