@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { roomsApi, tenantsApi, metersApi } from "../api/client";
+import { roomsApi, tenantsApi, metersApi, repairsApi, type RepairRequest, type RepairMovement, type RepairItem } from "../api/client";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -21,7 +21,7 @@ import TowerManagement from "../components/TowerManagement";
 import RoomTableView from "../components/RoomTableView";
 import PrivacyMask from "../components/PrivacyMask";
 import { usePersistedViewMode } from "../utils/usePersistedViewMode";
-import { toDisplayYear } from "../utils/yearFormat";
+import { toDisplayYear, thaiDateOnlyString } from "../utils/yearFormat";
 import { tenantDisplayName } from "../utils/tenantName";
 import { tenantOccupiesRoom, findTenantForRoom, roomsOfTenant, findBookingForRoom } from "../utils/tenantRoom";
 import { useLiveRefreshTick } from "../utils/useLiveSync";
@@ -685,6 +685,36 @@ function RoomDetailView({
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [savingTenant, setSavingTenant] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  // ซ่อมแซม/ปรับปรุงห้องนี้ล่าสุด: คำขอแจ้งซ่อมจากผู้เช่า + การเบิกของไปใช้กับห้องนี้ (หน้าซ่อมแซม)
+  const [repairData, setRepairData] = useState<{ requests: RepairRequest[]; moves: RepairMovement[]; items: RepairItem[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([repairsApi.getRequests(), repairsApi.getMovements(), repairsApi.getItems()])
+      .then(([requests, moves, items]) => { if (alive) setRepairData({ requests, moves, items }); })
+      .catch(() => { if (alive) setRepairData({ requests: [], moves: [], items: [] }); });
+    return () => { alive = false; };
+  }, [room.id]);
+  const repairLog = useMemo(() => {
+    if (!repairData) return [];
+    const num = String(room.number);
+    const itemName = (id: string) => repairData.items.find((i) => i.id === id)?.name ?? "ของใช้";
+    const itemUnit = (id: string) => repairData.items.find((i) => i.id === id)?.unit ?? "";
+    const fromRequests = repairData.requests
+      .filter((r) => String(r.roomNumber) === num)
+      .map((r) => ({
+        key: `req-${r.id}`, date: (r.status === "completed" && r.confirmedAt ? r.confirmedAt : r.createdAt).slice(0, 10),
+        icon: "fa-screwdriver-wrench", title: r.title || "แจ้งซ่อม", sub: r.adminNote || r.details || "",
+        status: r.status === "completed" ? "ซ่อมเสร็จแล้ว" : "รอซ่อม", done: r.status === "completed",
+      }));
+    const fromMoves = repairData.moves
+      .filter((m) => m.type === "out" && (String(m.roomId) === String(room.id) || String(m.roomNumber) === num))
+      .map((m) => ({
+        key: `mv-${m.id}`, date: m.date,
+        icon: "fa-toolbox", title: `${itemName(m.itemId)} × ${m.quantity} ${itemUnit(m.itemId)}`.trim(), sub: m.note || "",
+        status: "เบิกของใช้", done: true,
+      }));
+    return [...fromRequests, ...fromMoves].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  }, [repairData, room.id, room.number]);
   const [chartRange, setChartRange] = useState<"6m"|"1y"|"all">("6m");
   const [chartMode,  setChartMode]  = useState<"chart"|"table">("chart");
 
@@ -1053,6 +1083,33 @@ function RoomDetailView({
             <div className="file-view-empty mt-2">
               <i className="fas fa-door-open me-2 text-success" />
               {room.isActive === false ? "ห้องปิดปรับปรุงชั่วคราว" : "ว่าง — พร้อมให้เช่า"}
+            </div>
+          )}
+        </div>
+
+        {/* ─── ซ่อมแซม/ปรับปรุงล่าสุด ─── */}
+        <div className="detail-section">
+          <div className="detail-section-header">
+            <h6 className="mb-0">
+              <i className="fas fa-screwdriver-wrench me-2" style={{ color: "var(--color-primary)" }} />
+              ซ่อมแซม/ปรับปรุงล่าสุด
+            </h6>
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => navigate("/repairs")}>ไปหน้าซ่อมแซม</button>
+          </div>
+          {repairData && repairLog.length === 0 ? (
+            <div className="file-view-empty mt-2"><i className="fas fa-circle-check me-2 text-success" />ยังไม่มีประวัติซ่อมแซมของห้องนี้</div>
+          ) : (
+            <div className="file-view-list mt-2">
+              {repairLog.map((r, idx) => (
+                <div key={r.key} className="file-view-item" style={{ alignItems: "flex-start" }}>
+                  <i className={`fas ${r.icon} file-icon`} style={{ color: r.done ? "var(--color-success)" : "var(--color-warning)" }} />
+                  <span className="file-name">
+                    <strong>{r.title}</strong>
+                    {idx === 0 && <span className="badge bg-primary ms-2" style={{ fontSize: "0.65rem" }}>ล่าสุด</span>}
+                    <div className="text-muted small">{thaiDateOnlyString(new Date(r.date))} · {r.status}{r.sub ? ` · ${r.sub}` : ""}</div>
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
