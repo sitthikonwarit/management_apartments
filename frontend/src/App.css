@@ -2802,7 +2802,17 @@ body.dark-mode .import-format-hint code { background: rgba(255,255,255,0.07); co
 
   /* UnitCell diff arrows */
   .fw-bold { color: #000 !important; }
+
+  /* หน้าซ่อมแซม: พิมพ์รายการตามที่แสดงอยู่ (ซ่อนปุ่ม/ตัวกรอง ขยายกล่องเลื่อนให้เห็นครบ พื้นขาวตัวดำ) */
+  .repairs-print-title { display: block !important; margin-bottom: 0.6rem; }
+  .repairs-print-title h5 { margin: 0 0 0.2rem; color: #000 !important; }
+  .repairs-print, .repairs-print * { background: transparent !important; color: #000 !important; box-shadow: none !important; }
+  .repairs-print .text-danger { color: #cc0000 !important; }
+  .repairs-print .text-success { color: #006622 !important; }
+  .repairs-print .btn, .repairs-print .btn-group, .repairs-print input[type="checkbox"] { display: none !important; }
+  .repairs-print .nicescrollbar { max-height: none !important; overflow: visible !important; }
 }
+.repairs-print-title { display: none; }
 
 /* =================================================================
  * CHAT PAGE (แชท LINE) — จอกว้าง: รายชื่อสนทนา + เธรด อยู่คู่กัน

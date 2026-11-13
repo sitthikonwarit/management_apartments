@@ -391,10 +391,18 @@ export default function RepairsPage() {
   const stockEmptyText = items.length === 0 ? "ยังไม่มีของในคลัง กด \"เพิ่มของใหม่\" เพื่อเริ่มต้น" : "ไม่พบของที่ค้นหา";
 
   return (
-    <div className="custom-card">
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 page-list-toolbar">
+    <div className="custom-card repairs-print">
+      <div className="repairs-print-title">
+        <h5>รายการซ่อมแซม — {String(tabOptions.find((o) => o.value === tab)?.label ?? "")}</h5>
+        {(tab === "history" || tab === "rooms") && (dateFrom || dateTo) && <div>ช่วงวันที่ {dateFrom ? dateLabel(dateFrom) : "เริ่มต้น"} ถึง {dateTo ? dateLabel(dateTo) : "ปัจจุบัน"}</div>}
+        <div>พิมพ์เมื่อ {new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}</div>
+      </div>
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3 page-list-toolbar no-print">
         <h5 className="form-section-title mb-0" style={{ borderBottom: "none" }}>รายการซ่อมแซม</h5>
         <ToolbarActionsMenu>
+          <button className="btn btn-outline-secondary d-inline-flex align-items-center" onClick={() => setTimeout(() => window.print(), 80)}>
+            <i className="fas fa-print me-2" /><span className="btn-text">พิมพ์</span>
+          </button>
           <button className="btn btn-primary d-inline-flex align-items-center" onClick={() => setItemModal({ item: null })}>
             <i className="fas fa-box me-2" /><span className="btn-text">เพิ่มของใหม่</span>
           </button>
@@ -408,7 +416,7 @@ export default function RepairsPage() {
       </div>
 
       {!loading && (
-        <div className="row g-3 mb-4">
+        <div className="row g-3 mb-4 no-print">
           {[
             { icon: `fa-screwdriver-wrench ${pendingCount > 0 ? "text-danger" : "text-success"}`, label: "รอซ่อม", val: `${pendingCount} งาน` },
             { icon: "fa-boxes-stacked text-primary", label: "รายการของทั้งหมด", val: `${items.length} รายการ` },
@@ -429,7 +437,7 @@ export default function RepairsPage() {
       )}
 
       {/* ค้นหา → หมวด → ตัวกรอง → โหมดแสดงผล */}
-      <div className="row g-2 mb-3 align-items-center">
+      <div className="row g-2 mb-3 align-items-center no-print">
         <div className="col-12 col-lg">
           <div className="search-container">
             <i className="fas fa-search" />
